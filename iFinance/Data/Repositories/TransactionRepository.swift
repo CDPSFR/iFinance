@@ -129,7 +129,8 @@ class TransactionRepository: TransactionRepositoryProtocol {
         to destinationAccountID: UUID,
         amount: Decimal,
         date: Date,
-        memo: String?
+        memo: String?,
+        categoryID: UUID? = nil
     ) async throws -> (Transaction, Transaction) {
         
         // 🔍 DEBUG: Vérifier que les comptes existent
@@ -161,14 +162,14 @@ class TransactionRepository: TransactionRepositoryProtocol {
             toAccountID: destinationAccountID,
             linkedTransactionID: nil,  // ✅ nil pour l'instant
             payeeID: nil,
-            categoryID: nil,
+            categoryID: categoryID,
             type: .transfer,
             memo: memo,
             isReconciled: false,
             recurringTemplateID: nil,
             status: .cleared
         )
-        
+
         // ✅ ÉTAPE 2: Créer la transaction destination SANS linkedTransactionID
         var destTransaction = Transaction(
             date: date,
@@ -177,7 +178,7 @@ class TransactionRepository: TransactionRepositoryProtocol {
             toAccountID: sourceAccountID,
             linkedTransactionID: nil,  // ✅ nil pour l'instant aussi
             payeeID: nil,
-            categoryID: nil,
+            categoryID: categoryID,
             type: .transfer,
             memo: memo,
             isReconciled: false,

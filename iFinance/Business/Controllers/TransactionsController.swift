@@ -132,7 +132,8 @@ class TransactionsController: ObservableObject {
         to destinationAccountID: UUID,
         amount: Decimal,
         date: Date,
-        memo: String? = nil
+        memo: String? = nil,
+        categoryID: UUID? = nil
     ) async {
         do {
             _ = try await repository.createTransfer(
@@ -140,11 +141,34 @@ class TransactionsController: ObservableObject {
                 to: destinationAccountID,
                 amount: amount,
                 date: date,
-                memo: memo
+                memo: memo,
+                categoryID: categoryID
             )
         } catch {
             self.error = error
             print("❌ Erreur création transfert: \(error)")
+        }
+    }
+
+    // MARK: - Update Transfer (met à jour les deux transactions liées)
+
+    func updateTransfer(_ transaction: Transaction, categoryID: UUID?) async {
+        var updated = transaction
+        updated.categoryID = categoryID
+
+        do {
+            try await repository.update(updated)
+
+            // Mettre à jour la transaction liée avec la même catégorie
+            if let linkedID = transaction.linkedTransactionID,
+               let linked = try? await repository.fetch(id: linkedID) {
+                var updatedLinked = linked
+                updatedLinked.categoryID = categoryID
+                try await repository.update(updatedLinked)
+            }
+        } catch {
+            self.error = error
+            print("❌ Erreur mise à jour transfert: \(error)")
         }
     }
     

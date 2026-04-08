@@ -7,5 +7,5 @@ protocol TransactionRepositoryProtocol {
     func create(_ transaction: Transaction) async throws
     func update(_ transaction: Transaction) async throws
     func delete(id: UUID) async throws
-    func createTransfer(from: UUID, to: UUID, amount: Decimal, date: Date, memo: String?) async throws -> (Transaction, Transaction)
+    func createTransfer(from: UUID, to: UUID, amount: Decimal, date: Date, memo: String?, categoryID: UUID?) async throws -> (Transaction, Transaction)
 }

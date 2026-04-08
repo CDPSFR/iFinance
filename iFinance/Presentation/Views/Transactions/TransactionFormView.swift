@@ -92,12 +92,9 @@ struct TransactionFormView: View {
                                 if newValue != .transfer {
                                     selectedToAccount = nil
                                 }
-                                
-                                // Filtrer les catégories selon le type
-                                if newValue == .transfer {
-                                    selectedCategory = nil
-                                } else {
-                                    // Si la catégorie actuelle ne correspond pas au type, réinitialiser
+
+                                // Pour debit/credit, réinitialiser la catégorie si elle ne correspond pas au type
+                                if newValue != .transfer {
                                     if let catID = selectedCategory,
                                        let category = categoriesController.getCategory(id: catID) {
                                         let shouldBeIncome = newValue == .credit
@@ -256,51 +253,49 @@ struct TransactionFormView: View {
                         }
                     }
                     
-                    // Section Catégorie (sauf pour transferts)
-                    if selectedType != .transfer {
-                        GroupBox(label: Label("Catégorie", systemImage: "folder")) {
-                            VStack(spacing: 8) {
+                    // Section Catégorie (y compris pour transferts)
+                    GroupBox(label: Label("Catégorie", systemImage: "folder")) {
+                        VStack(spacing: 8) {
 
-                                let filteredCategories = categoriesController.rootCategories.filter {
+                            let filteredCategories: [Category] = selectedType == .transfer
+                                ? categoriesController.rootCategories
+                                : categoriesController.rootCategories.filter {
                                     $0.isIncome == (selectedType == .credit)
                                 }
 
-                                Picker("", selection: $selectedCategory) {
-                                    Text("Aucune").tag(nil as UUID?)
+                            Picker("", selection: $selectedCategory) {
+                                Text("Aucune").tag(nil as UUID?)
 
-                                    ForEach(filteredCategories) { category in
-                                        // Catégorie parent — label simple
-                                        Label(category.name, systemImage: category.icon ?? "folder")
-                                            .tag(category.id as UUID?)
+                                ForEach(filteredCategories) { category in
+                                    Label(category.name, systemImage: category.icon ?? "folder")
+                                        .tag(category.id as UUID?)
 
-                                        // Sous-catégories — préfixer le nom avec le chemin
-                                        ForEach(categoriesController.getSubcategories(for: category.id)) { sub in
-                                            Label(
-                                                "   \(sub.name)",   // indentation visuelle dans la liste
-                                                systemImage: sub.icon ?? "folder"
-                                            )
-                                            .tag(sub.id as UUID?)
-                                        }
+                                    ForEach(categoriesController.getSubcategories(for: category.id)) { sub in
+                                        Label(
+                                            "   \(sub.name)",
+                                            systemImage: sub.icon ?? "folder"
+                                        )
+                                        .tag(sub.id as UUID?)
                                     }
                                 }
-                                .labelsHidden()
-                                
-                                // Aperçu catégorie sélectionnée
-                                if let catID = selectedCategory,
-                                   let category = categoriesController.getCategory(id: catID) {
-                                    HStack {
-                                        if let iconName = category.icon {
-                                            Image(systemName: iconName)
-                                                .foregroundColor(Color(hex: category.displayColor))
-                                        }
-                                        Text(categoriesController.getCategoryPath(for: catID))
-                                            .font(.subheadline)
-                                        Spacer()
+                            }
+                            .labelsHidden()
+
+                            // Aperçu catégorie sélectionnée
+                            if let catID = selectedCategory,
+                               let category = categoriesController.getCategory(id: catID) {
+                                HStack {
+                                    if let iconName = category.icon {
+                                        Image(systemName: iconName)
+                                            .foregroundColor(Color(hex: category.displayColor))
                                     }
-                                    .padding(8)
-                                    .background(Color(hex: category.displayColor).opacity(0.1))
-                                    .cornerRadius(6)
+                                    Text(categoriesController.getCategoryPath(for: catID))
+                                        .font(.subheadline)
+                                    Spacer()
                                 }
+                                .padding(8)
+                                .background(Color(hex: category.displayColor).opacity(0.1))
+                                .cornerRadius(6)
                             }
                         }
                     }
@@ -410,28 +405,23 @@ struct TransactionFormView: View {
         
         Task {
             if selectedType == .transfer, let toAccountID = selectedToAccount {
-                // Créer un transfert
-                await transactionsController.createTransfer(
-                    from: accountID,
-                    to: toAccountID,
-                    amount: amountDecimal,
-                    date: date,
-                    memo: memo.isEmpty ? nil : memo
-                )
-            } else {
-                // Calculer le montant signé
-                let signedAmount: Decimal
-                switch selectedType {
-                case .debit:
-                    signedAmount = -abs(amountDecimal)
-                case .credit:
-                    signedAmount = abs(amountDecimal)
-                case .transfer:
-                    signedAmount = amountDecimal
-                }
-                
                 if let existingTransaction = transactionToEdit {
-                    // Modification
+                    // Modification d'un transfert existant : mettre à jour la catégorie des deux transactions liées
+                    await transactionsController.updateTransfer(existingTransaction, categoryID: selectedCategory)
+                } else {
+                    // Création d'un nouveau transfert
+                    await transactionsController.createTransfer(
+                        from: accountID,
+                        to: toAccountID,
+                        amount: amountDecimal,
+                        date: date,
+                        memo: memo.isEmpty ? nil : memo,
+                        categoryID: selectedCategory
+                    )
+                }
+            } else {
+                if let existingTransaction = transactionToEdit {
+                    // Modification d'une transaction non-transfert
                     var updated = existingTransaction
                     updated.date = date
                     updated.amount = abs(amountDecimal)
@@ -440,10 +430,10 @@ struct TransactionFormView: View {
                     updated.accountID = accountID
                     updated.payeeID = selectedPayee
                     updated.categoryID = selectedCategory
-                    
+
                     await transactionsController.updateTransaction(updated)
                 } else {
-                    // Création
+                    // Création d'une transaction non-transfert
                     await transactionsController.createTransaction(
                         accountID: accountID,
                         date: date,
