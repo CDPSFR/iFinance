@@ -250,7 +250,7 @@ struct TransactionListView: View {
             
             // Colonne Montant
             TableColumn("Montant", value: \.amount) { row in
-                Text(row.amount, format: .currency(code: row.currency))
+                 Text((row.amount >= 0 ? "+" : "") + row.amount.formatted(.currency(code: row.currency)))
                     .font(.body)
                     .fontWeight(.medium)
                     .foregroundColor(row.typeColor)
