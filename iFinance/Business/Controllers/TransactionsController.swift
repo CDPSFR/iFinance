@@ -187,6 +187,11 @@ class TransactionsController: ObservableObject {
     
     func deleteTransaction(id: UUID) async {
         do {
+            // Si c'est un transfert, supprimer aussi la transaction liée
+            if let transaction = try await repository.fetch(id: id),
+               let linkedID = transaction.linkedTransactionID {
+                try await repository.delete(id: linkedID)
+            }
             try await repository.delete(id: id)
         } catch {
             self.error = error

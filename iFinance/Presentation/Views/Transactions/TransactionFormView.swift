@@ -331,29 +331,14 @@ struct TransactionFormView: View {
         .padding()
         .frame(width: 600, height: 700)
         .onAppear {
-            // CORRECTION ICI : Prendre en compte le filtre actif
-            if let transaction = transactionToEdit {
-                // Mode édition : utiliser les données de la transaction
-                date = transaction.date
-                amount = "\(abs(transaction.amount))"
-                selectedType = transaction.type
-                memo = transaction.memo ?? ""
-                selectedAccount = transaction.accountID
-                selectedToAccount = transaction.toAccountID
-                selectedPayee = transaction.payeeID
-                selectedCategory = transaction.categoryID
-            } else if selectedAccount == nil {
-                // Mode création : utiliser le filtre actif s'il existe
-                if let filteredAccountID = transactionsController.filters.accountID {
-                    // Si un filtre de compte est actif, l'utiliser
-                    selectedAccount = filteredAccountID
-                } else if let defaultAccount = accountsController.selectedAccount?.id {
-                    // Sinon utiliser le compte par défaut du controller
-                    selectedAccount = defaultAccount
-                } else if let firstAccount = accountsController.activeAccounts.first?.id {
-                    // En dernier recours, prendre le premier compte actif
-                    selectedAccount = firstAccount
-                }
+            // Mode création uniquement : sélectionner le compte par défaut
+            guard transactionToEdit == nil, selectedAccount == nil else { return }
+            if let filteredAccountID = transactionsController.filters.accountID {
+                selectedAccount = filteredAccountID
+            } else if let defaultAccount = accountsController.selectedAccount?.id {
+                selectedAccount = defaultAccount
+            } else if let firstAccount = accountsController.activeAccounts.first?.id {
+                selectedAccount = firstAccount
             }
         }
     }

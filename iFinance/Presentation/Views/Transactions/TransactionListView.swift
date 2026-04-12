@@ -16,6 +16,7 @@ struct TransactionListView: View {
     @State private var selectedTransactions: Set<Transaction.ID> = []
     @State private var showBulkDeleteConfirmation = false
     @State private var showBulkCategorize = false
+    @State private var transactionToConvert: Transaction?
     @State private var sortOrder = [KeyPathComparator(\TransactionRow.date, order: .reverse)]
     
     var body: some View {
@@ -200,6 +201,31 @@ struct TransactionListView: View {
         } message: {
             Text("Cette action est irréversible.")
         }
+        .sheet(item: $transactionToConvert) { transaction in
+            ConvertToTransferView(
+                transaction: transaction,
+                isPresented: Binding(
+                    get: { transactionToConvert != nil },
+                    set: { if !$0 { transactionToConvert = nil } }
+                ),
+                onConfirm: { destinationAccountID in
+                    Task {
+                        // Supprimer la transaction originale
+                        await transactionsController.deleteTransaction(id: transaction.id)
+                        // Créer le transfert lié
+                        await transactionsController.createTransfer(
+                            from: transaction.accountID,
+                            to: destinationAccountID,
+                            amount: transaction.amount,
+                            date: transaction.date,
+                            memo: transaction.memo,
+                            categoryID: transaction.categoryID
+                        )
+                        await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
+                    }
+                }
+            )
+        }
         .sheet(isPresented: $showBulkCategorize) {
             BulkCategorizeView(
                 transactionIDs: selectedTransactions,
@@ -262,7 +288,7 @@ struct TransactionListView: View {
                             .font(.body)
                     }
                 } else {
-                    Text(row.memo ?? "—")
+                    Text("—")
                         .font(.body)
                         .foregroundColor(.secondary)
                 }
@@ -317,6 +343,14 @@ struct TransactionListView: View {
                     transactionToEdit = transaction
                 } label: {
                     Label("Modifier", systemImage: "pencil")
+                }
+
+                if transaction.type == .debit {
+                    Button {
+                        transactionToConvert = transaction
+                    } label: {
+                        Label("Convertir en transfert", systemImage: "arrow.left.arrow.right")
+                    }
                 }
 
                 Divider()
