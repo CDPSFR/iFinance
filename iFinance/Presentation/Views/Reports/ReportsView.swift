@@ -36,8 +36,7 @@ struct ReportsView: View {
             // Header
             HStack {
                 Text("Rapports")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                    .font(.system(size: 34, weight: .bold))
                 
                 Spacer()
             }

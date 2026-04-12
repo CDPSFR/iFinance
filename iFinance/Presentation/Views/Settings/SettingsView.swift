@@ -13,21 +13,6 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
-                // Header
-                HStack {
-                    Spacer()
-
-                    Button {
-                        // Menu options
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.title3)
-                            .foregroundColor(.teal)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding()
-
                 // Titre
                 HStack {
                     Text("Paramètres")
@@ -35,6 +20,7 @@ struct SettingsView: View {
                     Spacer()
                 }
                 .padding(.horizontal)
+                .padding(.top, 16)
                 .padding(.bottom, 16)
 
                 // Contenu

@@ -19,42 +19,6 @@ struct PayeeListView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Button {
-                    // Action retour - à adapter selon votre navigation
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("Retour")
-                    }
-                    .foregroundColor(.teal)
-                }
-                .buttonStyle(.plain)
-                
-                Spacer()
-                
-                Button {
-                    payeeToEdit = nil
-                    showPayeeForm = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.title3)
-                        .foregroundColor(.teal)
-                }
-                .buttonStyle(.plain)
-                
-                Button {
-                    // Menu options
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.title3)
-                        .foregroundColor(.teal)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding()
-            
             // Titre
             HStack {
                 Text("Bénéficiaires")
@@ -62,6 +26,7 @@ struct PayeeListView: View {
                 Spacer()
             }
             .padding(.horizontal)
+            .padding(.top, 16)
             .padding(.bottom, 8)
             
             // Barre de recherche
@@ -82,7 +47,8 @@ struct PayeeListView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding()
+            .padding(.horizontal)
+            .padding(.vertical, 7)
             .background(Color(nsColor: .controlBackgroundColor))
             .cornerRadius(8)
             .padding(.horizontal)

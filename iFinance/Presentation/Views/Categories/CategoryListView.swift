@@ -20,43 +20,6 @@ struct CategoryListView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Button {
-                    // Action retour - à adapter selon votre navigation
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                        Text("Retour")
-                    }
-                    .foregroundColor(.teal)
-                }
-                .buttonStyle(.plain)
-                
-                Spacer()
-                
-                Button {
-                    categoryToEdit = nil
-                    parentForNewCategory = nil
-                    showCategoryForm = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.title3)
-                        .foregroundColor(.teal)
-                }
-                .buttonStyle(.plain)
-                
-                Button {
-                    // Menu options
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.title3)
-                        .foregroundColor(.teal)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding()
-            
             // Titre
             HStack {
                 Text("Catégories")
@@ -64,6 +27,7 @@ struct CategoryListView: View {
                 Spacer()
             }
             .padding(.horizontal)
+            .padding(.top, 16)
             .padding(.bottom, 8)
             
             // Barre de recherche
@@ -84,7 +48,8 @@ struct CategoryListView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding()
+            .padding(.horizontal)
+            .padding(.vertical, 7)
             .background(Color(nsColor: .controlBackgroundColor))
             .cornerRadius(8)
             .padding(.horizontal)
@@ -308,31 +273,17 @@ struct CategoryGroupView: View {
     let onSelectCategory: (Category) -> Void
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Header de la catégorie parent
-            HStack {
-                Text(parentCategory.name)
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                
-                Spacer()
-                
-                Button {
-                    onEdit(parentCategory)
-                } label: {
-                    Text("Modifier")
-                        .font(.subheadline)
-                        .foregroundColor(.teal)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 12)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(8, corners: [.topLeft, .topRight])
-            
+        VStack(alignment: .leading, spacing: 6) {
+            // Nom de la catégorie parente (extérieur à la carte)
+            Text(parentCategory.name)
+                .font(.headline)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+
+            VStack(spacing: 0) {
             // Sous-catégories
-            ForEach(subcategories) { subcategory in
+            ForEach(Array(subcategories.enumerated()), id: \.element.id) { index, subcategory in
                 CategoryRowView(
                     category: subcategory,
                     count: transactionCounts[subcategory.id] ?? 0,
@@ -340,6 +291,10 @@ struct CategoryGroupView: View {
                     onEdit: { onEdit(subcategory) },
                     onDelete: { onDelete(subcategory) }
                 )
+                if index < subcategories.count - 1 {
+                    Divider()
+                        .padding(.leading, 54)
+                }
             }
             
             // Bouton "Nouvelle catégorie"
@@ -363,11 +318,12 @@ struct CategoryGroupView: View {
             }
             .buttonStyle(.plain)
             .cornerRadius(8, corners: [.bottomLeft, .bottomRight])
+            }
+            .background(Color(nsColor: .controlBackgroundColor))
+            .cornerRadius(8)
+            .padding(.horizontal, 16)
         }
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(8)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.bottom, 8)
     }
 }
 
@@ -385,14 +341,14 @@ struct CategoryRowView: View {
         Button {
             onTap()
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 // Icône de la catégorie
                 Image(systemName: category.displayIcon)
-                    .font(.title3)
+                    .font(.subheadline)
                     .foregroundColor(.white)
-                    .frame(width: 40, height: 40)
+                    .frame(width: 28, height: 28)
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: 6)
                             .fill(Color(hex: category.displayColor))
                     )
                 
@@ -414,7 +370,7 @@ struct CategoryRowView: View {
                     .foregroundColor(.secondary)
             }
             .padding(.horizontal)
-            .padding(.vertical, 12)
+            .padding(.vertical, 7)
             .background(Color(nsColor: .controlBackgroundColor))
             .contentShape(Rectangle())
         }

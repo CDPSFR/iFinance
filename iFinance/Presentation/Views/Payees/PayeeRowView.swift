@@ -10,12 +10,12 @@ struct PayeeRowView: View {
     let onDelete: () -> Void
     
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             // Icône du bénéficiaire
             Image(systemName: "person.crop.circle.fill")
-                .font(.title2)
+                .font(.subheadline)
                 .foregroundColor(.blue)
-                .frame(width: 40, height: 40)
+                .frame(width: 28, height: 28)
             
             // Informations du bénéficiaire
             VStack(alignment: .leading, spacing: 4) {
@@ -62,17 +62,25 @@ struct PayeeRowView: View {
             }
         }
         .padding(.horizontal)
-        .padding(.vertical, 12)
+        .padding(.vertical, 7)
         .background(Color(nsColor: .controlBackgroundColor))
         .contextMenu {
+            Button {
+                onTap()
+            } label: {
+                Label("Voir les transactions", systemImage: "list.bullet.rectangle")
+            }
+
+            Divider()
+
             Button {
                 onEdit()
             } label: {
                 Label("Modifier", systemImage: "pencil")
             }
-            
+
             Divider()
-            
+
             Button(role: .destructive) {
                 onDelete()
             } label: {
