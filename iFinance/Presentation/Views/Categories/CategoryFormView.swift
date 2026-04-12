@@ -14,13 +14,68 @@ struct CategoryFormView: View {
     @State private var selectedColor: String = "#2196F3"
     @State private var isIncome: Bool = false
     @State private var isCreating = false
-    
+    @State private var iconSearch = ""
+
     let availableIcons = [
-        "cart.fill", "bag.fill", "car.fill", "house.fill", "tv.fill",
-        "cross.case.fill", "fork.knife", "fuelpump.fill", "tram.fill",
-        "book.fill", "gamecontroller.fill", "music.note", "gift.fill",
-        "dollarsign.circle.fill", "briefcase.fill", "chart.line.uptrend.xyaxis",
-        "creditcard.fill", "banknote.fill", "folder.fill"
+        // Alimentation
+        "cart.fill", "fork.knife", "cup.and.saucer.fill", "wineglass.fill",
+        "birthday.cake.fill", "refrigerator.fill", "frying.pan.fill", "takeoutbag.and.cup.and.straw.fill",
+
+        // Transport
+        "car.fill", "fuelpump.fill", "tram.fill", "bus.fill", "airplane",
+        "bicycle", "ferry.fill", "ev.charger.fill", "parkingsign.circle.fill",
+
+        // Logement
+        "house.fill", "bolt.fill", "flame.fill", "drop.fill", "wifi",
+        "wrench.and.screwdriver.fill", "sofa.fill", "bed.double.fill", "key.fill",
+
+        // Santé
+        "cross.case.fill", "heart.fill", "pills.fill", "stethoscope",
+        "figure.run", "dumbbell.fill", "brain.filled.head.profile", "bandage.fill",
+
+        // Shopping
+        "bag.fill", "tag.fill", "tshirt.fill", "shoe.fill", "eyeglasses",
+        "watch.analog", "sparkles", "paintbrush.fill",
+
+        // Loisirs
+        "tv.fill", "gamecontroller.fill", "music.note", "headphones",
+        "film.fill", "book.fill", "theatermasks.fill", "sportscar.fill",
+        "figure.hiking", "figure.swimming", "figure.soccer", "tennis.racket",
+        "camera.fill", "photo.fill", "ticket.fill",
+
+        // Voyages
+        "airplane.departure", "suitcase.fill", "beach.umbrella.fill",
+        "map.fill", "globe", "tent.fill", "mountain.2.fill",
+
+        // Finance
+        "dollarsign.circle.fill", "banknote.fill", "creditcard.fill",
+        "chart.line.uptrend.xyaxis", "chart.bar.fill", "percent",
+        "arrow.up.arrow.down.circle.fill", "building.columns.fill",
+        "safe.fill", "bitcoinsign.circle.fill",
+
+        // Travail
+        "briefcase.fill", "desktopcomputer", "laptopcomputer",
+        "printer.fill", "phone.fill", "envelope.fill", "doc.fill",
+        "pencil.and.list.clipboard", "person.2.fill",
+
+        // Abonnements & Services
+        "play.rectangle.fill", "antenna.radiowaves.left.and.right",
+        "newspaper.fill", "cloud.fill", "iphone",
+
+        // Famille & Enfants
+        "figure.and.child.holdinghands", "teddybear.fill",
+        "stroller.fill", "backpack.fill", "graduationcap.fill",
+
+        // Animaux
+        "pawprint.fill", "dog.fill", "cat.fill", "lizard.fill",
+
+        // Dons & Impôts
+        "hand.raised.fill", "building.2.fill", "scalemass.fill",
+        "person.crop.circle.badge.checkmark",
+
+        // Divers
+        "gift.fill", "folder.fill", "star.fill", "bell.fill",
+        "questionmark.circle.fill", "ellipsis.circle.fill"
     ]
     
     let availableColors = [
@@ -98,32 +153,58 @@ struct CategoryFormView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Icône")
                             .font(.headline)
-                        
-                        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 8), spacing: 12) {
-                            ForEach(availableIcons, id: \.self) { icon in
-                                Button {
-                                    selectedIcon = icon
-                                } label: {
-                                    Image(systemName: icon)
-                                        .font(.title3)
-                                        .foregroundColor(selectedIcon == icon ? .white : Color(hex: selectedColor))
-                                        .frame(width: 40, height: 40)
-                                        .background(
-                                            Circle()
-                                                .fill(selectedIcon == icon ? Color(hex: selectedColor) : Color.gray.opacity(0.1))
-                                        )
+
+                        HStack {
+                            Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                            TextField("Rechercher une icône", text: $iconSearch)
+                                .textFieldStyle(.plain)
+                            if !iconSearch.isEmpty {
+                                Button { iconSearch = "" } label: {
+                                    Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
                                 }
                                 .buttonStyle(.plain)
                             }
                         }
+                        .padding(6)
+                        .background(Color(NSColor.windowBackgroundColor))
+                        .cornerRadius(6)
+
+                        let filtered = iconSearch.isEmpty ? availableIcons : availableIcons.filter { $0.localizedCaseInsensitiveContains(iconSearch) }
+
+                        ScrollView {
+                            LazyVGrid(columns: Array(repeating: GridItem(.fixed(42)), count: 10), spacing: 8) {
+                                ForEach(filtered, id: \.self) { icon in
+                                    Button {
+                                        selectedIcon = icon
+                                    } label: {
+                                        Image(systemName: icon)
+                                            .font(.title3)
+                                            .foregroundColor(selectedIcon == icon ? .white : Color(hex: selectedColor))
+                                            .frame(width: 38, height: 38)
+                                            .background(
+                                                Circle()
+                                                    .fill(selectedIcon == icon ? Color(hex: selectedColor) : Color.gray.opacity(0.1))
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help(icon)
+                                }
+                            }
+                            .padding(4)
+                        }
+                        .frame(height: 210)
+                        .background(Color(NSColor.windowBackgroundColor))
+                        .cornerRadius(8)
                     }
-                    
+                }
+
+                Section {
                     // Sélecteur de couleur
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Couleur")
                             .font(.headline)
-                        
-                        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 8), spacing: 12) {
+
+                        LazyVGrid(columns: Array(repeating: GridItem(.fixed(40)), count: 8), spacing: 10) {
                             ForEach(availableColors, id: \.self) { color in
                                 Button {
                                     selectedColor = color
@@ -188,7 +269,7 @@ struct CategoryFormView: View {
             }
         }
         .padding()
-        .frame(width: 600, height: 700)
+        .frame(width: 640, height: 780)
         .onAppear {
             loadCategoryData()
         }

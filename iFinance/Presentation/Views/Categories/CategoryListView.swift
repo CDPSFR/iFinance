@@ -280,6 +280,15 @@ struct CategoryGroupView: View {
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
+                .contextMenu {
+                    Button { onEdit(parentCategory) } label: {
+                        Label("Modifier", systemImage: "pencil")
+                    }
+                    Divider()
+                    Button(role: .destructive) { onDelete(parentCategory) } label: {
+                        Label("Supprimer", systemImage: "trash")
+                    }
+                }
 
             VStack(spacing: 0) {
             // Sous-catégories
