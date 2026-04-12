@@ -10,11 +10,13 @@ struct DatabaseSchema {
         createTransactionsTable,
         createRecurringTemplatesTable,
         createBudgetsTable,
+        createBudgetVersionsTable,
         createInvestmentPositionsTable,
         createInvestmentTransactionsTable
     ]
     
     static let migrationStatements: [String] = [
+        // Accounts
         "ALTER TABLE accounts ADD COLUMN iban TEXT;",
         "ALTER TABLE accounts ADD COLUMN bic TEXT;",
         "ALTER TABLE accounts ADD COLUMN is_excluded_from_reports INTEGER NOT NULL DEFAULT 0;"
@@ -40,7 +42,7 @@ struct DatabaseSchema {
         
         // Indexes pour Budgets
         "CREATE INDEX IF NOT EXISTS idx_budgets_book ON budgets(book_id);",
-        "CREATE INDEX IF NOT EXISTS idx_budgets_category ON budgets(category_id);",
+        "CREATE INDEX IF NOT EXISTS idx_budget_versions_budget ON budget_versions(budget_id);",
         
         // Indexes pour Recurring Templates
         "CREATE INDEX IF NOT EXISTS idx_recurring_book ON recurring_templates(book_id);",
@@ -175,18 +177,29 @@ struct DatabaseSchema {
     """
     
     // MARK: - Budgets
-    
+
     private static let createBudgetsTable = """
     CREATE TABLE IF NOT EXISTS budgets (
         id TEXT PRIMARY KEY,
         book_id TEXT NOT NULL,
-        category_id TEXT NOT NULL,
-        amount REAL NOT NULL,
+        name TEXT NOT NULL DEFAULT '',
+        note TEXT,
         period TEXT NOT NULL,
-        start_date TEXT NOT NULL,
-        end_date TEXT,
-        FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE,
-        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+        category_ids TEXT NOT NULL DEFAULT '[]',
+        anchor_date TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
+    );
+    """
+
+    static let createBudgetVersionsTable: String = """
+    CREATE TABLE IF NOT EXISTS budget_versions (
+        id TEXT PRIMARY KEY,
+        budget_id TEXT NOT NULL,
+        amount TEXT NOT NULL,
+        effective_from TEXT NOT NULL,
+        note TEXT,
+        FOREIGN KEY (budget_id) REFERENCES budgets(id) ON DELETE CASCADE
     );
     """
     

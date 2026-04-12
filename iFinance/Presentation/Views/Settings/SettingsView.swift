@@ -8,6 +8,8 @@ struct SettingsView: View {
         case accounts
         case payees
         case categories
+        case budgets
+        case budget(Budget)
     }
 
     @EnvironmentObject var appSettings: AppSettings
@@ -49,7 +51,16 @@ struct SettingsView: View {
                                 icon: "folder.fill",
                                 iconColor: .teal,
                                 label: "Catégories",
-                                destination: Destination.categories,
+                                destination: Destination.categories
+                            )
+                        }
+
+                        settingsSection(title: "Planification") {
+                            settingsRow(
+                                icon: "target",
+                                iconColor: .indigo,
+                                label: "Budgets",
+                                destination: Destination.budgets,
                                 isLast: true
                             )
                         }
@@ -90,6 +101,10 @@ struct SettingsView: View {
                     PayeeListView(selectedTab: .constant(.settings))
                 case .categories:
                     CategoryListView(selectedTab: .constant(.settings))
+                case .budgets:
+                    BudgetsView()
+                case .budget(let budget):
+                    BudgetDetailView(budget: budget)
                 }
             }
             .alert("Erreur d'export", isPresented: $showExportError) {

@@ -8,12 +8,14 @@ struct MainView: View {
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var payeesController: PayeesController
+    @EnvironmentObject var budgetsController: BudgetsController
 
     // MARK: - State
     @State private var showTransactionForm = false
     @State private var showAccountForm = false // NOUVEAU
     @State private var showCategoryForm = false // NOUVEAU
     @State private var showPayeeForm = false // NOUVEAU
+    @State private var showBudgetForm = false
     @State private var showFilterForm = false
     @State private var showBookSelector = false
     @State private var showBookForm = false
@@ -26,6 +28,7 @@ struct MainView: View {
         case account(UUID)
         case categories
         case payees
+        case budgets
         case reports
         case settings
 
@@ -36,6 +39,7 @@ struct MainView: View {
             case .account(let id): return "account-\(id.uuidString)"
             case .categories: return "categories"
             case .payees: return "payees"
+            case .budgets: return "budgets"
             case .reports: return "reports"
             case .settings: return "settings"
             }
@@ -70,6 +74,9 @@ struct MainView: View {
         .sheet(isPresented: $showPayeeForm) {
             PayeeFormView(isPresented: $showPayeeForm)
         }
+        .sheet(isPresented: $showBudgetForm) {
+            BudgetFormView(isPresented: $showBudgetForm)
+        }
         .sheet(isPresented: $showFilterForm) {
             TransactionFiltersView(filters: $transactionsController.filters, isPresented: $showFilterForm)
         }
@@ -85,6 +92,7 @@ struct MainView: View {
                 await transactionsController.loadAllTransactions(
                     for: accountsController.activeAccounts
                 )
+                await budgetsController.loadBudgets(for: bookID)
             }
         }
     }
@@ -147,6 +155,10 @@ struct MainView: View {
                         Label("Bénéficiaires", systemImage: "person.crop.circle.fill")
                     }
 
+                    NavigationLink(value: SidebarItem.budgets) {
+                        Label("Budgets", systemImage: "target")
+                    }
+
                     NavigationLink(value: SidebarItem.reports) {
                         Label("Rapports", systemImage: "chart.line.uptrend.xyaxis")
                     }
@@ -184,6 +196,15 @@ struct MainView: View {
                     CategoryListView(selectedTab: $selectedTab)
                 case .payees:
                     PayeeListView(selectedTab: $selectedTab)
+                case .budgets:
+                    NavigationStack {
+                        BudgetsView()
+                            .navigationDestination(for: SettingsView.Destination.self) { destination in
+                                if case .budget(let budget) = destination {
+                                    BudgetDetailView(budget: budget)
+                                }
+                            }
+                    }
                 case .reports:
                     ReportsView()
                 case .settings:
@@ -250,6 +271,12 @@ struct MainView: View {
                         showPayeeForm = true
                     } label: {
                         Label("Nouveau bénéficiaire", systemImage: "person.crop.circle")
+                    }
+
+                    Button {
+                        showBudgetForm = true
+                    } label: {
+                        Label("Nouveau budget", systemImage: "target")
                     }
                 } label: {
                     Image(systemName: "plus")

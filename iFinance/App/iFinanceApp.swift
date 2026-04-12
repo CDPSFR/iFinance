@@ -16,6 +16,7 @@ struct iFinanceApp: App {
                 .environmentObject(appState.transactionsController)
                 .environmentObject(appState.categoriesController)
                 .environmentObject(appState.payeesController)
+                .environmentObject(appState.budgetsController)
                 .frame(minWidth: 1000, minHeight: 700)
         }
         .windowStyle(.hiddenTitleBar)
