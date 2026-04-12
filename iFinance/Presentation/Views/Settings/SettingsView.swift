@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var path = NavigationPath()
     @State private var exportError: String?
     @State private var showExportError = false
+    @State private var showQIFImport = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -80,6 +81,12 @@ struct SettingsView: View {
 
                         settingsSection(title: "Outils") {
                             actionRow(
+                                icon: "arrow.down.doc.fill",
+                                iconColor: .blue,
+                                label: "Importer un fichier QIF",
+                                action: { showQIFImport = true }
+                            )
+                            actionRow(
                                 icon: "square.and.arrow.up.fill",
                                 iconColor: .green,
                                 label: "Exporter la base de données",
@@ -111,6 +118,9 @@ struct SettingsView: View {
                 Button("OK", role: .cancel) { }
             } message: {
                 Text(exportError ?? "Une erreur est survenue.")
+            }
+            .sheet(isPresented: $showQIFImport) {
+                QIFImportView(isPresented: $showQIFImport)
             }
         }
     }
