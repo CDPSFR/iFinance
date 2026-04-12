@@ -187,7 +187,7 @@ struct MainView: View {
                 case .reports:
                     ReportsView()
                 case .settings:
-                    AccountListView()
+                    SettingsView()
                 }
             }
             .onChange(of: selectedTab) { oldValue, newValue in

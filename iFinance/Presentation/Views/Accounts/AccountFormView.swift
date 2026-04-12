@@ -32,7 +32,7 @@ struct AccountFormView: View {
         VStack(spacing: 20) {
             // Header
             HStack {
-                Text(accountToEdit == nil ? "Nouveau Compte" : "Modifier le Compte")
+                Text(accountToEdit == nil ? "Nouveau Compte" : "Modifier le compte")
                     .font(.title)
                     .fontWeight(.bold)
                 
