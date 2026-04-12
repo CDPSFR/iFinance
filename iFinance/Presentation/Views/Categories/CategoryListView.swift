@@ -67,11 +67,16 @@ struct CategoryListView: View {
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .sheet(isPresented: $showCategoryForm) {
-            if let category = categoryToEdit {
-                CategoryFormView(isPresented: $showCategoryForm, categoryToEdit: category)
-            } else {
-                CategoryFormView(isPresented: $showCategoryForm)
-            }
+            CategoryFormView(isPresented: $showCategoryForm)
+        }
+        .sheet(item: $categoryToEdit) { category in
+            CategoryFormView(
+                isPresented: Binding(
+                    get: { categoryToEdit != nil },
+                    set: { if !$0 { categoryToEdit = nil } }
+                ),
+                categoryToEdit: category
+            )
         }
         .alert("Supprimer la catégorie ?", isPresented: $showDeleteConfirmation, presenting: categoryToDelete) { category in
             Button("Annuler", role: .cancel) { }
@@ -160,7 +165,6 @@ struct CategoryListView: View {
                         transactionCounts: getCategoryTransactionCounts(),
                         onEdit: { category in
                             categoryToEdit = category
-                            showCategoryForm = true
                         },
                         onDelete: { category in
                             categoryToDelete = category
@@ -168,7 +172,6 @@ struct CategoryListView: View {
                         },
                         onAddSubcategory: { parent in
                             parentForNewCategory = parent.id
-                            categoryToEdit = nil
                             showCategoryForm = true
                         },
                         onSelectCategory: { category in
@@ -186,7 +189,6 @@ struct CategoryListView: View {
                         transactionCounts: getCategoryTransactionCounts(),
                         onEdit: { category in
                             categoryToEdit = category
-                            showCategoryForm = true
                         },
                         onDelete: { category in
                             categoryToDelete = category
@@ -194,7 +196,6 @@ struct CategoryListView: View {
                         },
                         onAddSubcategory: { parent in
                             parentForNewCategory = parent.id
-                            categoryToEdit = nil
                             showCategoryForm = true
                         },
                         onSelectCategory: { category in

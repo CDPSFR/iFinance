@@ -21,8 +21,8 @@ struct BudgetsView: View {
             // Header
             HStack {
                 Text("Budgets")
-                    .font(.title2)
-                    .fontWeight(.semibold)
+                    .font(.system(size: 34, weight: .bold))
+                Spacer()
             }
             .padding(.horizontal)
             .padding(.top, 16)

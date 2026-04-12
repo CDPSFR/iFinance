@@ -66,11 +66,16 @@ struct PayeeListView: View {
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .sheet(isPresented: $showPayeeForm) {
-            if let payee = payeeToEdit {
-                PayeeFormView(isPresented: $showPayeeForm, payeeToEdit: payee)
-            } else {
-                PayeeFormView(isPresented: $showPayeeForm)
-            }
+            PayeeFormView(isPresented: $showPayeeForm)
+        }
+        .sheet(item: $payeeToEdit) { payee in
+            PayeeFormView(
+                isPresented: Binding(
+                    get: { payeeToEdit != nil },
+                    set: { if !$0 { payeeToEdit = nil } }
+                ),
+                payeeToEdit: payee
+            )
         }
         .alert("Supprimer le bénéficiaire ?", isPresented: $showDeleteConfirmation, presenting: payeeToDelete) { payee in
             Button("Annuler", role: .cancel) { }
@@ -172,7 +177,6 @@ struct PayeeListView: View {
                         categoriesController: categoriesController,
                         onEdit: { payee in
                             payeeToEdit = payee
-                            showPayeeForm = true
                         },
                         onDelete: { payee in
                             payeeToDelete = payee

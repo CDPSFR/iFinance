@@ -15,6 +15,7 @@ struct TransactionListView: View {
     @State private var showDeleteConfirmation = false
     @State private var selectedTransactions: Set<Transaction.ID> = []
     @State private var showBulkDeleteConfirmation = false
+    @State private var showBulkCategorize = false
     @State private var sortOrder = [KeyPathComparator(\TransactionRow.date, order: .reverse)]
     
     var body: some View {
@@ -199,6 +200,24 @@ struct TransactionListView: View {
         } message: {
             Text("Cette action est irréversible.")
         }
+        .sheet(isPresented: $showBulkCategorize) {
+            BulkCategorizeView(
+                transactionIDs: selectedTransactions,
+                isPresented: $showBulkCategorize,
+                onApply: { categoryID in
+                    let ids = selectedTransactions
+                    Task {
+                        for id in ids {
+                            if var tx = transactionsController.filteredTransactions.first(where: { $0.id == id }) {
+                                tx.categoryID = categoryID
+                                await transactionsController.updateTransaction(tx)
+                            }
+                        }
+                        await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
+                    }
+                }
+            )
+        }
     }
     
     // MARK: - Transaction Table
@@ -271,7 +290,7 @@ struct TransactionListView: View {
             
             // Colonne Montant
             TableColumn("Montant", value: \.amount) { row in
-                Text((row.amount >= 0 ? "+" : "") + row.amount.formatted(.currency(code: row.currency)))
+                Text(row.amount, format: .currency(code: row.currency))
                     .font(.body)
                     .fontWeight(.medium)
                     .foregroundColor(row.typeColor)
@@ -309,6 +328,15 @@ struct TransactionListView: View {
                     Label("Supprimer", systemImage: "trash")
                 }
             } else if items.count > 1 {
+                Button {
+                    selectedTransactions = items
+                    showBulkCategorize = true
+                } label: {
+                    Label("Catégoriser \(items.count) transactions", systemImage: "folder.badge.plus")
+                }
+
+                Divider()
+
                 Button(role: .destructive) {
                     selectedTransactions = items
                     showBulkDeleteConfirmation = true
@@ -357,7 +385,7 @@ struct TransactionListView: View {
                 memo: transaction.memo,
                 categoryName: category.map { categoriesController.getCategoryPath(for: $0.id) },
                 categoryColor: category.map { Color(hex: $0.displayColor) },
-                amount: transaction.amount,
+                amount: transaction.signedAmount,
                 balance: newBalance,
                 currency: account?.currency ?? "EUR"
             )
