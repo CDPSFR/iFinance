@@ -13,7 +13,8 @@ struct TransactionListView: View {
     @State private var transactionToEdit: Transaction?
     @State private var transactionToDelete: Transaction?
     @State private var showDeleteConfirmation = false
-    @State private var selectedTransaction: Transaction.ID?
+    @State private var selectedTransactions: Set<Transaction.ID> = []
+    @State private var showBulkDeleteConfirmation = false
     @State private var sortOrder = [KeyPathComparator(\TransactionRow.date, order: .reverse)]
     
     var body: some View {
@@ -180,12 +181,30 @@ struct TransactionListView: View {
         } message: { _ in
             Text("Cette action est irréversible.")
         }
+        .alert(
+            "Supprimer \(selectedTransactions.count) transaction(s) ?",
+            isPresented: $showBulkDeleteConfirmation
+        ) {
+            Button("Annuler", role: .cancel) { }
+            Button("Supprimer", role: .destructive) {
+                let ids = selectedTransactions
+                Task {
+                    for id in ids {
+                        await transactionsController.deleteTransaction(id: id)
+                    }
+                    selectedTransactions.removeAll()
+                    await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
+                }
+            }
+        } message: {
+            Text("Cette action est irréversible.")
+        }
     }
     
     // MARK: - Transaction Table
     
     private var transactionTable: some View {
-        Table(tableRows, selection: $selectedTransaction, sortOrder: $sortOrder) {
+        Table(tableRows, selection: $selectedTransactions, sortOrder: $sortOrder) {
             // Colonne Type (icône)
             TableColumn("") { row in
                 Image(systemName: row.typeIcon)
@@ -272,21 +291,29 @@ struct TransactionListView: View {
             }
         }
         .contextMenu(forSelectionType: Transaction.ID.self) { items in
-            if items.count == 1, let id = items.first,
+            if items.count == 1,
+               let id = items.first,
                let transaction = transactionsController.filteredTransactions.first(where: { $0.id == id }) {
                 Button {
-                    transactionToEdit = transaction  // Ceci déclenchera automatiquement le sheet
+                    transactionToEdit = transaction
                 } label: {
                     Label("Modifier", systemImage: "pencil")
                 }
-                
+
                 Divider()
-                
+
                 Button(role: .destructive) {
                     transactionToDelete = transaction
                     showDeleteConfirmation = true
                 } label: {
                     Label("Supprimer", systemImage: "trash")
+                }
+            } else if items.count > 1 {
+                Button(role: .destructive) {
+                    selectedTransactions = items
+                    showBulkDeleteConfirmation = true
+                } label: {
+                    Label("Supprimer \(items.count) transactions", systemImage: "trash")
                 }
             }
         }
