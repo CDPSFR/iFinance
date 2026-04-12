@@ -12,6 +12,9 @@ struct AccountFormView: View {
     @State private var selectedType: AccountType
     @State private var initialBalance: String
     @State private var currency: String
+    @State private var iban: String
+    @State private var bic: String
+    @State private var isExcludedFromReports: Bool
     @State private var isCreating = false
     
     let availableCurrencies = ["EUR", "USD", "GBP", "CHF", "CAD", "JPY", "AUD"]
@@ -26,6 +29,9 @@ struct AccountFormView: View {
         _selectedType = State(initialValue: accountToEdit?.type ?? .checking)
         _initialBalance = State(initialValue: accountToEdit != nil ? "\(accountToEdit!.initialBalance)" : "0")
         _currency = State(initialValue: accountToEdit?.currency ?? "EUR")
+        _iban = State(initialValue: accountToEdit?.iban ?? "")
+        _bic = State(initialValue: accountToEdit?.bic ?? "")
+        _isExcludedFromReports = State(initialValue: accountToEdit?.isExcludedFromReports ?? false)
     }
     
     var body: some View {
@@ -82,13 +88,25 @@ struct AccountFormView: View {
                             .frame(width: 150)
                             .multilineTextAlignment(.trailing)
                     }
-                    
+
                     Picker("Devise", selection: $currency) {
                         ForEach(availableCurrencies, id: \.self) { curr in
                             Text(curr).tag(curr)
                         }
                     }
                     .pickerStyle(.menu)
+                }
+
+                Section("Coordonnées bancaires") {
+                    TextField("IBAN (optionnel)", text: $iban)
+                        .textFieldStyle(.roundedBorder)
+
+                    TextField("BIC (optionnel)", text: $bic)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                Section("Options") {
+                    Toggle("Exclure du tableau de bord et des rapports", isOn: $isExcludedFromReports)
                 }
             }
             .formStyle(.grouped)
@@ -113,7 +131,7 @@ struct AccountFormView: View {
             }
         }
         .padding()
-        .frame(width: 500, height: 500)
+        .frame(width: 500, height: 640)
     }
     
     private func saveAccount() {
@@ -126,24 +144,28 @@ struct AccountFormView: View {
         
         Task {
             if let existingAccount = accountToEdit {
-                // Modification
                 var updated = existingAccount
                 updated.name = name
                 updated.bank = bank.isEmpty ? nil : bank
                 updated.type = selectedType
                 updated.initialBalance = balance
                 updated.currency = currency
-                
+                updated.iban = iban.isEmpty ? nil : iban
+                updated.bic = bic.isEmpty ? nil : bic
+                updated.isExcludedFromReports = isExcludedFromReports
+
                 await accountsController.updateAccount(updated)
             } else {
-                // Création
                 await accountsController.createAccount(
                     bookID: bookID,
                     name: name,
                     bank: bank.isEmpty ? nil : bank,
                     type: selectedType,
                     initialBalance: balance,
-                    currency: currency
+                    currency: currency,
+                    iban: iban.isEmpty ? nil : iban,
+                    bic: bic.isEmpty ? nil : bic,
+                    isExcludedFromReports: isExcludedFromReports
                 )
             }
             

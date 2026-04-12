@@ -45,14 +45,17 @@ struct Account: Identifiable, Codable, Equatable, Hashable {
     var type: AccountType
     var initialBalance: Decimal = 0
     var currency: String = "EUR"
+    var iban: String? = nil
+    var bic: String? = nil
+    var isExcludedFromReports: Bool = false
     var isClosed: Bool = false
     var createdAt: Date = Date()
-    
+
     // Calculé côté application (pas en base)
     var currentBalance: Decimal = 0
-    
+
     enum CodingKeys: String, CodingKey {
-        case id, bookID, name, bank, type, initialBalance, currency, isClosed, createdAt
+        case id, bookID, name, bank, type, initialBalance, currency, iban, bic, isExcludedFromReports, isClosed, createdAt
         // currentBalance n'est pas sérialisé
     }
 }

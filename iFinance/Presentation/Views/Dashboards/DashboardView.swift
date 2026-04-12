@@ -139,13 +139,15 @@ struct DashboardView: View {
     // MARK: - Computed Properties
     
     private var totalBalance: String {
-        let total = accountsController.activeAccounts.reduce(Decimal(0)) { sum, account in
-            let balance = transactionsController.calculateBalance(
-                for: account.id,
-                initialBalance: account.initialBalance
-            )
-            return sum + balance
-        }
+        let total = accountsController.activeAccounts
+            .filter { !$0.isExcludedFromReports }
+            .reduce(Decimal(0)) { sum, account in
+                let balance = transactionsController.calculateBalance(
+                    for: account.id,
+                    initialBalance: account.initialBalance
+                )
+                return sum + balance
+            }
         
         if let currency = booksController.currentBook?.currency {
             return total.formatted(.currency(code: currency))

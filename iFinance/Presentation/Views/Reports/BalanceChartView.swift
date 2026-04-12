@@ -166,8 +166,10 @@ struct BalanceChartView: View {
             guard let account = accountsController.getAccount(id: accountID) else { return [] }
             accountsToUse = [account]
         } else {
-            accountsToUse = accountsController.activeAccounts
+            accountsToUse = accountsController.activeAccounts.filter { !$0.isExcludedFromReports }
         }
+
+        let includedAccountIDs = Set(accountsToUse.map { $0.id })
         
         guard !accountsToUse.isEmpty else { return [] }
         
@@ -183,9 +185,9 @@ struct BalanceChartView: View {
             startDate = calendar.date(byAdding: .day, value: -30, to: endDate)!
         }
         
-        // Filtrer les transactions
+        // Filtrer les transactions (uniquement les comptes inclus)
         let relevantTransactions = transactionsController.filteredTransactions
-            .filter { $0.date >= startDate && $0.date < endDate }
+            .filter { $0.date >= startDate && $0.date < endDate && includedAccountIDs.contains($0.accountID) }
             .sorted { $0.date < $1.date }
         
         guard !relevantTransactions.isEmpty else { return [] }

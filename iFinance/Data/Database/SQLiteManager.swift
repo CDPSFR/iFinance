@@ -227,6 +227,15 @@ class SQLiteManager {
             execute(sql: sql)
         }
         
+        runMigrations()
+
         print("✅ Base de données initialisée")
+    }
+
+    private func runMigrations() {
+        for sql in DatabaseSchema.migrationStatements {
+            // Les ALTER TABLE échouent silencieusement si la colonne existe déjà
+            execute(sql: sql)
+        }
     }
 }

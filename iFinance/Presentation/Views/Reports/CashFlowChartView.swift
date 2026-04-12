@@ -5,6 +5,7 @@ struct CashFlowChartView: View {
 
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var booksController: BooksController
+    @EnvironmentObject var accountsController: AccountsController
 
     // MARK: - Data Models
 
@@ -131,9 +132,14 @@ struct CashFlowChartView: View {
         }
     }
 
+    private var excludedAccountIDs: Set<UUID> {
+        Set(accountsController.activeAccounts.filter { $0.isExcludedFromReports }.map { $0.id })
+    }
+
     private var dataPoints: [DataPoint] {
         let calendar = Calendar.current
-        let filtered = transactionsController.filteredTransactions.filter { $0.status != .skipped }
+        let filtered = transactionsController.filteredTransactions
+            .filter { $0.status != .skipped && !excludedAccountIDs.contains($0.accountID) }
 
         let grouped = Dictionary(grouping: filtered) { transaction in
             calendar.date(from: calendar.dateComponents([.year, .month], from: transaction.date))!

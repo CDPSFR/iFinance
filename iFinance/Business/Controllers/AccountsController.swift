@@ -67,7 +67,10 @@ class AccountsController: ObservableObject {
         bank: String?,
         type: AccountType,
         initialBalance: Decimal,
-        currency: String
+        currency: String,
+        iban: String? = nil,
+        bic: String? = nil,
+        isExcludedFromReports: Bool = false
     ) async {
         let account = Account(
             bookID: bookID,
@@ -75,7 +78,10 @@ class AccountsController: ObservableObject {
             bank: bank,
             type: type,
             initialBalance: initialBalance,
-            currency: currency
+            currency: currency,
+            iban: iban,
+            bic: bic,
+            isExcludedFromReports: isExcludedFromReports
         )
         
         do {

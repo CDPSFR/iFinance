@@ -14,6 +14,12 @@ struct DatabaseSchema {
         createInvestmentTransactionsTable
     ]
     
+    static let migrationStatements: [String] = [
+        "ALTER TABLE accounts ADD COLUMN iban TEXT;",
+        "ALTER TABLE accounts ADD COLUMN bic TEXT;",
+        "ALTER TABLE accounts ADD COLUMN is_excluded_from_reports INTEGER NOT NULL DEFAULT 0;"
+    ]
+
     static let createIndexStatements: [String] = [
         // Indexes pour Transactions
         "CREATE INDEX IF NOT EXISTS idx_transactions_account_date ON transactions(account_id, date);",
@@ -72,6 +78,9 @@ struct DatabaseSchema {
         type TEXT NOT NULL,
         initial_balance REAL NOT NULL DEFAULT 0,
         currency TEXT NOT NULL DEFAULT 'EUR',
+        iban TEXT,
+        bic TEXT,
+        is_excluded_from_reports INTEGER NOT NULL DEFAULT 0,
         is_closed INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE

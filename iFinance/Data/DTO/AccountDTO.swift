@@ -8,6 +8,9 @@ struct AccountDTO {
     let type: String
     let initialBalance: Double
     let currency: String
+    let iban: String?
+    let bic: String?
+    let isExcludedFromReports: Bool
     let isClosed: Bool
     let createdAt: String
 }

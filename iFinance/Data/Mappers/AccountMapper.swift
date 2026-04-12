@@ -15,6 +15,9 @@ struct AccountMapper {
             type: account.type.rawValue,
             initialBalance: NSDecimalNumber(decimal: account.initialBalance).doubleValue,
             currency: account.currency,
+            iban: account.iban,
+            bic: account.bic,
+            isExcludedFromReports: account.isExcludedFromReports,
             isClosed: account.isClosed,
             createdAt: dateFormatter.string(from: account.createdAt)
         )
@@ -36,6 +39,9 @@ struct AccountMapper {
             type: type,
             initialBalance: Decimal(dto.initialBalance),
             currency: dto.currency,
+            iban: dto.iban,
+            bic: dto.bic,
+            isExcludedFromReports: dto.isExcludedFromReports,
             isClosed: dto.isClosed,
             createdAt: createdAt
         )
@@ -53,6 +59,7 @@ struct AccountMapper {
             return nil
         }
         
+        let isExcludedInt = row["is_excluded_from_reports"] as? Int64 ?? 0
         let dto = AccountDTO(
             id: id,
             bookID: bookID,
@@ -61,6 +68,9 @@ struct AccountMapper {
             type: typeStr,
             initialBalance: initialBalance,
             currency: currency,
+            iban: row["iban"] as? String,
+            bic: row["bic"] as? String,
+            isExcludedFromReports: isExcludedInt == 1,
             isClosed: isClosedInt == 1,
             createdAt: createdAtStr
         )

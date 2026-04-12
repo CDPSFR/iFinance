@@ -162,7 +162,8 @@ struct AccountsChartView: View {
         let grandTotal = totals.reduce(Decimal(0)) { $0 + $1.1 }
         
         let data = totals.compactMap { (accountID, amount) -> AccountData? in
-            guard let account = accountsController.getAccount(id: accountID) else { return nil }
+            guard let account = accountsController.getAccount(id: accountID),
+                  !account.isExcludedFromReports else { return nil }
             
             let percentage = Double(truncating: NSDecimalNumber(decimal: (amount / grandTotal) * 100))
             
