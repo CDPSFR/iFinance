@@ -6,6 +6,7 @@ struct TransactionListView: View {
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var payeesController: PayeesController
+    @EnvironmentObject var appSettings: AppSettings
     
     @State private var showTransactionForm = false
     @State private var showFilters = false
@@ -48,6 +49,7 @@ struct TransactionListView: View {
                             .font(.title2)
                             .fontWeight(.bold)
                             .foregroundColor(balance >= 0 ? .green : .red)
+                            .privacyBlur(hidden: appSettings.hideAmounts)
                     }
                 }
             }
@@ -250,10 +252,11 @@ struct TransactionListView: View {
             
             // Colonne Montant
             TableColumn("Montant", value: \.amount) { row in
-                 Text((row.amount >= 0 ? "+" : "") + row.amount.formatted(.currency(code: row.currency)))
+                Text((row.amount >= 0 ? "+" : "") + row.amount.formatted(.currency(code: row.currency)))
                     .font(.body)
                     .fontWeight(.medium)
                     .foregroundColor(row.typeColor)
+                    .privacyBlur(hidden: appSettings.hideAmounts)
             }
             .width(min: 100, ideal: 120)
             
@@ -263,6 +266,7 @@ struct TransactionListView: View {
                     Text(row.balance, format: .currency(code: row.currency))
                         .font(.body)
                         .foregroundColor(row.balance >= 0 ? .green : .red)
+                        .privacyBlur(hidden: appSettings.hideAmounts)
                 }
                 .width(min: 100, ideal: 120)
             }

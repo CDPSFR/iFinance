@@ -5,6 +5,7 @@ struct CategoriesChartView: View {
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var categoriesController: CategoriesController
+    @EnvironmentObject var appSettings: AppSettings
     
     // https://www.youtube.com/watch?v=nu74-aRobSs
     
@@ -56,6 +57,7 @@ struct CategoriesChartView: View {
                 if let highestCategory = categoryData.max(by: { $1.amount > $0.amount }) {
                     ChartPopOverView(highestCategory.amount, highestCategory.categoryName)
                         .padding(.vertical)
+                        .privacyBlur(hidden: appSettings.hideAmounts)
                         //.opacity(selectedCategoryID == nil ? 1 : 0)
                     
                 }
@@ -63,6 +65,7 @@ struct CategoriesChartView: View {
                 // Graphique centré
                 VStack(spacing: 12) {
                     
+                    let hideAmounts = appSettings.hideAmounts
                     Chart {
                         ForEach(categoryData.sorted { $0.amount > $1.amount }) { item in
                             SectorMark(
@@ -79,6 +82,7 @@ struct CategoriesChartView: View {
                                 Text("\(NSDecimalNumber(decimal: item.amount).doubleValue, specifier: "%.0f")€")
                                     .font(.headline)
                                     .foregroundStyle(.white)
+                                    .privacyBlur(hidden: hideAmounts)
                             }
                             .opacity(selectedCategoryID == nil ? 1 : (selectedCategoryID == item.categoryID ? 1 : 0.4))
                         }
@@ -237,18 +241,20 @@ struct StatisticCardView: View {
     let value: Decimal
     let color: Color
     var isCurrency: Bool = true
-    
+    @EnvironmentObject var appSettings: AppSettings
+
     var body: some View {
         VStack(spacing: 8) {
             Text(title)
                 .font(.caption)
                 .foregroundColor(.secondary)
-            
+
             if isCurrency {
                 Text(value, format: .currency(code: "EUR"))
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(color)
+                    .privacyBlur(hidden: appSettings.hideAmounts)
             } else {
                 Text("\(NSDecimalNumber(decimal: value).intValue)")
                     .font(.title2)

@@ -6,6 +6,7 @@ struct DashboardView: View {
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var payeesController: PayeesController
+    @EnvironmentObject var appSettings: AppSettings
     
     var body: some View {
         ScrollView {
@@ -46,6 +47,7 @@ struct DashboardView: View {
                         icon: "banknote",
                         color: .blue
                     )
+                    .privacyBlur(hidden: appSettings.hideAmounts)
                     
                     // Nombre de comptes
                     DashboardCard(
@@ -76,13 +78,15 @@ struct DashboardView: View {
                         icon: "arrow.down.circle",
                         color: .red
                     )
-                    
+                    .privacyBlur(hidden: appSettings.hideAmounts)
+
                     DashboardCard(
                         title: "Revenus ce mois",
                         value: incomeThisMonth,
                         icon: "arrow.up.circle",
                         color: .green
                     )
+                    .privacyBlur(hidden: appSettings.hideAmounts)
                 }
                 .padding(.horizontal)
                 
@@ -262,6 +266,7 @@ struct DashboardCard: View {
 struct AccountSummaryRow: View {
     let account: Account
     @EnvironmentObject var transactionsController: TransactionsController
+    @EnvironmentObject var appSettings: AppSettings
     
     var body: some View {
         HStack(spacing: 12) {
@@ -292,6 +297,7 @@ struct AccountSummaryRow: View {
             Text(balance, format: .currency(code: account.currency))
                 .font(.headline)
                 .foregroundColor(balance >= 0 ? .green : .red)
+                .privacyBlur(hidden: appSettings.hideAmounts)
         }
         .padding()
         .background(Color(NSColor.controlBackgroundColor))

@@ -4,11 +4,13 @@ import SwiftUI
 @main
 struct iFinanceApp: App {
     @StateObject private var appState = AppState()
-    
+    @StateObject private var appSettings = AppSettings()
+
     var body: some Scene {
         WindowGroup {
             MainView()
                 .environmentObject(appState)
+                .environmentObject(appSettings)
                 .environmentObject(appState.bookController)
                 .environmentObject(appState.accountsController)
                 .environmentObject(appState.transactionsController)

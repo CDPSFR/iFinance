@@ -14,6 +14,7 @@ struct MonthlyBalanceChartView: View {
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var accountsController: AccountsController
+    @EnvironmentObject var appSettings: AppSettings
 
     // MARK: - Data Models
 
@@ -62,6 +63,7 @@ struct MonthlyBalanceChartView: View {
                 Divider()
 
                 // Graphique
+                let hideAmounts = appSettings.hideAmounts
                 Chart {
                     ForEach(balanceData) { item in
                         BarMark(
@@ -74,6 +76,7 @@ struct MonthlyBalanceChartView: View {
                             Text("\(NSDecimalNumber(decimal: item.balance).doubleValue, specifier: "%.0f")€")
                                 .font(.caption)
                                 .foregroundColor(item.balance >= 0 ? .green : .red)
+                                .privacyBlur(hidden: hideAmounts)
                         }
                     }
 
@@ -231,6 +234,7 @@ struct MonthlyBalanceChartView: View {
                 Spacer()
                 Text(balance.income, format: .currency(code: booksController.currentBook?.currency ?? "EUR"))
                     .foregroundColor(.green)
+                    .privacyBlur(hidden: appSettings.hideAmounts)
             }
             .font(.caption)
 
@@ -240,6 +244,7 @@ struct MonthlyBalanceChartView: View {
                 Spacer()
                 Text(balance.expense, format: .currency(code: booksController.currentBook?.currency ?? "EUR"))
                     .foregroundColor(.red)
+                    .privacyBlur(hidden: appSettings.hideAmounts)
             }
             .font(.caption)
 
@@ -252,6 +257,7 @@ struct MonthlyBalanceChartView: View {
                 Text(balance.balance, format: .currency(code: booksController.currentBook?.currency ?? "EUR"))
                     .fontWeight(.bold)
                     .foregroundColor(balance.balance >= 0 ? .green : .red)
+                    .privacyBlur(hidden: appSettings.hideAmounts)
             }
             .font(.callout)
         }

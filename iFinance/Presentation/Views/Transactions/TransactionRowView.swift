@@ -7,6 +7,7 @@ struct TransactionRowView: View {
     
     @EnvironmentObject var payeesController: PayeesController
     @EnvironmentObject var categoriesController: CategoriesController
+    @EnvironmentObject var appSettings: AppSettings
     
     var body: some View {
         HStack(spacing: 12) {
@@ -77,6 +78,7 @@ struct TransactionRowView: View {
             Text(abs(transaction.amount), format: .currency(code: "EUR"))
                 .font(.headline)
                 .foregroundColor(colorForType(transaction.type))
+                .privacyBlur(hidden: appSettings.hideAmounts)
             
             // Menu
             Menu {

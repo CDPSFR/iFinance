@@ -15,6 +15,7 @@ struct AccountsChartView: View {
         let percentage: Double
     }
     
+    @EnvironmentObject var appSettings: AppSettings
     @State private var selectedAccountID: UUID?
     @State private var rawSelectedAngle: Double?
     
@@ -61,9 +62,11 @@ struct AccountsChartView: View {
                 if let highestAccount = accountData.max(by: { $1.amount > $0.amount }) {
                     ChartPopOverView(highestAccount.amount, highestAccount.accountName)
                         .padding(.vertical)
+                        .privacyBlur(hidden: appSettings.hideAmounts)
                 }
                 
                 // Graphique centré
+                let hideAmounts = appSettings.hideAmounts
                 VStack(spacing: 12) {
                     Chart {
                         ForEach(accountData.sorted { $0.amount > $1.amount }) { item in
@@ -80,6 +83,7 @@ struct AccountsChartView: View {
                                 Text("\(NSDecimalNumber(decimal: item.amount).doubleValue, specifier: "%.0f")€")
                                     .font(.headline)
                                     .foregroundStyle(.white)
+                                    .privacyBlur(hidden: hideAmounts)
                             }
                             .opacity(selectedAccountID == nil ? 1 : (selectedAccountID == item.accountID ? 1 : 0.4))
                         }

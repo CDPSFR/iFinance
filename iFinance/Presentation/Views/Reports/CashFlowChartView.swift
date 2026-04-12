@@ -6,6 +6,7 @@ struct CashFlowChartView: View {
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var accountsController: AccountsController
+    @EnvironmentObject var appSettings: AppSettings
 
     // MARK: - Data Models
 
@@ -46,6 +47,7 @@ struct CashFlowChartView: View {
                 Divider()
 
                 // Graphique
+                let hideAmounts = appSettings.hideAmounts
                 Chart {
                     ForEach(categorizedDataPoints) { point in
                         BarMark(
@@ -59,6 +61,7 @@ struct CashFlowChartView: View {
                             Text("\(NSDecimalNumber(decimal: point.amount).doubleValue, specifier: "%.0f")€")
                                 .font(.caption)
                                 .foregroundColor(point.type == "Revenus" ? .green : .red)
+                                .privacyBlur(hidden: hideAmounts)
                         }
                     }
 
@@ -210,9 +213,11 @@ struct CashFlowChartView: View {
 
             Text("Revenus : \(point.income, format: .currency(code: booksController.currentBook?.currency ?? "EUR"))")
                 .foregroundColor(.green)
+                .privacyBlur(hidden: appSettings.hideAmounts)
 
             Text("Dépenses : \(point.expense, format: .currency(code: booksController.currentBook?.currency ?? "EUR"))")
                 .foregroundColor(.red)
+                .privacyBlur(hidden: appSettings.hideAmounts)
         }
         .padding(8)
         .background(

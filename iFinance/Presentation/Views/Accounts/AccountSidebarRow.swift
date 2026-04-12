@@ -4,6 +4,7 @@ struct AccountSidebarRow: View {
     let account: Account
     let balance: Decimal
     let isClosed: Bool
+    @EnvironmentObject var appSettings: AppSettings
 
     var body: some View {
         HStack(spacing: 8) {
@@ -27,6 +28,7 @@ struct AccountSidebarRow: View {
             Text(balance, format: .currency(code: account.currency))
                 .font(.caption)
                 .foregroundColor(isClosed ? .gray : (balance >= 0 ? .green : .red))
+                .privacyBlur(hidden: appSettings.hideAmounts)
         }
     }
 }

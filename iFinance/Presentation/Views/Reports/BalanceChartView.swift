@@ -4,6 +4,7 @@ import Charts
 struct BalanceChartView: View {
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var transactionsController: TransactionsController
+    @EnvironmentObject var appSettings: AppSettings
     
     struct DataPoint: Identifiable {
         let id = UUID()
@@ -257,6 +258,7 @@ struct BalanceChartView: View {
                 .foregroundColor(.secondary)
             Text(point.balance, format: .currency(code: booksController.currentBook?.currency ?? "EUR"))
                 .font(.headline)
+                .privacyBlur(hidden: appSettings.hideAmounts)
         }
         .padding(8)
         .background(

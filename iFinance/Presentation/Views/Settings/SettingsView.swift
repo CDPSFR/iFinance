@@ -10,6 +10,8 @@ struct SettingsView: View {
         case categories
     }
 
+    @EnvironmentObject var appSettings: AppSettings
+
     @State private var path = NavigationPath()
     @State private var exportError: String?
     @State private var showExportError = false
@@ -48,6 +50,19 @@ struct SettingsView: View {
                                 iconColor: .teal,
                                 label: "Catégories",
                                 destination: Destination.categories,
+                                isLast: true
+                            )
+                        }
+
+                        settingsSection(title: "Confidentialité") {
+                            toggleRow(
+                                icon: "eye.slash.fill",
+                                iconColor: .purple,
+                                label: "Masquer les montants",
+                                isOn: Binding(
+                                    get: { appSettings.hideAmounts },
+                                    set: { appSettings.hideAmounts = $0 }
+                                ),
                                 isLast: true
                             )
                         }
@@ -153,6 +168,42 @@ struct SettingsView: View {
             rowContent(icon: icon, iconColor: iconColor, label: label, trailing: "chevron.right")
         }
         .buttonStyle(.plain)
+
+        if !isLast {
+            Divider().padding(.leading, 54)
+        }
+    }
+
+    // MARK: - Toggle row
+
+    @ViewBuilder
+    private func toggleRow(
+        icon: String,
+        iconColor: Color,
+        label: String,
+        isOn: Binding<Bool>,
+        isLast: Bool = false
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.subheadline)
+                .foregroundColor(.white)
+                .frame(width: 28, height: 28)
+                .background(RoundedRectangle(cornerRadius: 6).fill(iconColor))
+
+            Text(label)
+                .font(.body)
+                .foregroundColor(.primary)
+
+            Spacer()
+
+            Toggle("", isOn: isOn)
+                .toggleStyle(.switch)
+                .labelsHidden()
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 7)
+        .background(Color(nsColor: .controlBackgroundColor))
 
         if !isLast {
             Divider().padding(.leading, 54)

@@ -5,6 +5,7 @@ struct PayeesChartView: View {
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var payeesController: PayeesController
+    @EnvironmentObject var appSettings: AppSettings
     
     struct PayeeData: Identifiable {
         let id = UUID()
@@ -61,9 +62,11 @@ struct PayeesChartView: View {
                 if let highestPayee = payeeData.max(by: { $1.amount > $0.amount }) {
                     ChartPopOverView(highestPayee.amount, highestPayee.payeeName)
                         .padding(.vertical)
+                        .privacyBlur(hidden: appSettings.hideAmounts)
                 }
                 
                 // Graphique centré
+                let hideAmounts = appSettings.hideAmounts
                 VStack(spacing: 12) {
                     Chart {
                         ForEach(payeeData.sorted { $0.amount > $1.amount }) { item in
@@ -80,6 +83,7 @@ struct PayeesChartView: View {
                                 Text("\(NSDecimalNumber(decimal: item.amount).doubleValue, specifier: "%.0f")€")
                                     .font(.headline)
                                     .foregroundStyle(.white)
+                                    .privacyBlur(hidden: hideAmounts)
                             }
                             .opacity(selectedPayeeID == nil ? 1 : (selectedPayeeID == item.payeeID ? 1 : 0.4))
                         }
