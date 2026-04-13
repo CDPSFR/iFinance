@@ -18,6 +18,7 @@ struct SettingsView: View {
     @State private var exportError: String?
     @State private var showExportError = false
     @State private var showQIFImport = false
+    @State private var showDuplicateDetection = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -87,6 +88,12 @@ struct SettingsView: View {
                                 action: { showQIFImport = true }
                             )
                             actionRow(
+                                icon: "doc.on.doc.fill",
+                                iconColor: .orange,
+                                label: "Détecter les doublons",
+                                action: { showDuplicateDetection = true }
+                            )
+                            actionRow(
                                 icon: "square.and.arrow.up.fill",
                                 iconColor: .green,
                                 label: "Exporter la base de données",
@@ -121,6 +128,9 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showQIFImport) {
                 QIFImportView(isPresented: $showQIFImport)
+            }
+            .sheet(isPresented: $showDuplicateDetection) {
+                DuplicateDetectionView(isPresented: $showDuplicateDetection)
             }
         }
     }
