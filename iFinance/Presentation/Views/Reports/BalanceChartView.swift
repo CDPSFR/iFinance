@@ -167,7 +167,7 @@ struct BalanceChartView: View {
             guard let account = accountsController.getAccount(id: accountID) else { return [] }
             accountsToUse = [account]
         } else {
-            accountsToUse = accountsController.activeAccounts.filter { !$0.isExcludedFromReports }
+            accountsToUse = accountsController.activeAccounts.filter { $0.countsInCashFlow }
         }
 
         let includedAccountIDs = Set(accountsToUse.map { $0.id })

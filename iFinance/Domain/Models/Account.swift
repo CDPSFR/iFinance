@@ -1,38 +1,129 @@
 import Foundation
 
+enum AccountGroup: String, CaseIterable {
+    case liquidity
+    case savings
+    case investment
+    case retirement
+    case debt
+    case other
+
+    var displayName: String {
+        switch self {
+        case .liquidity: return "Liquidités"
+        case .savings: return "Épargne"
+        case .investment: return "Investissements"
+        case .retirement: return "Retraite & épargne salariale"
+        case .debt: return "Dettes"
+        case .other: return "Autre"
+        }
+    }
+
+    var sortOrder: Int {
+        switch self {
+        case .liquidity: return 0
+        case .savings: return 1
+        case .investment: return 2
+        case .retirement: return 3
+        case .debt: return 4
+        case .other: return 5
+        }
+    }
+
+    /// Seuls les comptes de liquidités alimentent les rapports de dépenses / cash-flow
+    var includesCashFlow: Bool {
+        self == .liquidity
+    }
+
+    var types: [AccountType] {
+        AccountType.allCases.filter { $0.group == self }
+    }
+}
+
 enum AccountType: String, Codable, CaseIterable {
+    // Liquidités
     case checking = "checking"           // Compte courant
-    case savings = "savings"             // Épargne
     case creditCard = "credit_card"      // Carte de crédit
-    case investment = "investment"       // Compte titre
-    case retirement = "retirement"       // PER, assurance vie
+    // Épargne
+    case livretA = "livret_a"            // Livret A
+    case ldds = "ldds"                   // LDDS
+    case lep = "lep"                     // LEP
+    case pel = "pel"                     // PEL
+    case cel = "cel"                     // CEL
+    case termDeposit = "term_deposit"    // Compte à terme
+    case savings = "savings"             // Autre épargne
+    // Investissements
+    case investment = "investment"       // Compte-titres (CTO)
+    case pea = "pea"                     // PEA
     case crypto = "crypto"               // Cryptomonnaies
+    // Retraite & épargne salariale
+    case retirement = "retirement"       // PER
+    case lifeInsurance = "life_insurance" // Assurance vie
+    case perco = "perco"                 // PERCO / PERECO
+    case pee = "pee"                     // PEE
+    // Dettes
     case loan = "loan"                   // Prêt
+    // Autre
     case other = "other"                 // Autre
-    
+
     var displayName: String {
         switch self {
         case .checking: return "Compte courant"
-        case .savings: return "Épargne"
         case .creditCard: return "Carte de crédit"
-        case .investment: return "Compte titre"
-        case .retirement: return "Retraite / Assurance vie"
+        case .livretA: return "Livret A"
+        case .ldds: return "LDDS"
+        case .lep: return "LEP"
+        case .pel: return "PEL"
+        case .cel: return "CEL"
+        case .termDeposit: return "Compte à terme"
+        case .savings: return "Autre épargne"
+        case .investment: return "Compte-titres (CTO)"
+        case .pea: return "PEA"
         case .crypto: return "Cryptomonnaies"
+        case .retirement: return "PER"
+        case .lifeInsurance: return "Assurance vie"
+        case .perco: return "PERCO / PERECO"
+        case .pee: return "PEE"
         case .loan: return "Prêt"
         case .other: return "Autre"
         }
     }
-    
+
     var icon: String {
         switch self {
         case .checking: return "creditcard.fill"
-        case .savings: return "banknote.fill"
         case .creditCard: return "creditcard.trianglebadge.exclamationmark"
+        case .livretA, .ldds, .lep: return "banknote.fill"
+        case .pel, .cel: return "house.lodge.fill"
+        case .termDeposit: return "lock.fill"
+        case .savings: return "banknote.fill"
         case .investment: return "chart.line.uptrend.xyaxis"
-        case .retirement: return "calendar"
+        case .pea: return "chart.bar.fill"
         case .crypto: return "bitcoinsign.circle.fill"
+        case .retirement: return "calendar"
+        case .lifeInsurance: return "umbrella.fill"
+        case .perco, .pee: return "briefcase.fill"
         case .loan: return "house.fill"
         case .other: return "folder.fill"
+        }
+    }
+
+    var group: AccountGroup {
+        switch self {
+        case .checking, .creditCard: return .liquidity
+        case .livretA, .ldds, .lep, .pel, .cel, .termDeposit, .savings: return .savings
+        case .investment, .pea, .crypto: return .investment
+        case .retirement, .lifeInsurance, .perco, .pee: return .retirement
+        case .loan: return .debt
+        case .other: return .other
+        }
+    }
+
+    /// Compte pouvant détenir des positions (titres, fonds, cryptos)
+    var supportsPositions: Bool {
+        switch group {
+        case .investment, .retirement: return true
+        default: return false
         }
     }
 }
@@ -57,6 +148,11 @@ struct Account: Identifiable, Codable, Equatable, Hashable {
     enum CodingKeys: String, CodingKey {
         case id, bookID, name, bank, type, initialBalance, currency, iban, bic, isExcludedFromReports, isClosed, createdAt
         // currentBalance n'est pas sérialisé
+    }
+
+    /// Compte pris en compte dans les rapports de dépenses / cash-flow
+    var countsInCashFlow: Bool {
+        type.group.includesCashFlow && !isExcludedFromReports
     }
 }
 

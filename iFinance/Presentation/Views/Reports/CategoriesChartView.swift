@@ -4,6 +4,7 @@ import Charts
 struct CategoriesChartView: View {
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var transactionsController: TransactionsController
+    @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var appSettings: AppSettings
     
@@ -158,7 +159,7 @@ struct CategoriesChartView: View {
     
     private var categoryData: [CategoryData] {
         let expenses = transactionsController.filteredTransactions
-            .filter { $0.type == .debit && $0.categoryID != nil }
+            .filter { $0.type == .debit && $0.categoryID != nil && accountsController.isReported($0, accountFilter: transactionsController.filters.accountID) }
         
         guard !expenses.isEmpty else { return [] }
         

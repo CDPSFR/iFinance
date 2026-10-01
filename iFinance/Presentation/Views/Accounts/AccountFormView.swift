@@ -68,12 +68,16 @@ struct AccountFormView: View {
                 
                 Section {
                     Picker("Type de compte", selection: $selectedType) {
-                        ForEach(AccountType.allCases, id: \.self) { type in
-                            HStack {
-                                Image(systemName: type.icon)
-                                Text(type.displayName)
+                        ForEach(AccountGroup.allCases, id: \.self) { group in
+                            Section(group.displayName) {
+                                ForEach(group.types, id: \.self) { type in
+                                    HStack {
+                                        Image(systemName: type.icon)
+                                        Text(type.displayName)
+                                    }
+                                    .tag(type)
+                                }
                             }
-                            .tag(type)
                         }
                     }
                     .pickerStyle(.menu)

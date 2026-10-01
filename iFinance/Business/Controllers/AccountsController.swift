@@ -171,4 +171,16 @@ class AccountsController: ObservableObject {
     func getAccount(id: UUID) -> Account? {
         return accounts.first { $0.id == id }
     }
+
+    // MARK: - Reports
+
+    /// IDs des comptes actifs inclus dans les rapports de dépenses / cash-flow
+    var cashFlowAccountIDs: Set<UUID> {
+        Set(activeAccounts.filter { $0.countsInCashFlow }.map { $0.id })
+    }
+
+    /// Un filtre explicite sur un compte l'emporte sur l'exclusion des rapports
+    func isReported(_ transaction: Transaction, accountFilter: UUID?) -> Bool {
+        accountFilter != nil || cashFlowAccountIDs.contains(transaction.accountID)
+    }
 }

@@ -9,7 +9,7 @@ struct AccountSidebarRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: account.type.icon)
-                .foregroundColor(.blue)
+                .foregroundColor(isClosed ? .gray : account.type.color)
                 .frame(width: 20)
 
             VStack(alignment: .leading, spacing: 2) {

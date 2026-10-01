@@ -145,14 +145,10 @@ struct MonthlyBalanceChartView: View {
 
     // MARK: - Helpers
 
-    private var excludedAccountIDs: Set<UUID> {
-        Set(accountsController.activeAccounts.filter { $0.isExcludedFromReports }.map { $0.id })
-    }
-
     private var balanceData: [MonthlyBalance] {
         let calendar = Calendar.current
         let filtered = transactionsController.filteredTransactions
-            .filter { $0.status != .skipped && !excludedAccountIDs.contains($0.accountID) }
+            .filter { $0.status != .skipped && accountsController.isReported($0, accountFilter: transactionsController.filters.accountID) }
 
         let grouped = Dictionary(grouping: filtered) { transaction in
             calendar.date(from: calendar.dateComponents([.year, .month], from: transaction.date))!

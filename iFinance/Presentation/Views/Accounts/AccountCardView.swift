@@ -85,14 +85,22 @@ struct AccountCardView: View {
 extension AccountType {
     var color: Color {
         switch self {
-        case .checking:    return .blue
-        case .savings:     return .green
-        case .creditCard:  return .orange
-        case .investment:  return .purple
-        case .retirement:  return .indigo
-        case .crypto:      return Color(red: 0.95, green: 0.6, blue: 0.1)
-        case .loan:        return .red
-        case .other:       return .gray
+        case .creditCard: return .orange
+        case .crypto:     return Color(red: 0.95, green: 0.6, blue: 0.1)
+        default:          return group.color
+        }
+    }
+}
+
+extension AccountGroup {
+    var color: Color {
+        switch self {
+        case .liquidity:  return .blue
+        case .savings:    return .green
+        case .investment: return .purple
+        case .retirement: return .indigo
+        case .debt:       return .red
+        case .other:      return .gray
         }
     }
 }

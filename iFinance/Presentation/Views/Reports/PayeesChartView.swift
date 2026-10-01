@@ -4,6 +4,7 @@ import Charts
 struct PayeesChartView: View {
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var transactionsController: TransactionsController
+    @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var payeesController: PayeesController
     @EnvironmentObject var appSettings: AppSettings
     
@@ -152,7 +153,7 @@ struct PayeesChartView: View {
     
     private var payeeData: [PayeeData] {
         let expenses = transactionsController.filteredTransactions
-            .filter { $0.type == .debit && $0.payeeID != nil }
+            .filter { $0.type == .debit && $0.payeeID != nil && accountsController.isReported($0, accountFilter: transactionsController.filters.accountID) }
         
         guard !expenses.isEmpty else { return [] }
         

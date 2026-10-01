@@ -152,7 +152,7 @@ struct AccountsChartView: View {
     
     private var accountData: [AccountData] {
         let expenses = transactionsController.filteredTransactions
-            .filter { $0.type == .debit }
+            .filter { $0.type == .debit && accountsController.isReported($0, accountFilter: transactionsController.filters.accountID) }
         
         guard !expenses.isEmpty else { return [] }
         
@@ -166,8 +166,7 @@ struct AccountsChartView: View {
         let grandTotal = totals.reduce(Decimal(0)) { $0 + $1.1 }
         
         let data = totals.compactMap { (accountID, amount) -> AccountData? in
-            guard let account = accountsController.getAccount(id: accountID),
-                  !account.isExcludedFromReports else { return nil }
+            guard let account = accountsController.getAccount(id: accountID) else { return nil }
             
             let percentage = Double(truncating: NSDecimalNumber(decimal: (amount / grandTotal) * 100))
             

@@ -24,6 +24,7 @@ struct MainView: View {
     // MARK: - Sidebar enum
     enum SidebarItem: Hashable, Identifiable {
         case dashboard
+        case wealth
         case allTransactions
         case account(UUID)
         case categories
@@ -35,6 +36,7 @@ struct MainView: View {
         var id: String {
             switch self {
             case .dashboard: return "dashboard"
+            case .wealth: return "wealth"
             case .allTransactions: return "allTransactions"
             case .account(let id): return "account-\(id.uuidString)"
             case .categories: return "categories"
@@ -108,23 +110,26 @@ struct MainView: View {
                         Label("Vue d'ensemble", systemImage: "chart.pie")
                     }
 
+                    NavigationLink(value: SidebarItem.wealth) {
+                        Label("Patrimoine", systemImage: "building.columns")
+                    }
+
                     NavigationLink(value: SidebarItem.allTransactions) {
                         Label("Toutes les transactions", systemImage: "list.bullet.rectangle")
                     }
                 }
 
-                // Comptes ouverts
-                Section("Comptes ouverts") {
-                    ForEach(accountsController.activeAccounts) { account in
-                        NavigationLink(value: SidebarItem.account(account.id)) {
-                            AccountSidebarRow(
-                                account: account,
-                                balance: transactionsController.calculateBalance(
-                                    for: account.id,
-                                    initialBalance: account.initialBalance
-                                ),
-                                isClosed: false
-                            )
+                // Comptes ouverts, regroupés par type
+                ForEach(activeAccountGroups, id: \.group) { item in
+                    Section(item.group.displayName) {
+                        ForEach(item.accounts) { account in
+                            NavigationLink(value: SidebarItem.account(account.id)) {
+                                AccountSidebarRow(
+                                    account: account,
+                                    balance: valuation.value(of: account),
+                                    isClosed: false
+                                )
+                            }
                         }
                     }
                 }
@@ -135,10 +140,7 @@ struct MainView: View {
                         NavigationLink(value: SidebarItem.account(account.id)) {
                             AccountSidebarRow(
                                 account: account,
-                                balance: transactionsController.calculateBalance(
-                                    for: account.id,
-                                    initialBalance: account.initialBalance
-                                ),
+                                balance: valuation.value(of: account),
                                 isClosed: true
                             )
                         }
@@ -188,6 +190,8 @@ struct MainView: View {
                 switch selectedTab {
                 case .dashboard:
                     DashboardView()
+                case .wealth:
+                    WealthView()
                 case .allTransactions:
                     TransactionListView()
                 case .account(_):
@@ -293,6 +297,16 @@ struct MainView: View {
     }
 
     // MARK: - Helpers
+    private var valuation: AccountValuation {
+        AccountValuation(transactionsController: transactionsController)
+    }
+
+    private var activeAccountGroups: [(group: AccountGroup, accounts: [Account])] {
+        Dictionary(grouping: accountsController.activeAccounts) { $0.type.group }
+            .map { ($0.key, $0.value) }
+            .sorted { $0.group.sortOrder < $1.group.sortOrder }
+    }
+
     private var shouldShowFilters: Bool {
         switch selectedTab {
         case .allTransactions, .account(_), .reports:

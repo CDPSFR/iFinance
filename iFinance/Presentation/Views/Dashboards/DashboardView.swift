@@ -38,14 +38,24 @@ struct DashboardView: View {
                 LazyVGrid(columns: [
                     GridItem(.flexible()),
                     GridItem(.flexible()),
+                    GridItem(.flexible()),
                     GridItem(.flexible())
                 ], spacing: 16) {
-                    // Solde total
+                    // Liquidités (comptes courants, cartes)
                     DashboardCard(
-                        title: "Solde total",
+                        title: "Liquidités",
                         value: totalBalance,
                         icon: "banknote",
                         color: .blue
+                    )
+                    .privacyBlur(hidden: appSettings.hideAmounts)
+
+                    // Patrimoine net (tous les comptes)
+                    DashboardCard(
+                        title: "Patrimoine net",
+                        value: formatted(valuation.total(of: wealthAccounts)),
+                        icon: "building.columns",
+                        color: .purple
                     )
                     .privacyBlur(hidden: appSettings.hideAmounts)
                     
@@ -142,23 +152,26 @@ struct DashboardView: View {
     
     // MARK: - Computed Properties
     
+    private var valuation: AccountValuation {
+        AccountValuation(transactionsController: transactionsController)
+    }
+
+    private var wealthAccounts: [Account] {
+        accountsController.activeAccounts.filter { !$0.isExcludedFromReports }
+    }
+
+    private func formatted(_ amount: Decimal) -> String {
+        amount.formatted(.currency(code: booksController.currentBook?.currency ?? "EUR"))
+    }
+
     private var totalBalance: String {
-        let total = accountsController.activeAccounts
-            .filter { !$0.isExcludedFromReports }
-            .reduce(Decimal(0)) { sum, account in
-                let balance = transactionsController.calculateBalance(
-                    for: account.id,
-                    initialBalance: account.initialBalance
-                )
-                return sum + balance
-            }
-        
-        if let currency = booksController.currentBook?.currency {
-            return total.formatted(.currency(code: currency))
-        }
-        return total.formatted(.currency(code: "EUR"))
+        formatted(valuation.total(of: accountsController.activeAccounts.filter { $0.countsInCashFlow }))
     }
     
+    private var cashFlowAccountIDs: Set<UUID> {
+        accountsController.cashFlowAccountIDs
+    }
+
     private var transactionsThisMonth: Int {
         let calendar = Calendar.current
         let now = Date()
@@ -179,6 +192,7 @@ struct DashboardView: View {
         let total = transactionsController.allTransactions
             .filter { tx in
                 tx.date >= start && tx.date < end && tx.type == .debit
+                    && cashFlowAccountIDs.contains(tx.accountID)
             }
             .reduce(Decimal(0)) { $0 + abs($1.amount) }
         
@@ -197,6 +211,7 @@ struct DashboardView: View {
         let total = transactionsController.allTransactions
             .filter { tx in
                 tx.date >= start && tx.date < end && tx.type == .credit
+                    && cashFlowAccountIDs.contains(tx.accountID)
             }
             .reduce(Decimal(0)) { $0 + abs($1.amount) }
         
@@ -215,6 +230,7 @@ struct DashboardView: View {
         // Grouper par catégorie
         let expensesByCategory = Dictionary(grouping: transactionsController.allTransactions.filter { tx in
             tx.date >= start && tx.date < end && tx.type == .debit && tx.categoryID != nil
+                && cashFlowAccountIDs.contains(tx.accountID)
         }) { tx in
             tx.categoryID!
         }
@@ -272,9 +288,9 @@ struct AccountSummaryRow: View {
         HStack(spacing: 12) {
             Image(systemName: account.type.icon)
                 .font(.title2)
-                .foregroundColor(.blue)
+                .foregroundColor(account.type.color)
                 .frame(width: 40, height: 40)
-                .background(Circle().fill(Color.blue.opacity(0.1)))
+                .background(Circle().fill(account.type.color.opacity(0.1)))
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(account.name)
@@ -289,10 +305,8 @@ struct AccountSummaryRow: View {
             
             Spacer()
             
-            let balance = transactionsController.calculateBalance(
-                for: account.id,
-                initialBalance: account.initialBalance
-            )
+            let balance = AccountValuation(transactionsController: transactionsController)
+                .value(of: account)
             
             Text(balance, format: .currency(code: account.currency))
                 .font(.headline)
