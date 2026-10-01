@@ -26,7 +26,11 @@ class AppState: ObservableObject {
 
     init() {
         // Initialiser la base de données
-        self.db = SQLiteManager(dbName: "iFinance.sqlite")
+        do {
+            self.db = try SQLiteManager(dbName: "iFinance.sqlite")
+        } catch {
+            fatalError("❌ Impossible de démarrer iFinance : \(error.localizedDescription)")
+        }
 
         // Exécuter les migrations
         let migrations = DatabaseMigrations(db: db)

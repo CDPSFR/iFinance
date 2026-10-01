@@ -5,7 +5,7 @@ class SQLiteManager {
     private var db: OpaquePointer?
     private let dbPath: String
     
-    init(dbName: String = "iFinance.sqlite") {
+    init(dbName: String = "iFinance.sqlite") throws {
         // Stockage dans Application Support
         let fileManager = FileManager.default
         let appSupportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -18,7 +18,7 @@ class SQLiteManager {
         
         print("📁 Database path: \(dbPath)")
         
-        openDatabase()
+        try openDatabase()
         createTables()
     }
     
@@ -28,10 +28,13 @@ class SQLiteManager {
     
     // MARK: - Connection Management
     
-    private func openDatabase() {
-        if sqlite3_open(dbPath, &db) != SQLITE_OK {
-            print("❌ Erreur lors de l'ouverture de la base de données")
-            return
+    private func openDatabase() throws {
+        guard sqlite3_open(dbPath, &db) == SQLITE_OK else {
+            let errorMessage = db.map { String(cString: sqlite3_errmsg($0)) } ?? "handle SQLite non alloué"
+            // sqlite3_open alloue un handle même en cas d'échec : il faut le libérer
+            sqlite3_close(db)
+            db = nil
+            throw SQLiteError.openDatabase(message: "\(errorMessage) (\(dbPath))")
         }
         print("✅ Base de données ouverte avec succès")
         
