@@ -4,6 +4,7 @@ struct WealthView: View {
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var transactionsController: TransactionsController
+    @EnvironmentObject var investmentsController: InvestmentsController
     @EnvironmentObject var appSettings: AppSettings
 
     var body: some View {
@@ -89,7 +90,7 @@ struct WealthView: View {
     }
 
     private var valuation: AccountValuation {
-        AccountValuation(transactionsController: transactionsController)
+        AccountValuation(transactionsController: transactionsController, investmentsController: investmentsController)
     }
 
     private var accounts: [Account] {

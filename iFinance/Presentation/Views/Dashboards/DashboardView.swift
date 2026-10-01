@@ -4,6 +4,7 @@ struct DashboardView: View {
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var transactionsController: TransactionsController
+    @EnvironmentObject var investmentsController: InvestmentsController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var payeesController: PayeesController
     @EnvironmentObject var appSettings: AppSettings
@@ -153,7 +154,7 @@ struct DashboardView: View {
     // MARK: - Computed Properties
     
     private var valuation: AccountValuation {
-        AccountValuation(transactionsController: transactionsController)
+        AccountValuation(transactionsController: transactionsController, investmentsController: investmentsController)
     }
 
     private var wealthAccounts: [Account] {
@@ -282,6 +283,7 @@ struct DashboardCard: View {
 struct AccountSummaryRow: View {
     let account: Account
     @EnvironmentObject var transactionsController: TransactionsController
+    @EnvironmentObject var investmentsController: InvestmentsController
     @EnvironmentObject var appSettings: AppSettings
     
     var body: some View {
@@ -305,7 +307,7 @@ struct AccountSummaryRow: View {
             
             Spacer()
             
-            let balance = AccountValuation(transactionsController: transactionsController)
+            let balance = AccountValuation(transactionsController: transactionsController, investmentsController: investmentsController)
                 .value(of: account)
             
             Text(balance, format: .currency(code: account.currency))

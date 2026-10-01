@@ -6,6 +6,7 @@ struct MainView: View {
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var transactionsController: TransactionsController
+    @EnvironmentObject var investmentsController: InvestmentsController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var payeesController: PayeesController
     @EnvironmentObject var budgetsController: BudgetsController
@@ -94,6 +95,7 @@ struct MainView: View {
                 await transactionsController.loadAllTransactions(
                     for: accountsController.activeAccounts
                 )
+                await investmentsController.load(for: accountsController.activeAccounts)
                 await budgetsController.loadBudgets(for: bookID)
             }
         }
@@ -298,7 +300,7 @@ struct MainView: View {
 
     // MARK: - Helpers
     private var valuation: AccountValuation {
-        AccountValuation(transactionsController: transactionsController)
+        AccountValuation(transactionsController: transactionsController, investmentsController: investmentsController)
     }
 
     private var activeAccountGroups: [(group: AccountGroup, accounts: [Account])] {

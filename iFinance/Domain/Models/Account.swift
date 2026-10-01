@@ -170,13 +170,24 @@ struct InvestmentPosition: Identifiable, Codable, Equatable, Hashable {
     var lastUpdated: Date?
 }
 
-enum AssetType: String, Codable {
-    case stock
-    case bond
-    case etf
-    case mutualFund
-    case crypto
-    case other
+enum AssetType: String, Codable, CaseIterable {
+    case stock = "stock"
+    case bond = "bond"
+    case etf = "etf"
+    case mutualFund = "mutual_fund"   // OPCVM, FCPE, unités de compte
+    case crypto = "crypto"
+    case other = "other"
+
+    var displayName: String {
+        switch self {
+        case .stock: return "Action"
+        case .bond: return "Obligation"
+        case .etf: return "ETF"
+        case .mutualFund: return "Fonds (OPCVM, FCPE, UC)"
+        case .crypto: return "Crypto"
+        case .other: return "Autre"
+        }
+    }
 }
 
 // Pour tracer les opérations sur titres
@@ -189,17 +200,37 @@ struct InvestmentTransaction: Identifiable, Codable, Equatable, Hashable {
     var symbol: String?
     var quantity: Decimal?
     var price: Decimal?
-    var amount: Decimal         // Montant total
+    var amount: Decimal         // Montant brut, toujours positif (achat/vente : quantité × prix)
     var fees: Decimal = 0
     var memo: String?
 }
 
-enum InvestmentTransactionType: String, Codable {
-    case buy
-    case sell
-    case dividend
-    case interest
-    case fee
-    case split          // Division d'actions
-    case transfer       // Transfert de titres
+enum InvestmentTransactionType: String, Codable, CaseIterable {
+    case buy = "buy"
+    case sell = "sell"
+    case dividend = "dividend"
+    case interest = "interest"
+    case fee = "fee"
+    case split = "split"            // Division d'actions (quantity = ratio)
+    case transfer = "transfer"      // Transfert de titres (quantity > 0 entrée, < 0 sortie)
+
+    var displayName: String {
+        switch self {
+        case .buy: return "Achat"
+        case .sell: return "Vente"
+        case .dividend: return "Dividende"
+        case .interest: return "Intérêts"
+        case .fee: return "Frais"
+        case .split: return "Division"
+        case .transfer: return "Transfert de titres"
+        }
+    }
+
+    /// Opération qui modifie la quantité détenue (et nécessite donc une position)
+    var affectsQuantity: Bool {
+        switch self {
+        case .buy, .sell, .split, .transfer: return true
+        case .dividend, .interest, .fee: return false
+        }
+    }
 }
