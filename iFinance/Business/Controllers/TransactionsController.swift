@@ -95,6 +95,7 @@ class TransactionsController: ObservableObject {
     
     // MARK: - Create Transaction
     
+    @discardableResult
     func createTransaction(
         accountID: UUID,
         date: Date,
@@ -103,7 +104,7 @@ class TransactionsController: ObservableObject {
         payeeID: UUID? = nil,
         categoryID: UUID? = nil,
         memo: String? = nil
-    ) async {
+    ) async -> Transaction? {
         let transaction = Transaction(
             date: date,
             amount: amount,
@@ -119,14 +120,18 @@ class TransactionsController: ObservableObject {
             try await repository.create(transaction)
             // Recharger toutes les transactions
             // (sera appelé depuis la vue avec accountsController.activeAccounts)
+            return transaction
         } catch {
             self.error = error
             print("❌ Erreur création transaction: \(error)")
+            return nil
         }
     }
     
     // MARK: - Create Transfer
     
+    /// Retourne (transaction source, transaction destination)
+    @discardableResult
     func createTransfer(
         from sourceAccountID: UUID,
         to destinationAccountID: UUID,
@@ -134,9 +139,9 @@ class TransactionsController: ObservableObject {
         date: Date,
         memo: String? = nil,
         categoryID: UUID? = nil
-    ) async {
+    ) async -> (source: Transaction, destination: Transaction)? {
         do {
-            _ = try await repository.createTransfer(
+            return try await repository.createTransfer(
                 from: sourceAccountID,
                 to: destinationAccountID,
                 amount: amount,
@@ -147,6 +152,7 @@ class TransactionsController: ObservableObject {
         } catch {
             self.error = error
             print("❌ Erreur création transfert: \(error)")
+            return nil
         }
     }
 

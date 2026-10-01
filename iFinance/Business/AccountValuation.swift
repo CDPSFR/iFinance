@@ -5,8 +5,10 @@ import Foundation
 struct AccountValuation {
     let transactionsController: TransactionsController
     let investmentsController: InvestmentsController
+    let savingsPlansController: SavingsPlansController
 
-    /// Espèces : solde initial + versements / retraits + effet des opérations sur titres
+    /// Espèces : solde initial + versements / retraits (+ effet des opérations sur titres).
+    /// Pour un plan valorisé, c'est le montant net versé.
     func cash(of account: Account) -> Decimal {
         let balance = transactionsController.calculateBalance(
             for: account.id,
@@ -16,10 +18,32 @@ struct AccountValuation {
         return balance + investmentsController.cashImpact(for: account.id)
     }
 
-    /// Valeur totale : espèces + valeur de marché des titres
+    /// Valeur totale du compte
     func value(of account: Account) -> Decimal {
-        guard account.type.supportsPositions else { return cash(of: account) }
-        return cash(of: account) + investmentsController.marketValue(for: account.id)
+        switch account.type.trackingMode {
+        case .transactions:
+            return cash(of: account)
+        case .positions:
+            return cash(of: account) + investmentsController.marketValue(for: account.id)
+        case .valuations:
+            return planSummary(of: account).value
+        }
+    }
+
+    /// Plus-value latente (titres ou plan valorisé), 0 pour un compte classique
+    func unrealizedGain(of account: Account) -> Decimal {
+        switch account.type.trackingMode {
+        case .transactions:
+            return 0
+        case .positions:
+            return investmentsController.unrealizedGain(for: account.id)
+        case .valuations:
+            return planSummary(of: account).gain
+        }
+    }
+
+    func planSummary(of account: Account) -> SavingsPlanSummary {
+        savingsPlansController.summary(for: account, transactions: transactionsController.allTransactions)
     }
 
     func total(of accounts: [Account]) -> Decimal {

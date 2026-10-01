@@ -17,6 +17,7 @@ class AppState: ObservableObject {
     let budgetRepository: BudgetRepository
     let investmentPositionRepository: InvestmentPositionRepository
     let investmentTransactionRepository: InvestmentTransactionRepository
+    let savingsPlanRepository: SavingsPlanRepository
 
     // Controllers
     let bookController: BooksController
@@ -26,6 +27,7 @@ class AppState: ObservableObject {
     let payeesController: PayeesController
     let budgetsController: BudgetsController
     let investmentsController: InvestmentsController
+    let savingsPlansController: SavingsPlansController
 
     init() {
         // Initialiser la base de données
@@ -48,6 +50,7 @@ class AppState: ObservableObject {
         self.budgetRepository = BudgetRepository(db: db)
         self.investmentPositionRepository = InvestmentPositionRepository(db: db)
         self.investmentTransactionRepository = InvestmentTransactionRepository(db: db)
+        self.savingsPlanRepository = SavingsPlanRepository(db: db)
 
         // Initialiser les controllers
         self.bookController = BooksController(repository: bookRepository)
@@ -60,6 +63,7 @@ class AppState: ObservableObject {
             positionRepository: investmentPositionRepository,
             transactionRepository: investmentTransactionRepository
         )
+        self.savingsPlansController = SavingsPlansController(repository: savingsPlanRepository)
 
         print("✅ iFinance AppState initialisé")
     }

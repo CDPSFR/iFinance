@@ -7,6 +7,7 @@ struct MainView: View {
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var investmentsController: InvestmentsController
+    @EnvironmentObject var savingsPlansController: SavingsPlansController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var payeesController: PayeesController
     @EnvironmentObject var budgetsController: BudgetsController
@@ -96,6 +97,7 @@ struct MainView: View {
                     for: accountsController.activeAccounts
                 )
                 await investmentsController.load(for: accountsController.activeAccounts)
+                await savingsPlansController.load(for: accountsController.activeAccounts)
                 await budgetsController.loadBudgets(for: bookID)
             }
         }
@@ -197,10 +199,14 @@ struct MainView: View {
                 case .allTransactions:
                     TransactionListView()
                 case .account(let accountID):
-                    if accountsController.getAccount(id: accountID)?.type.supportsPositions == true {
+                    switch accountsController.getAccount(id: accountID)?.type.trackingMode {
+                    case .positions:
                         InvestmentAccountView(accountID: accountID)
                             .id(accountID)
-                    } else {
+                    case .valuations:
+                        SavingsPlanAccountView(accountID: accountID)
+                            .id(accountID)
+                    default:
                         TransactionListView()
                     }
                 case .categories:
@@ -305,7 +311,7 @@ struct MainView: View {
 
     // MARK: - Helpers
     private var valuation: AccountValuation {
-        AccountValuation(transactionsController: transactionsController, investmentsController: investmentsController)
+        AccountValuation(transactionsController: transactionsController, investmentsController: investmentsController, savingsPlansController: savingsPlansController)
     }
 
     private var activeAccountGroups: [(group: AccountGroup, accounts: [Account])] {

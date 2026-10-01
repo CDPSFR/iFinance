@@ -5,6 +5,7 @@ struct TransactionListView: View {
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var investmentsController: InvestmentsController
+    @EnvironmentObject var savingsPlansController: SavingsPlansController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var payeesController: PayeesController
     @EnvironmentObject var appSettings: AppSettings
@@ -40,13 +41,14 @@ struct TransactionListView: View {
                 if let accountID = transactionsController.filters.accountID,
                    let account = accountsController.getAccount(id: accountID) {
                     VStack(alignment: .trailing, spacing: 4) {
-                        Text(account.type.supportsPositions ? "Espèces" : "Solde actuel")
+                        Text(headerBalanceLabel(for: account))
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
                         let balance = AccountValuation(
                             transactionsController: transactionsController,
-                            investmentsController: investmentsController
+                            investmentsController: investmentsController,
+                            savingsPlansController: savingsPlansController
                         ).cash(of: account)
                         
                         Text(balance, format: .currency(code: account.currency))
@@ -501,5 +503,15 @@ struct TransactionListView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+extension TransactionListView {
+    func headerBalanceLabel(for account: Account) -> String {
+        switch account.type.trackingMode {
+        case .transactions: return "Solde actuel"
+        case .positions: return "Espèces"
+        case .valuations: return "Versements nets"
+        }
     }
 }

@@ -20,6 +20,7 @@ struct DatabaseMigrations {
             (1, migration_v1_initial),
             (2, migration_v2_budgets_new_schema),
             (3, migration_v3_fix_budget_versions_fk),
+            (4, migration_v4_savings_plans),
         ]
         
         for (version, migration) in migrations where version > currentVersion {
@@ -120,6 +121,15 @@ struct DatabaseMigrations {
     private func migration_v3_fix_budget_versions_fk() -> Bool {
         guard db.execute(sql: "DROP TABLE IF EXISTS budget_versions;") else { return false }
         guard db.execute(sql: DatabaseSchema.createBudgetVersionsTable) else { return false }
+        return true
+    }
+
+    /// Tables des plans d'épargne : valeurs relevées et origine / disponibilité des apports.
+    /// Idempotente : DatabaseSchema les crée déjà au lancement (IF NOT EXISTS).
+    private func migration_v4_savings_plans() -> Bool {
+        guard db.execute(sql: DatabaseSchema.createAccountValuationsTable) else { return false }
+        guard db.execute(sql: DatabaseSchema.createContributionDetailsTable) else { return false }
+        guard db.execute(sql: "CREATE INDEX IF NOT EXISTS idx_valuations_account_date ON account_valuations(account_id, date);") else { return false }
         return true
     }
 }

@@ -5,6 +5,7 @@ struct WealthView: View {
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var investmentsController: InvestmentsController
+    @EnvironmentObject var savingsPlansController: SavingsPlansController
     @EnvironmentObject var appSettings: AppSettings
 
     var body: some View {
@@ -90,7 +91,7 @@ struct WealthView: View {
     }
 
     private var valuation: AccountValuation {
-        AccountValuation(transactionsController: transactionsController, investmentsController: investmentsController)
+        AccountValuation(transactionsController: transactionsController, investmentsController: investmentsController, savingsPlansController: savingsPlansController)
     }
 
     private var accounts: [Account] {
@@ -139,6 +140,7 @@ struct WealthGroupSection: View {
     let currency: String
     let valuation: AccountValuation
     @EnvironmentObject var investmentsController: InvestmentsController
+    @EnvironmentObject var savingsPlansController: SavingsPlansController
     @EnvironmentObject var appSettings: AppSettings
 
     var body: some View {
@@ -187,9 +189,8 @@ struct WealthGroupSection: View {
                                 .foregroundColor(value >= 0 ? .primary : .red)
                                 .privacyBlur(hidden: appSettings.hideAmounts)
 
-                            if account.type.supportsPositions,
-                               investmentsController.costBasis(for: account.id) > 0 {
-                                let gain = investmentsController.unrealizedGain(for: account.id)
+                            let gain = valuation.unrealizedGain(of: account)
+                            if account.type.trackingMode != .transactions, gain != 0 {
                                 Text("\(gain >= 0 ? "+" : "")\(gain.formatted(.currency(code: account.currency))) latents")
                                     .font(.caption)
                                     .foregroundColor(gain >= 0 ? .green : .red)

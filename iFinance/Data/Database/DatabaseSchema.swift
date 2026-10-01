@@ -12,7 +12,9 @@ struct DatabaseSchema {
         createBudgetsTable,
         createBudgetVersionsTable,
         createInvestmentPositionsTable,
-        createInvestmentTransactionsTable
+        createInvestmentTransactionsTable,
+        createAccountValuationsTable,
+        createContributionDetailsTable
     ]
     
     static let migrationStatements: [String] = [
@@ -53,7 +55,10 @@ struct DatabaseSchema {
         
         // Indexes pour Investment Transactions
         "CREATE INDEX IF NOT EXISTS idx_investment_txs_account ON investment_transactions(account_id);",
-        "CREATE INDEX IF NOT EXISTS idx_investment_txs_position ON investment_transactions(position_id);"
+        "CREATE INDEX IF NOT EXISTS idx_investment_txs_position ON investment_transactions(position_id);",
+
+        // Indexes pour les valorisations de comptes
+        "CREATE INDEX IF NOT EXISTS idx_valuations_account_date ON account_valuations(account_id, date);"
     ]
     
     // MARK: - Books
@@ -238,6 +243,30 @@ struct DatabaseSchema {
         memo TEXT,
         FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
         FOREIGN KEY (position_id) REFERENCES investment_positions(id) ON DELETE SET NULL
+    );
+    """
+
+    // MARK: - Account Valuations (relevés des plans d'épargne)
+
+    static let createAccountValuationsTable = """
+    CREATE TABLE IF NOT EXISTS account_valuations (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        value REAL NOT NULL,
+        note TEXT,
+        FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+    );
+    """
+
+    // MARK: - Contribution Details (origine et disponibilité des apports)
+
+    static let createContributionDetailsTable = """
+    CREATE TABLE IF NOT EXISTS contribution_details (
+        transaction_id TEXT PRIMARY KEY,
+        origin TEXT NOT NULL,
+        available_on TEXT,
+        FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
     );
     """
 }

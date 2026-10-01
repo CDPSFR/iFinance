@@ -6,6 +6,7 @@ struct InvestmentAccountView: View {
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var investmentsController: InvestmentsController
+    @EnvironmentObject var savingsPlansController: SavingsPlansController
     @EnvironmentObject var appSettings: AppSettings
 
     @State private var selectedTab: Tab = .positions
@@ -67,7 +68,8 @@ struct InvestmentAccountView: View {
     private func header(for account: Account) -> some View {
         let valuation = AccountValuation(
             transactionsController: transactionsController,
-            investmentsController: investmentsController
+            investmentsController: investmentsController,
+            savingsPlansController: savingsPlansController
         )
         let cost = investmentsController.costBasis(for: account.id)
         let gain = investmentsController.unrealizedGain(for: account.id)

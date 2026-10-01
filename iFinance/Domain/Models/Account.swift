@@ -119,11 +119,47 @@ enum AccountType: String, Codable, CaseIterable {
         }
     }
 
-    /// Compte pouvant détenir des positions (titres, fonds, cryptos)
-    var supportsPositions: Bool {
+    /// Manière de suivre la valeur du compte
+    var trackingMode: AccountTrackingMode {
         switch group {
-        case .investment, .retirement: return true
-        default: return false
+        case .investment: return .positions
+        case .retirement: return .valuations
+        default: return .transactions
+        }
+    }
+
+    /// Compte pouvant détenir des positions (titres, cryptos) gérées ligne par ligne
+    var supportsPositions: Bool {
+        trackingMode == .positions
+    }
+
+    /// Règle d'indisponibilité par défaut des sommes versées
+    var availabilityRule: AvailabilityRule {
+        switch self {
+        case .pee: return .lockedYears(5)
+        case .perco, .retirement: return .untilRetirement
+        default: return .immediate
+        }
+    }
+}
+
+enum AccountTrackingMode {
+    case transactions   // Solde = somme des transactions
+    case positions      // Titres détaillés (CTO, PEA, crypto)
+    case valuations     // Plan géré par un prestataire : versements + valeurs des relevés
+}
+
+enum AvailabilityRule: Equatable {
+    case immediate
+    case lockedYears(Int)
+    case untilRetirement
+
+    /// Date de disponibilité par défaut d'un versement (nil = jusqu'à la retraite)
+    func defaultAvailability(for date: Date, calendar: Calendar = .current) -> Date? {
+        switch self {
+        case .immediate: return date
+        case .lockedYears(let years): return calendar.date(byAdding: .year, value: years, to: date)
+        case .untilRetirement: return nil
         }
     }
 }
