@@ -196,8 +196,13 @@ struct MainView: View {
                     WealthView()
                 case .allTransactions:
                     TransactionListView()
-                case .account(_):
-                    TransactionListView()
+                case .account(let accountID):
+                    if accountsController.getAccount(id: accountID)?.type.supportsPositions == true {
+                        InvestmentAccountView(accountID: accountID)
+                            .id(accountID)
+                    } else {
+                        TransactionListView()
+                    }
                 case .categories:
                     CategoryListView(selectedTab: $selectedTab)
                 case .payees:

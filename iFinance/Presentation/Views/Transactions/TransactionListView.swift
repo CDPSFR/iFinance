@@ -4,6 +4,7 @@ struct TransactionListView: View {
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var transactionsController: TransactionsController
+    @EnvironmentObject var investmentsController: InvestmentsController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var payeesController: PayeesController
     @EnvironmentObject var appSettings: AppSettings
@@ -39,14 +40,14 @@ struct TransactionListView: View {
                 if let accountID = transactionsController.filters.accountID,
                    let account = accountsController.getAccount(id: accountID) {
                     VStack(alignment: .trailing, spacing: 4) {
-                        Text("Solde actuel")
+                        Text(account.type.supportsPositions ? "Espèces" : "Solde actuel")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
-                        let balance = transactionsController.calculateBalance(
-                            for: account.id,
-                            initialBalance: account.initialBalance
-                        )
+                        let balance = AccountValuation(
+                            transactionsController: transactionsController,
+                            investmentsController: investmentsController
+                        ).cash(of: account)
                         
                         Text(balance, format: .currency(code: account.currency))
                             .font(.title2)

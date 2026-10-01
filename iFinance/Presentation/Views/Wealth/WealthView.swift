@@ -138,6 +138,7 @@ struct WealthGroupSection: View {
     let share: Double?
     let currency: String
     let valuation: AccountValuation
+    @EnvironmentObject var investmentsController: InvestmentsController
     @EnvironmentObject var appSettings: AppSettings
 
     var body: some View {
@@ -180,10 +181,21 @@ struct WealthGroupSection: View {
 
                         Spacer()
 
-                        let value = valuation.value(of: account)
-                        Text(value, format: .currency(code: account.currency))
-                            .foregroundColor(value >= 0 ? .primary : .red)
-                            .privacyBlur(hidden: appSettings.hideAmounts)
+                        VStack(alignment: .trailing, spacing: 2) {
+                            let value = valuation.value(of: account)
+                            Text(value, format: .currency(code: account.currency))
+                                .foregroundColor(value >= 0 ? .primary : .red)
+                                .privacyBlur(hidden: appSettings.hideAmounts)
+
+                            if account.type.supportsPositions,
+                               investmentsController.costBasis(for: account.id) > 0 {
+                                let gain = investmentsController.unrealizedGain(for: account.id)
+                                Text("\(gain >= 0 ? "+" : "")\(gain.formatted(.currency(code: account.currency))) latents")
+                                    .font(.caption)
+                                    .foregroundColor(gain >= 0 ? .green : .red)
+                                    .privacyBlur(hidden: appSettings.hideAmounts)
+                            }
+                        }
                     }
                 }
             }
