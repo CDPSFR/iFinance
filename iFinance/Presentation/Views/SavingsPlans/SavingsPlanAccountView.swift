@@ -100,17 +100,21 @@ struct SavingsPlanAccountView: View {
 
             Divider()
 
-            switch selectedTab {
-            case .evolution:
-                evolutionTab(account: account, summary: summary)
-            case .contributions:
-                contributionsTab(account: account, summary: summary)
-            case .availability:
-                availabilityTab(account: account, summary: summary)
-            case .movements:
-                TransactionListView()
+            Group {
+                switch selectedTab {
+                case .evolution:
+                    evolutionTab(account: account, summary: summary)
+                case .contributions:
+                    contributionsTab(account: account, summary: summary)
+                case .availability:
+                    availabilityTab(account: account, summary: summary)
+                case .movements:
+                    TransactionListView()
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private func header(for account: Account, summary: SavingsPlanSummary) -> some View {
@@ -208,6 +212,7 @@ struct SavingsPlanAccountView: View {
                     activeSheet = .newValuation
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -268,6 +273,7 @@ struct SavingsPlanAccountView: View {
                         activeSheet = .newContribution
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 Table(Array(flows), selection: $selectedFlows) {
                     TableColumn("Date") { flow in

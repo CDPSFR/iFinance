@@ -23,6 +23,7 @@ struct PositionListView: View {
                         activeSheet = .newPosition
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 table
 
@@ -36,6 +37,7 @@ struct PositionListView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .confirmationDialog(
             "Supprimer cette position ?",
             isPresented: Binding(

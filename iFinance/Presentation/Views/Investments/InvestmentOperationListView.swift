@@ -23,10 +23,12 @@ struct InvestmentOperationListView: View {
                         activeSheet = .newOperation
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 table
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .confirmationDialog(
             "Supprimer cette opération ?",
             isPresented: Binding(

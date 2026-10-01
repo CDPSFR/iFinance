@@ -54,15 +54,19 @@ struct InvestmentAccountView: View {
 
             Divider()
 
-            switch selectedTab {
-            case .positions:
-                PositionListView(account: account, activeSheet: $activeSheet)
-            case .operations:
-                InvestmentOperationListView(account: account, activeSheet: $activeSheet)
-            case .cash:
-                TransactionListView()
+            Group {
+                switch selectedTab {
+                case .positions:
+                    PositionListView(account: account, activeSheet: $activeSheet)
+                case .operations:
+                    InvestmentOperationListView(account: account, activeSheet: $activeSheet)
+                case .cash:
+                    TransactionListView()
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private func header(for account: Account) -> some View {
