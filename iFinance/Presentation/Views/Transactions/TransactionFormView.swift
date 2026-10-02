@@ -53,12 +53,12 @@ struct TransactionFormView: View {
         VStack(spacing: 20) {
             // Header
             HStack {
-                Text(transactionToEdit == nil ? "Nouvelle Transaction" : "Modifier la Transaction")
+                Text(transactionToEdit == nil ? "Nouvelle transaction" : "Modifier la transaction")
                     .font(.title)
                     .fontWeight(.bold)
-                
+
                 Spacer()
-                
+
                 Button {
                     isPresented = false
                 } label: {
@@ -68,257 +68,179 @@ struct TransactionFormView: View {
                 }
                 .buttonStyle(.plain)
             }
-            
+
             Divider()
-            
+
             // Formulaire
-            ScrollView {
-                VStack(spacing: 16) {
-                    
-                    // Section Type
-                    GroupBox {
-                        VStack(spacing: 12) {
-                            Picker("Type", selection: $selectedType) {
-                                ForEach(TransactionType.allCases, id: \.self) { type in
-                                    HStack {
-                                        Text(type.displayName)
-                                    }
-                                    .tag(type)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                            .onChange(of: selectedType) { oldValue, newValue in
-                                // Réinitialiser certains champs selon le type
-                                if newValue != .transfer {
-                                    selectedToAccount = nil
-                                }
-
-                                // Pour debit/credit, réinitialiser la catégorie si elle ne correspond pas au type
-                                if newValue != .transfer {
-                                    if let catID = selectedCategory,
-                                       let category = categoriesController.getCategory(id: catID) {
-                                        let shouldBeIncome = newValue == .credit
-                                        if category.isIncome != shouldBeIncome {
-                                            selectedCategory = nil
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            // Comptes pour transfert
-                            if selectedType == .transfer {
-                                Picker("Compte source", selection: Binding(
-                                    get: { selectedAccount ?? accountsController.activeAccounts.first?.id ?? UUID() },
-                                    set: { selectedAccount = $0 }
-                                )) {
-                                    ForEach(accountsController.activeAccounts) { account in
-                                        Text(account.name).tag(account.id)
-                                    }
-                                }
-                                
-                                Picker("Compte destination", selection: $selectedToAccount) {
-                                    Text("Sélectionner...").tag(nil as UUID?)
-                                    ForEach(accountsController.activeAccounts.filter { $0.id != selectedAccount }) { account in
-                                        Text(account.name).tag(account.id as UUID?)
-                                    }
-                                }
-                            }
+            Form {
+                // Type, date, montant, comptes
+                Section {
+                    FillSegmentedPicker(
+                        options: TransactionType.allCases.map { ($0, $0.displayName) },
+                        selection: $selectedType
+                    )
+                    .frame(maxWidth: .infinity)
+                    .onChange(of: selectedType) { oldValue, newValue in
+                        // Réinitialiser certains champs selon le type
+                        if newValue != .transfer {
+                            selectedToAccount = nil
                         }
-                    }
-                    
-                        
-                    // Section Date et Montant
-                    GroupBox {
-                        VStack(spacing: 12) {
-                            
-                            HStack {
-                                Text("Date")
-                                Spacer()
-                                DatePicker("", selection: $date, displayedComponents: [.date])
-                            }
-                            
-                            HStack {
-                                Text("Montant")
-                                Spacer()
-                                TextField("0.00", text: $amount)
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(width: 150)
-                                    .multilineTextAlignment(.trailing)
-                            }
-                            
-                            if selectedType != .transfer {
-                                Picker("Compte", selection: Binding(
-                                    get: { selectedAccount ?? accountsController.activeAccounts.first?.id ?? UUID() },
-                                    set: { selectedAccount = $0 }
-                                )) {
-                                    ForEach(accountsController.activeAccounts) { account in
-                                        Text(account.name).tag(account.id)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    
-                    
-                    // Section Bénéficiaire (sauf pour transferts)
-                    if selectedType != .transfer {
-                        GroupBox(label: Label("Bénéficiaire", systemImage: "person.crop.circle")) {
-                            VStack(spacing: 12) {
-                                HStack {
-                                    Picker("", selection: $selectedPayee) {
-                                        Text("Aucun").tag(nil as UUID?)
-                                        
-                                        ForEach(payeesController.payees) { payee in
-                                            HStack {
-                                                Text(payee.name)
-                                                if let location = payee.locationDisplay {
-                                                    Text("(\(location))")
-                                                        .foregroundColor(.secondary)
-                                                }
-                                            }
-                                            .tag(payee.id as UUID?)
-                                        }
-                                    }
-                                    .labelsHidden()
-                                    .onChange(of: selectedPayee) { oldValue, newValue in
-                                        // Auto-suggérer la catégorie si le payee en a une par défaut
-                                        if let payeeID = newValue,
-                                           let defaultCat = payeesController.getDefaultCategory(for: payeeID) {
-                                            selectedCategory = defaultCat
-                                        }
-                                    }
-                                    
-                                    // Bouton création rapide
-                                    Button {
-                                        showQuickPayeeCreate.toggle()
-                                    } label: {
-                                        Image(systemName: "plus.circle.fill")
-                                            .foregroundColor(.blue)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .help("Créer un nouveau bénéficiaire rapidement")
-                                }
-                                
-                                // Création rapide de payee
-                                if showQuickPayeeCreate {
-                                    HStack {
-                                        TextField("Nom du bénéficiaire", text: $quickPayeeName)
-                                            .textFieldStyle(.roundedBorder)
-                                        
-                                        Button("Créer") {
-                                            createQuickPayee()
-                                        }
-                                        .buttonStyle(.borderedProminent)
-                                        .disabled(quickPayeeName.trimmingCharacters(in: .whitespaces).isEmpty)
-                                        
-                                        Button("Annuler") {
-                                            showQuickPayeeCreate = false
-                                            quickPayeeName = ""
-                                        }
-                                        .buttonStyle(.bordered)
-                                    }
-                                }
-                                
-                                // Info si payee sélectionné
-                                if let payeeID = selectedPayee,
-                                   let payee = payeesController.getPayee(id: payeeID) {
-                                    HStack {
-                                        Image(systemName: "info.circle")
-                                            .foregroundColor(.blue)
-                                            .font(.caption)
-                                        
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            if let location = payee.locationDisplay {
-                                                Text(location)
-                                                    .font(.caption)
-                                                    .foregroundColor(.secondary)
-                                            }
-                                            
-                                            if let catID = payee.defaultCategoryID,
-                                               let category = categoriesController.getCategory(id: catID) {
-                                                Text("Catégorie par défaut : \(categoriesController.getCategoryPath(for: catID))")
-                                                    .font(.caption)
-                                                    .foregroundColor(.secondary)
-                                            }
-                                        }
-                                        
-                                        Spacer()
-                                    }
-                                    .padding(8)
-                                    .background(Color.blue.opacity(0.05))
-                                    .cornerRadius(6)
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Section Catégorie (y compris pour transferts)
-                    GroupBox(label: Label("Catégorie", systemImage: "folder")) {
-                        VStack(spacing: 8) {
 
-                            let filteredCategories: [Category] = selectedType == .transfer
-                                ? categoriesController.rootCategories
-                                : categoriesController.rootCategories.filter {
-                                    $0.isIncome == (selectedType == .credit)
-                                }
-
-                            Picker("", selection: $selectedCategory) {
-                                Text("Aucune").tag(nil as UUID?)
-
-                                ForEach(filteredCategories) { category in
-                                    Label(category.name, systemImage: category.icon ?? "folder")
-                                        .tag(category.id as UUID?)
-
-                                    ForEach(categoriesController.getSubcategories(for: category.id)) { sub in
-                                        Label(
-                                            "   \(sub.name)",
-                                            systemImage: sub.icon ?? "folder"
-                                        )
-                                        .tag(sub.id as UUID?)
-                                    }
-                                }
-                            }
-                            .labelsHidden()
-
-                            // Aperçu catégorie sélectionnée
+                        // Pour debit/credit, réinitialiser la catégorie si elle ne correspond pas au type
+                        if newValue != .transfer {
                             if let catID = selectedCategory,
                                let category = categoriesController.getCategory(id: catID) {
-                                HStack {
-                                    if let iconName = category.icon {
-                                        Image(systemName: iconName)
-                                            .foregroundColor(Color(hex: category.displayColor))
-                                    }
-                                    Text(categoriesController.getCategoryPath(for: catID))
-                                        .font(.subheadline)
-                                    Spacer()
+                                let shouldBeIncome = newValue == .credit
+                                if category.isIncome != shouldBeIncome {
+                                    selectedCategory = nil
                                 }
-                                .padding(8)
-                                .background(Color(hex: category.displayColor).opacity(0.1))
-                                .cornerRadius(6)
                             }
                         }
                     }
-                    
-                    // Section Mémo
-                    GroupBox(label: Label("Mémo", systemImage: "note.text")) {
-                        TextField("Ajouter une note (optionnel)", text: $memo, axis: .vertical)
+
+                    formRow("Date") {
+                        DatePicker("Date", selection: $date, displayedComponents: [.date])
+                            .labelsHidden()
+                        Spacer()
+                    }
+
+                    formRow("Montant") {
+                        TextField("Montant", text: $amount, prompt: Text("0,00"))
+                            .labelsHidden()
                             .textFieldStyle(.roundedBorder)
-                            .lineLimit(3...6)
+                            .multilineTextAlignment(.trailing)
+                    }
+
+                    if selectedType == .transfer {
+                        accountPicker("Compte source", selection: $selectedAccount, accounts: accountsController.activeAccounts)
+
+                        accountPicker(
+                            "Compte destination",
+                            selection: $selectedToAccount,
+                            accounts: accountsController.activeAccounts.filter { $0.id != selectedAccount }
+                        )
+                    } else {
+                        accountPicker("Compte", selection: $selectedAccount, accounts: accountsController.activeAccounts)
                     }
                 }
-                .padding()
+
+                // Bénéficiaire (sauf pour transferts)
+                if selectedType != .transfer {
+                    Section("Bénéficiaire") {
+                        HStack {
+                            FillPopUpPicker(items: payeeItems, selection: $selectedPayee)
+                                .frame(maxWidth: .infinity)
+                            .onChange(of: selectedPayee) { oldValue, newValue in
+                                // Auto-suggérer la catégorie si le payee en a une par défaut
+                                if let payeeID = newValue,
+                                   let defaultCat = payeesController.getDefaultCategory(for: payeeID) {
+                                    selectedCategory = defaultCat
+                                }
+                            }
+
+                            // Bouton création rapide
+                            Button {
+                                showQuickPayeeCreate.toggle()
+                            } label: {
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundColor(.blue)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Créer un nouveau bénéficiaire rapidement")
+                        }
+
+                        // Création rapide de payee
+                        if showQuickPayeeCreate {
+                            HStack {
+                                TextField("Nom du bénéficiaire", text: $quickPayeeName)
+                                    .textFieldStyle(.roundedBorder)
+
+                                Button("Créer") {
+                                    createQuickPayee()
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(quickPayeeName.trimmingCharacters(in: .whitespaces).isEmpty)
+
+                                Button("Annuler") {
+                                    showQuickPayeeCreate = false
+                                    quickPayeeName = ""
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+
+                        // Info si payee sélectionné
+                        if let payeeID = selectedPayee,
+                           let payee = payeesController.getPayee(id: payeeID),
+                           payee.locationDisplay != nil || payee.defaultCategoryID != nil {
+                            HStack(alignment: .top) {
+                                Image(systemName: "info.circle")
+                                    .foregroundColor(.blue)
+                                    .font(.caption)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    if let location = payee.locationDisplay {
+                                        Text(location)
+                                    }
+
+                                    if let catID = payee.defaultCategoryID,
+                                       categoriesController.getCategory(id: catID) != nil {
+                                        Text("Catégorie par défaut : \(categoriesController.getCategoryPath(for: catID))")
+                                    }
+                                }
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+
+                                Spacer()
+                            }
+                        }
+                    }
+                }
+
+                // Catégorie (y compris pour transferts)
+                Section("Catégorie") {
+                    let filteredCategories: [Category] = selectedType == .transfer
+                        ? categoriesController.rootCategories
+                        : categoriesController.rootCategories.filter {
+                            $0.isIncome == (selectedType == .credit)
+                        }
+
+                    FillPopUpPicker(items: categoryItems(filteredCategories), selection: $selectedCategory)
+                        .frame(maxWidth: .infinity)
+
+                    // Aperçu catégorie sélectionnée
+                    if let catID = selectedCategory,
+                       let category = categoriesController.getCategory(id: catID) {
+                        HStack {
+                            if let iconName = category.icon {
+                                Image(systemName: iconName)
+                                    .foregroundColor(Color(hex: category.displayColor))
+                            }
+                            Text(categoriesController.getCategoryPath(for: catID))
+                                .font(.subheadline)
+                            Spacer()
+                        }
+                    }
+                }
+
+                // Mémo
+                Section("Mémo") {
+                    TextField("Mémo", text: $memo, prompt: Text("Ajouter une note (optionnel)"), axis: .vertical)
+                        .lineLimit(3...6)
+                        .labelsHidden()
+                }
             }
-            
+            .formStyle(.grouped)
+
             // Boutons
             HStack {
                 Button("Annuler") {
                     isPresented = false
                 }
                 .keyboardShortcut(.cancelAction)
-                
+
                 Spacer()
-                
+
                 Button(transactionToEdit == nil ? "Créer" : "Modifier") {
                     saveTransaction()
                 }
@@ -326,10 +248,15 @@ struct TransactionFormView: View {
                 .disabled(!isFormValid || isCreating)
                 .keyboardShortcut(.defaultAction)
             }
-            .padding()
         }
         .padding()
-        .frame(width: 600, height: 700)
+        .frame(width: 560, height: 800)
+        .onChange(of: selectedAccount) { _, newValue in
+            // Source et destination d'un transfert doivent différer
+            if selectedToAccount == newValue {
+                selectedToAccount = nil
+            }
+        }
         .onAppear {
             // Mode création uniquement : sélectionner le compte par défaut
             guard transactionToEdit == nil, selectedAccount == nil else { return }
@@ -342,7 +269,47 @@ struct TransactionFormView: View {
             }
         }
     }
-    
+
+    /// Sélecteur de compte : propose « Sélectionner… » tant qu'aucun compte valide n'est choisi
+    private func accountPicker(_ title: String, selection: Binding<UUID?>, accounts: [Account]) -> some View {
+        let needsPlaceholder = selection.wrappedValue == nil || !accounts.contains { $0.id == selection.wrappedValue }
+        let items = (needsPlaceholder ? [FillPopUpItem<UUID>(id: nil, title: "Sélectionner…")] : [])
+            + accounts.map { FillPopUpItem(id: $0.id, title: $0.name, systemImage: $0.type.icon) }
+
+        return formRow(title) {
+            FillPopUpPicker(items: items, selection: selection)
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var payeeItems: [FillPopUpItem<UUID>] {
+        [FillPopUpItem(id: nil, title: "Aucun")]
+            + payeesController.payees.map { payee in
+                FillPopUpItem(id: payee.id, title: payee.locationDisplay.map { "\(payee.name) (\($0))" } ?? payee.name)
+            }
+    }
+
+    /// Catégories racines suivies de leurs sous-catégories, indentées
+    private func categoryItems(_ roots: [Category]) -> [FillPopUpItem<UUID>] {
+        var items = [FillPopUpItem<UUID>(id: nil, title: "Aucune")]
+        for category in roots {
+            items.append(FillPopUpItem(id: category.id, title: category.name, systemImage: category.icon ?? "folder"))
+            for sub in categoriesController.getSubcategories(for: category.id) {
+                items.append(FillPopUpItem(id: sub.id, title: sub.name, systemImage: sub.icon ?? "folder", indentationLevel: 1))
+            }
+        }
+        return items
+    }
+
+    /// Ligne de formulaire : libellé en colonne fixe, contrôle sur toute la largeur restante
+    private func formRow<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        HStack {
+            Text(title)
+                .frame(width: 140, alignment: .leading)
+            content()
+        }
+    }
+
     private var isFormValid: Bool {
         guard !amount.isEmpty,
               Decimal(string: amount.replacingOccurrences(of: ",", with: ".")) != nil else {
