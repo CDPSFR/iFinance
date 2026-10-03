@@ -45,6 +45,9 @@ class TransactionsController: ObservableObject {
     
     // MARK: - Apply Filters
     
+    /// Sous-catégories d'une catégorie, fourni par CategoriesController (voir AppState)
+    var subcategoryIDs: (UUID) -> [UUID] = { _ in [] }
+
     func applyFilters() {
         var result = allTransactions
         
@@ -58,9 +61,10 @@ class TransactionsController: ObservableObject {
             result = result.filter { $0.accountID == accountID }
         }
         
-        // Filtre par catégorie
+        // Filtre par catégorie (une catégorie parente inclut ses sous-catégories)
         if let categoryID = filters.categoryID {
-            result = result.filter { $0.categoryID == categoryID }
+            let categoryIDs = Set([categoryID] + subcategoryIDs(categoryID))
+            result = result.filter { $0.categoryID.map(categoryIDs.contains) ?? false }
         }
         
         // Filtre par bénéficiaire

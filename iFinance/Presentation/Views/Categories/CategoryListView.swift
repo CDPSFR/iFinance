@@ -50,8 +50,7 @@ struct CategoryListView: View {
             }
             .padding(.horizontal)
             .padding(.vertical, 7)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(8)
+            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
             .padding(.horizontal)
             .padding(.bottom, 8)
             
@@ -65,9 +64,13 @@ struct CategoryListView: View {
                 categoriesScrollView
             }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
-        .sheet(isPresented: $showCategoryForm) {
-            CategoryFormView(isPresented: $showCategoryForm)
+        // Fond légèrement teinté pour détacher les cartes (blanc sur blanc depuis macOS 26)
+        .background(Color(nsColor: .windowBackgroundColor).overlay(Color.primary.opacity(0.045)))
+        .sheet(isPresented: $showCategoryForm, onDismiss: { parentForNewCategory = nil }) {
+            CategoryFormView(
+                isPresented: $showCategoryForm,
+                parentCategory: parentForNewCategory.flatMap { categoriesController.getCategory(id: $0) }
+            )
         }
         .sheet(item: $categoryToEdit) { category in
             CategoryFormView(
@@ -155,59 +158,53 @@ struct CategoryListView: View {
     }
     
     private var categoriesScrollView: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                // Catégories de dépenses
-                ForEach(filteredExpenseCategories.filter { $0.isRoot }) { parentCategory in
-                    CategoryGroupView(
-                        parentCategory: parentCategory,
-                        subcategories: getFilteredSubcategories(for: parentCategory.id),
-                        transactionCounts: getCategoryTransactionCounts(),
-                        onEdit: { category in
-                            categoryToEdit = category
-                        },
-                        onDelete: { category in
-                            categoryToDelete = category
-                            showDeleteConfirmation = true
-                        },
-                        onAddSubcategory: { parent in
-                            parentForNewCategory = parent.id
-                            showCategoryForm = true
-                        },
-                        onSelectCategory: { category in
-                            selectedCategoryForNavigation = category.id
-                            navigateToTransactions = true
-                        }
-                    )
-                }
-                
-                // Catégories de revenus
-                ForEach(filteredIncomeCategories.filter { $0.isRoot }) { parentCategory in
-                    CategoryGroupView(
-                        parentCategory: parentCategory,
-                        subcategories: getFilteredSubcategories(for: parentCategory.id),
-                        transactionCounts: getCategoryTransactionCounts(),
-                        onEdit: { category in
-                            categoryToEdit = category
-                        },
-                        onDelete: { category in
-                            categoryToDelete = category
-                            showDeleteConfirmation = true
-                        },
-                        onAddSubcategory: { parent in
-                            parentForNewCategory = parent.id
-                            showCategoryForm = true
-                        },
-                        onSelectCategory: { category in
-                            selectedCategoryForNavigation = category.id
-                            navigateToTransactions = true
-                        }
-                    )
-                }
+        let stats = categoryStats()
+        let currency = bookController.currentBook?.currency ?? "EUR"
+
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                categorySection(title: "Dépenses", roots: filteredExpenseCategories, stats: stats, currency: currency)
+                categorySection(title: "Revenus", roots: filteredIncomeCategories, stats: stats, currency: currency)
+            }
+            .padding(.bottom)
+        }
+    }
+
+    @ViewBuilder
+    private func categorySection(title: String, roots: [Category], stats: [UUID: CategoryStats], currency: String) -> some View {
+        if !roots.isEmpty {
+            Text(title)
+                .font(.title3.weight(.semibold))
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 4)
+
+            ForEach(roots) { parentCategory in
+                CategoryGroupView(
+                    parentCategory: parentCategory,
+                    subcategories: getFilteredSubcategories(for: parentCategory.id),
+                    stats: stats,
+                    currency: currency,
+                    onEdit: { category in
+                        categoryToEdit = category
+                    },
+                    onDelete: { category in
+                        categoryToDelete = category
+                        showDeleteConfirmation = true
+                    },
+                    onAddSubcategory: { parent in
+                        parentForNewCategory = parent.id
+                        showCategoryForm = true
+                    },
+                    onSelectCategory: { category in
+                        selectedCategoryForNavigation = category.id
+                        navigateToTransactions = true
+                    }
+                )
             }
         }
     }
-    
+
     // MARK: - Filtered Categories
     private var filteredExpenseCategories: [Category] {
         let rootCategories = categoriesController.expenseCategories.filter { $0.isRoot }
@@ -238,7 +235,8 @@ struct CategoryListView: View {
     private func getFilteredSubcategories(for parentID: UUID) -> [Category] {
         let subcategories = categoriesController.getSubcategories(for: parentID)
         
-        if searchQuery.isEmpty {
+        // Si la catégorie parente correspond, on affiche toutes ses sous-catégories
+        if searchQuery.isEmpty || categoriesController.getCategory(id: parentID).map(categoryMatchesSearch) == true {
             return subcategories
         }
         
@@ -257,9 +255,27 @@ struct CategoryListView: View {
         return subcategories.contains { categoryMatchesSearch($0) }
     }
     
-    // MARK: - Transaction Count
-    private func getCategoryTransactionCounts() -> [UUID: Int] {
-        return categoriesController.getTransactionCounts(from: transactionsController.allTransactions)
+    // MARK: - Category Stats
+    private func categoryStats() -> [UUID: CategoryStats] {
+        var stats: [UUID: CategoryStats] = [:]
+
+        for transaction in transactionsController.allTransactions where transaction.status != .skipped {
+            guard let categoryID = transaction.categoryID else { continue }
+            stats[categoryID, default: CategoryStats()].count += 1
+            stats[categoryID, default: CategoryStats()].total += transaction.signedAmount
+        }
+
+        return stats
+    }
+}
+
+/// Activité d'une catégorie calculée à partir des transactions chargées
+struct CategoryStats {
+    var count = 0
+    var total: Decimal = 0          // Somme signée : < 0 dépenses, > 0 revenus
+
+    static func + (lhs: CategoryStats, rhs: CategoryStats) -> CategoryStats {
+        CategoryStats(count: lhs.count + rhs.count, total: lhs.total + rhs.total)
     }
 }
 
@@ -267,139 +283,174 @@ struct CategoryListView: View {
 struct CategoryGroupView: View {
     let parentCategory: Category
     let subcategories: [Category]
-    let transactionCounts: [UUID: Int]
+    let stats: [UUID: CategoryStats]
+    let currency: String
     let onEdit: (Category) -> Void
     let onDelete: (Category) -> Void
     let onAddSubcategory: (Category) -> Void
     let onSelectCategory: (Category) -> Void
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Nom de la catégorie parente (extérieur à la carte)
-            Text(parentCategory.name)
-                .font(.headline)
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .contextMenu {
-                    Button { onEdit(parentCategory) } label: {
-                        Label("Modifier", systemImage: "pencil")
-                    }
-                    Divider()
-                    Button(role: .destructive) { onDelete(parentCategory) } label: {
-                        Label("Supprimer", systemImage: "trash")
-                    }
-                }
 
-            VStack(spacing: 0) {
-            // Sous-catégories
-            ForEach(Array(subcategories.enumerated()), id: \.element.id) { index, subcategory in
+    var body: some View {
+        VStack(spacing: 0) {
+            // Catégorie parente : total du groupe (parente + sous-catégories)
+            CategoryRowView(
+                category: parentCategory,
+                stats: groupStats,
+                currency: currency,
+                isParent: true,
+                onTap: { onSelectCategory(parentCategory) },
+                onEdit: { onEdit(parentCategory) },
+                onDelete: { onDelete(parentCategory) }
+            )
+
+            ForEach(subcategories) { subcategory in
+                Divider()
+                    .padding(.leading, 62)
+
                 CategoryRowView(
                     category: subcategory,
-                    count: transactionCounts[subcategory.id] ?? 0,
+                    stats: stats[subcategory.id] ?? CategoryStats(),
+                    currency: currency,
+                    isParent: false,
                     onTap: { onSelectCategory(subcategory) },
                     onEdit: { onEdit(subcategory) },
                     onDelete: { onDelete(subcategory) }
                 )
-                if index < subcategories.count - 1 {
-                    Divider()
-                        .padding(.leading, 54)
-                }
             }
-            
-            // Bouton "Nouvelle catégorie"
+
+            Divider()
+                .padding(.leading, 62)
+
+            // Ajouter une sous-catégorie
             Button {
                 onAddSubcategory(parentCategory)
             } label: {
-                HStack {
-                    Text("Nouvelle catégorie")
+                HStack(spacing: 12) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title3)
+                        .frame(width: 36)
+                    Text("Nouvelle sous-catégorie")
                         .font(.subheadline)
-                        .foregroundColor(.teal)
-                    
                     Spacer()
-                    
-                    Image(systemName: "plus")
-                        .font(.subheadline)
-                        .foregroundColor(.teal)
                 }
-                .padding(.horizontal)
-                .padding(.vertical, 12)
-                .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+                .foregroundColor(.accentColor)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .cornerRadius(8, corners: [.bottomLeft, .bottomRight])
-            }
-            .background(Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(8)
-            .padding(.horizontal, 16)
         }
-        .padding(.bottom, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(nsColor: .controlBackgroundColor))
+                .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(.separator.opacity(0.6))
+        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
+    }
+
+    private var groupStats: CategoryStats {
+        subcategories.reduce(stats[parentCategory.id] ?? CategoryStats()) { $0 + (stats[$1.id] ?? CategoryStats()) }
     }
 }
 
 // MARK: - Category Row View
 struct CategoryRowView: View {
     let category: Category
-    let count: Int
+    let stats: CategoryStats
+    let currency: String
+    let isParent: Bool
     let onTap: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
-    
-    @State private var showContextMenu = false
-    
+
     var body: some View {
         Button {
             onTap()
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 // Icône de la catégorie
                 Image(systemName: category.displayIcon)
-                    .font(.subheadline)
+                    .font(isParent ? .body : .subheadline)
                     .foregroundColor(.white)
-                    .frame(width: 28, height: 28)
+                    .frame(width: isParent ? 36 : 28, height: isParent ? 36 : 28)
                     .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(hex: category.displayColor))
+                        RoundedRectangle(cornerRadius: isParent ? 9 : 7)
+                            .fill(Color(hex: category.displayColor).gradient)
                     )
-                
+                    .frame(width: 36)
+
                 // Nom de la catégorie
-                Text(category.name)
-                    .font(.body)
-                    .foregroundColor(.primary)
-                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(category.name)
+                        .font(isParent ? .headline : .body)
+                        .foregroundColor(.primary)
+
+                    if isParent, let description = category.description, !description.isEmpty {
+                        Text(description)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+
                 Spacer()
-                
-                // Nombre de transactions
-                Text("\(count)")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                
-                // Chevron
+
+                // Activité
+                VStack(alignment: .trailing, spacing: 2) {
+                    if stats.count > 0 {
+                        Text(totalText)
+                            .font(isParent ? .body.weight(.semibold) : .body)
+                            .monospacedDigit()
+                            .foregroundColor(stats.total > 0 ? .green : .primary)
+                    }
+                    Text(stats.count > 0 ? "\(stats.count) opération\(stats.count > 1 ? "s" : "")" : "Aucune opération")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
                 Image(systemName: "chevron.right")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundStyle(.tertiary)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 7)
-            .background(Color(nsColor: .controlBackgroundColor))
+            .padding(.horizontal, 14)
+            .padding(.vertical, isParent ? 11 : 8)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help("Voir les transactions de \(category.name)")
         .contextMenu {
+            Button {
+                onTap()
+            } label: {
+                Label("Voir les transactions", systemImage: "list.bullet.rectangle")
+            }
+
+            Divider()
+
             Button {
                 onEdit()
             } label: {
                 Label("Modifier", systemImage: "pencil")
             }
-            
+
             Divider()
-            
+
             Button(role: .destructive) {
                 onDelete()
             } label: {
                 Label("Supprimer", systemImage: "trash")
             }
         }
+    }
+
+    private var totalText: String {
+        let amount = abs(stats.total).formatted(.currency(code: currency))
+        return stats.total > 0 ? "+\(amount)" : amount
     }
 }
 

@@ -6,6 +6,8 @@ struct CategoryFormView: View {
     @Binding var isPresented: Bool
     
     var categoryToEdit: Category?
+    /// Parent présélectionné lors de la création d'une sous-catégorie
+    var parentCategory: Category? = nil
     
     @State private var name: String = ""
     @State private var description: String = ""
@@ -134,8 +136,11 @@ struct CategoryFormView: View {
                     }
                     .pickerStyle(.segmented)
                     .onChange(of: isIncome) { oldValue, newValue in
-                        // Réinitialiser le parent si on change de type
-                        selectedParent = nil
+                        // Réinitialiser le parent s'il n'est plus du même type
+                        if let parentID = selectedParent,
+                           categoriesController.getCategory(id: parentID)?.isIncome != newValue {
+                            selectedParent = nil
+                        }
                     }
                     
                     // Catégorie parent (optionnel)
@@ -284,13 +289,13 @@ struct CategoryFormView: View {
             selectedColor = category.displayColor  // Utilise displayColor au lieu de color
             isIncome = category.isIncome
         } else {
-            // Réinitialiser pour une nouvelle catégorie
+            // Réinitialiser pour une nouvelle catégorie (sous la catégorie parente si fournie)
             name = ""
             description = ""
-            selectedParent = nil
+            selectedParent = parentCategory?.id
             selectedIcon = "folder.fill"
-            selectedColor = "#2196F3"
-            isIncome = false
+            selectedColor = parentCategory?.displayColor ?? "#2196F3"
+            isIncome = parentCategory?.isIncome ?? false
         }
     }
     

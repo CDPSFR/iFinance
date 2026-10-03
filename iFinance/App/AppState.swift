@@ -65,6 +65,11 @@ class AppState: ObservableObject {
         )
         self.savingsPlansController = SavingsPlansController(repository: savingsPlanRepository)
 
+        // Le filtre par catégorie parente inclut ses sous-catégories
+        transactionsController.subcategoryIDs = { [weak categoriesController] categoryID in
+            categoriesController?.getSubcategories(for: categoryID).map { $0.id } ?? []
+        }
+
         print("✅ iFinance AppState initialisé")
     }
 }
