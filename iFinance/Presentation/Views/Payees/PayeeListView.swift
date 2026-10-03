@@ -49,8 +49,7 @@ struct PayeeListView: View {
             }
             .padding(.horizontal)
             .padding(.vertical, 7)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(8)
+            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
             .padding(.horizontal)
             .padding(.bottom, 8)
             
@@ -64,7 +63,8 @@ struct PayeeListView: View {
                 payeesScrollView
             }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        // Fond légèrement teinté pour détacher les cartes (blanc sur blanc depuis macOS 26)
+        .background(Color(nsColor: .windowBackgroundColor).overlay(Color.primary.opacity(0.045)))
         .sheet(isPresented: $showPayeeForm) {
             PayeeFormView(isPresented: $showPayeeForm)
         }
@@ -167,13 +167,15 @@ struct PayeeListView: View {
     }
     
     private var payeesScrollView: some View {
-        ScrollView {
+        let stats = payeeStats()
+        return ScrollView {
             VStack(spacing: 0) {
                 ForEach(groupedPayees.keys.sorted(), id: \.self) { letter in
                     PayeeGroupView(
                         letter: letter,
                         payees: groupedPayees[letter] ?? [],
-                        transactionCounts: getPayeeTransactionCounts(),
+                        stats: stats,
+                        currency: bookController.currentBook?.currency ?? "EUR",
                         categoriesController: categoriesController,
                         onEdit: { payee in
                             payeeToEdit = payee
@@ -191,6 +193,7 @@ struct PayeeListView: View {
                     )
                 }
             }
+            .padding(.bottom)
         }
     }
     
@@ -201,17 +204,22 @@ struct PayeeListView: View {
         }
     }
     
-    // MARK: - Transaction Count
-    private func getPayeeTransactionCounts() -> [UUID: Int] {
-        var counts: [UUID: Int] = [:]
-        
-        for transaction in transactionsController.allTransactions {
-            if let payeeID = transaction.payeeID {
-                counts[payeeID, default: 0] += 1
+    // MARK: - Payee Stats
+    private func payeeStats() -> [UUID: PayeeStats] {
+        var stats: [UUID: PayeeStats] = [:]
+
+        for transaction in transactionsController.allTransactions where transaction.status != .skipped {
+            guard let payeeID = transaction.payeeID else { continue }
+            var entry = stats[payeeID, default: PayeeStats()]
+            entry.count += 1
+            entry.total += transaction.signedAmount
+            if entry.lastDate.map({ transaction.date > $0 }) ?? true {
+                entry.lastDate = transaction.date
             }
+            stats[payeeID] = entry
         }
-        
-        return counts
+
+        return stats
     }
 }
 
@@ -219,39 +227,48 @@ struct PayeeListView: View {
 struct PayeeGroupView: View {
     let letter: String
     let payees: [Payee]
-    let transactionCounts: [UUID: Int]
+    let stats: [UUID: PayeeStats]
+    let currency: String
     let categoriesController: CategoriesController
     let onEdit: (Payee) -> Void
     let onDelete: (Payee) -> Void
     let onSelectPayee: (Payee) -> Void
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-
-            // 🔤 LETTRE – À L’EXTÉRIEUR DU FOND
             Text(letter)
                 .font(.headline)
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
 
-            // 🧱 CARTE AVEC FOND + RADIUS
             VStack(spacing: 0) {
-                ForEach(payees) { payee in
+                ForEach(Array(payees.enumerated()), id: \.element.id) { index, payee in
                     PayeeRowView(
                         payee: payee,
-                        count: transactionCounts[payee.id] ?? 0,
-                        defaultCategory: categoriesController.getCategory(
-                            id: payee.defaultCategoryID ?? UUID()
-                        ),
+                        stats: stats[payee.id] ?? PayeeStats(),
+                        defaultCategory: payee.defaultCategoryID.flatMap { categoriesController.getCategory(id: $0) },
+                        currency: currency,
                         onTap: { onSelectPayee(payee) },
                         onEdit: { onEdit(payee) },
                         onDelete: { onDelete(payee) }
                     )
+
+                    if index < payees.count - 1 {
+                        Divider()
+                            .padding(.leading, 62)
+                    }
                 }
             }
-            .background(Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(8)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(.separator.opacity(0.6))
+            )
             .padding(.horizontal, 16)
         }
         .padding(.bottom, 8)
