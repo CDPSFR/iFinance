@@ -1,14 +1,7 @@
-//
-//  MonthlyBalanceChartView.swift
-//  iFinance
-//
-//  Created by charles.du.portal on 08/01/2026.
-//
-
-
 import SwiftUI
 import Charts
 
+/// Rapport « Solde mensuel » : chiffres clés, barres au-dessus et en dessous de zéro, tableau mensuel
 struct MonthlyBalanceChartView: View {
 
     @EnvironmentObject var transactionsController: TransactionsController
@@ -16,141 +9,184 @@ struct MonthlyBalanceChartView: View {
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var appSettings: AppSettings
 
-    // MARK: - Data Models
-
     struct MonthlyBalance: Identifiable {
-        let id = UUID()
         let date: Date
-        let balance: Decimal
         let income: Decimal
         let expense: Decimal
+
+        var id: Date { date }
+        var balance: Decimal { income - expense }
+        var kind: String { balance >= 0 ? "Excédent" : "Déficit" }
     }
 
-    // MARK: - State
-
-    @State private var selectedBalance: MonthlyBalance?
-    @State private var hoverLocation: CGPoint = .zero
-
-    // MARK: - Body
+    @State private var selectedDate: Date?
 
     var body: some View {
-        VStack(spacing: 0) {
-            if balanceData.isEmpty {
-                emptyStateView
-            } else {
-                // Statistiques
-                HStack(spacing: NativeMetrics.groupSpacing) {
-                    StatisticCard(
-                        title: "Solde moyen",
-                        value: averageBalance,
-                        color: averageBalance >= 0 ? .green : .red
-                    )
-                    
-                    StatisticCard(
-                        title: "Meilleur mois",
-                        value: bestMonth?.balance ?? 0,
-                        color: .green
-                    )
-                    
-                    StatisticCard(
-                        title: "Pire mois",
-                        value: worstMonth?.balance ?? 0,
-                        color: .red
-                    )
-                }
-                .padding(.bottom, NativeMetrics.groupSpacing)
+        let months = balanceData
 
-                // Graphique
-                let hideAmounts = appSettings.hideAmounts
-                Chart {
-                    ForEach(balanceData) { item in
-                        BarMark(
-                            x: .value("Mois", item.date, unit: .month),
-                            y: .value("Solde", NSDecimalNumber(decimal: item.balance).doubleValue)
-                        )
-                        .foregroundStyle(item.balance >= 0 ? Color.green : Color.red)
-                        .cornerRadius(4)
-                        .annotation(position: item.balance >= 0 ? .top : .bottom, alignment: .center) {
-                            Text("\(NSDecimalNumber(decimal: item.balance).doubleValue, specifier: "%.0f")€")
-                                .font(.caption)
-                                .foregroundColor(item.balance >= 0 ? .green : .red)
-                                .privacyBlur(hidden: hideAmounts)
-                        }
-                    }
-
-                    // Ligne zéro
-                    RuleMark(y: .value("Zéro", 0))
-                        .lineStyle(StrokeStyle(lineWidth: 1))
-                        .foregroundStyle(.gray.opacity(0.5))
-
-                    if let selectedBalance {
-                        RuleMark(x: .value("Mois", selectedBalance.date))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
-                            .foregroundStyle(.gray.opacity(0.5))
-                    }
+        if months.isEmpty {
+            ReportEmptyState(systemImage: "chart.bar.xaxis")
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: NativeMetrics.groupSpacing) {
+                    tiles(months)
+                    chartBlock(months)
+                    tableBlock(months)
                 }
-                .chartXAxis {
-                    AxisMarks(values: .stride(by: .month)) { value in
-                        AxisGridLine()
-                        AxisValueLabel(format: .dateTime.month().year())
-                    }
-                }
-                .chartYAxis {
-                    AxisMarks { value in
-                        AxisGridLine()
-                        AxisValueLabel()
-                    }
-                }
-                .chartOverlay { proxy in
-                    GeometryReader { geo in
-                        Rectangle()
-                            .fill(Color.clear)
-                            .contentShape(Rectangle())
-                            .onHover { hovering in
-                                if !hovering { selectedBalance = nil }
-                            }
-                            .onContinuousHover { phase in
-                                switch phase {
-                                case .active(let location):
-                                    hoverLocation = location
-                                    selectedBalance = findBalanceAtShiftedLocation(location.x, in: proxy, geometry: geo)
-                                case .ended:
-                                    selectedBalance = nil
-                                }
-                            }
-                    }
-                }
-                .overlay(alignment: .topLeading) {
-                    if let selectedBalance {
-                        GeometryReader { geo in
-                            let tooltipSize = CGSize(width: 200, height: 100)
-                            let x = min(max(hoverLocation.x + 12, 0), geo.size.width - tooltipSize.width)
-                            let y = min(max(hoverLocation.y - tooltipSize.height - 12, 0), geo.size.height - tooltipSize.height)
-                            let position = CGPoint(x: x + tooltipSize.width / 2, y: y + tooltipSize.height / 2)
-
-                            tooltipView(for: selectedBalance)
-                                .frame(width: tooltipSize.width, height: tooltipSize.height)
-                                .position(position)
-                        }
-                    }
-                }
-                .padding()
-                .frame(height: 300)
-                .cardBackground(cornerRadius: 12)
-                .padding(.vertical)
             }
         }
     }
 
-    // MARK: - Helpers
+    // MARK: - Chiffres clés
 
+    private func tiles(_ months: [MonthlyBalance]) -> some View {
+        let average = months.reduce(Decimal(0)) { $0 + $1.balance } / Decimal(months.count)
+        let positive = months.filter { $0.balance >= 0 }.count
+        let best = months.max { $0.balance < $1.balance }
+        let worst = months.min { $0.balance < $1.balance }
+
+        return ReportTiles {
+            StatTile(
+                title: "Solde moyen",
+                value: signed(average),
+                valueColor: average >= 0 ? .green : .red,
+                detail: "par mois"
+            )
+            .privacyBlur(hidden: appSettings.hideAmounts)
+
+            StatTile(title: "Mois excédentaires", value: "\(positive) sur \(months.count)")
+
+            StatTile(
+                title: "Meilleur mois",
+                value: signed(best?.balance ?? 0),
+                valueColor: (best?.balance ?? 0) >= 0 ? .green : .red,
+                detail: best.map { monthName($0.date) }
+            )
+            .privacyBlur(hidden: appSettings.hideAmounts)
+
+            StatTile(
+                title: "Moins bon mois",
+                value: signed(worst?.balance ?? 0),
+                valueColor: (worst?.balance ?? 0) >= 0 ? .green : .red,
+                detail: worst.map { monthName($0.date) }
+            )
+            .privacyBlur(hidden: appSettings.hideAmounts)
+        }
+    }
+
+    // MARK: - Graphique
+
+    private func chartBlock(_ months: [MonthlyBalance]) -> some View {
+        let selected = selectedMonth(in: months)
+
+        return VStack(alignment: .leading, spacing: 12) {
+            GroupTitle("Solde de chaque mois (revenus moins dépenses)")
+
+            Chart {
+                ForEach(months) { month in
+                    BarMark(
+                        x: .value("Mois", month.date, unit: .month),
+                        y: .value("Solde", NSDecimalNumber(decimal: month.balance).doubleValue)
+                    )
+                    .foregroundStyle(by: .value("Type", month.kind))
+                    .cornerRadius(3)
+                }
+
+                RuleMark(y: .value("Zéro", 0))
+                    .foregroundStyle(Color.secondary.opacity(0.5))
+                    .lineStyle(StrokeStyle(lineWidth: 1))
+
+                if let selected {
+                    RuleMark(x: .value("Mois", selected.date, unit: .month))
+                        .foregroundStyle(Color.secondary.opacity(0.25))
+                        .annotation(
+                            position: .top,
+                            overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                        ) {
+                            ReportTooltip {
+                                Text(monthName(selected.date))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text("Revenus : \(money(selected.income))")
+                                Text("Dépenses : \(money(selected.expense))")
+                                Text("Solde : \(signed(selected.balance))")
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                }
+            }
+            .chartForegroundStyleScale([
+                "Excédent": Color.green,
+                "Déficit": Color.red
+            ])
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .month)) { _ in
+                    AxisValueLabel(format: .dateTime.month(.abbreviated), centered: true)
+                }
+            }
+            .chartYAxis {
+                AxisMarks { _ in
+                    AxisGridLine()
+                    AxisValueLabel()
+                }
+            }
+            .chartLegend(position: .top, alignment: .trailing)
+            .chartXSelection(value: $selectedDate)
+            .frame(height: 260)
+            .privacyBlur(hidden: appSettings.hideAmounts)
+        }
+        .padding(NativeMetrics.groupPadding)
+        .cardBackground()
+    }
+
+    private func selectedMonth(in months: [MonthlyBalance]) -> MonthlyBalance? {
+        guard let selectedDate else { return nil }
+        let calendar = Calendar.current
+        return months.first { calendar.isDate($0.date, equalTo: selectedDate, toGranularity: .month) }
+    }
+
+    // MARK: - Tableau mensuel
+
+    private func tableBlock(_ months: [MonthlyBalance]) -> some View {
+        ReportTable(
+            columns: ["Mois", "Revenus", "Dépenses", "Solde du mois"],
+            rows: months.reversed().map { month in
+                ReportRow(id: "\(month.date.timeIntervalSince1970)", cells: [
+                    ReportCell(text: monthName(month.date)),
+                    ReportCell(text: money(month.income)),
+                    ReportCell(text: money(month.expense)),
+                    ReportCell(text: signed(month.balance), color: month.balance >= 0 ? .green : .red)
+                ])
+            }
+        )
+    }
+
+    // MARK: - Données
+
+    private var currency: String {
+        booksController.currentBook?.currency ?? "EUR"
+    }
+
+    private func money(_ amount: Decimal) -> String {
+        amount.formatted(.currency(code: currency))
+    }
+
+    private func signed(_ amount: Decimal) -> String {
+        (amount > 0 ? "+" : "") + money(amount)
+    }
+
+    private func monthName(_ date: Date) -> String {
+        date.formatted(.dateTime.month(.wide).year()).capitalized
+    }
+
+    /// Revenus et dépenses par mois, sur les transactions filtrées et les comptes inclus dans les rapports
     private var balanceData: [MonthlyBalance] {
         let calendar = Calendar.current
         let filtered = transactionsController.filteredTransactions
             .filter { $0.status != .skipped && accountsController.isReported($0, accountFilter: transactionsController.filters.accountID) }
 
         let grouped = Dictionary(grouping: filtered) { transaction in
-            calendar.date(from: calendar.dateComponents([.year, .month], from: transaction.date))!
+            calendar.date(from: calendar.dateComponents([.year, .month], from: transaction.date)) ?? transaction.date
         }
 
         return grouped.map { date, transactions in
@@ -160,124 +196,8 @@ struct MonthlyBalanceChartView: View {
             let expense = transactions
                 .filter { $0.signedAmount < 0 }
                 .reduce(Decimal(0)) { $0 + abs($1.signedAmount) }
-            let balance = income - expense
-            
-            return MonthlyBalance(
-                date: date,
-                balance: balance,
-                income: income,
-                expense: expense
-            )
+            return MonthlyBalance(date: date, income: income, expense: expense)
         }
         .sorted { $0.date < $1.date }
-    }
-
-    private var averageBalance: Decimal {
-        guard !balanceData.isEmpty else { return 0 }
-        let total = balanceData.reduce(Decimal(0)) { $0 + $1.balance }
-        return total / Decimal(balanceData.count)
-    }
-
-    private var bestMonth: MonthlyBalance? {
-        balanceData.max { $0.balance < $1.balance }
-    }
-
-    private var worstMonth: MonthlyBalance? {
-        balanceData.min { $0.balance < $1.balance }
-    }
-
-    private func nearestBalance(to date: Date) -> MonthlyBalance? {
-        balanceData.min {
-            abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
-        }
-    }
-    
-    /// Trouve le solde en décalant la zone de détection de 50% vers la droite
-    private func findBalanceAtShiftedLocation(_ xPosition: CGFloat, in proxy: ChartProxy, geometry: GeometryProxy) -> MonthlyBalance? {
-        guard balanceData.count >= 2 else {
-            if let date: Date = proxy.value(atX: xPosition) {
-                return nearestBalance(to: date)
-            }
-            return nil
-        }
-        
-        let firstX = proxy.position(forX: balanceData[0].date) ?? 0
-        let secondX = proxy.position(forX: balanceData[1].date) ?? 0
-        let intervalWidth = abs(secondX - firstX)
-        
-        let shiftedX = xPosition - (intervalWidth * 0.5)
-        
-        guard let date: Date = proxy.value(atX: shiftedX) else {
-            return nil
-        }
-        
-        return nearestBalance(to: date)
-    }
-
-    @ViewBuilder
-    private func tooltipView(for balance: MonthlyBalance) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(balance.date, format: .dateTime.month().year())
-                .font(.headline)
-                .foregroundColor(.primary)
-
-            Divider()
-
-            HStack {
-                Text("Revenus :")
-                    .foregroundColor(.secondary)
-                Spacer()
-                Text(balance.income, format: .currency(code: booksController.currentBook?.currency ?? "EUR"))
-                    .foregroundColor(.green)
-                    .privacyBlur(hidden: appSettings.hideAmounts)
-            }
-            .font(.caption)
-
-            HStack {
-                Text("Dépenses :")
-                    .foregroundColor(.secondary)
-                Spacer()
-                Text(balance.expense, format: .currency(code: booksController.currentBook?.currency ?? "EUR"))
-                    .foregroundColor(.red)
-                    .privacyBlur(hidden: appSettings.hideAmounts)
-            }
-            .font(.caption)
-
-            Divider()
-
-            HStack {
-                Text("Solde :")
-                    .fontWeight(.semibold)
-                Spacer()
-                Text(balance.balance, format: .currency(code: booksController.currentBook?.currency ?? "EUR"))
-                    .fontWeight(.bold)
-                    .foregroundColor(balance.balance >= 0 ? .green : .red)
-                    .privacyBlur(hidden: appSettings.hideAmounts)
-            }
-            .font(.callout)
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(NSColor.windowBackgroundColor))
-                .shadow(radius: 4)
-        )
-    }
-
-    private var emptyStateView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "chart.bar")
-                .font(.system(size: 60))
-                .foregroundColor(.gray.opacity(0.5))
-
-            Text("Aucune donnée à afficher")
-                .font(.title2)
-                .foregroundColor(.secondary)
-
-            Text("Ajoutez des transactions pour visualiser votre solde mensuel")
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

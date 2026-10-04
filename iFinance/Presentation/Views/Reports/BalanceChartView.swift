@@ -1,284 +1,259 @@
 import SwiftUI
 import Charts
 
+/// Rapport « Évolution du solde » : chiffres clés, courbe du solde cumulé, tableau mensuel
 struct BalanceChartView: View {
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var transactionsController: TransactionsController
+    @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var appSettings: AppSettings
-    
+
     struct DataPoint: Identifiable {
-        let id = UUID()
         let date: Date
         let balance: Decimal
+
+        var id: Date { date }
+        var doubleBalance: Double { NSDecimalNumber(decimal: balance).doubleValue }
     }
-    
-    @State private var selectedPoint: DataPoint?
-    @State private var hoverLocation: CGPoint = .zero
-    
+
+    /// Solde de fin de mois et variation par rapport à la fin du mois précédent
+    struct MonthPoint: Identifiable {
+        let date: Date
+        let balance: Decimal
+        let variation: Decimal
+
+        var id: Date { date }
+    }
+
+    @State private var selectedDate: Date?
+
     var body: some View {
-        VStack(spacing: 0) {
-            if dataPoints.isEmpty {
-                emptyStateView
-            } else {
-                // Statistiques
-                HStack(spacing: NativeMetrics.groupSpacing) {
-                    StatisticCard(
-                        title: "Solde actuel",
-                        value: currentBalance,
-                        color: currentBalance >= 0 ? .green : .red
-                    )
-                    
-                    StatisticCard(
-                        title: "Solde initial",
-                        value: initialBalance,
-                        color: .primary
-                    )
-                    
-                    StatisticCard(
-                        title: "Variation",
-                        value: variation,
-                        color: variation >= 0 ? .green : .red
-                    )
+        let series = self.series
+
+        if series.points.isEmpty {
+            ReportEmptyState(systemImage: "chart.line.uptrend.xyaxis")
+        } else {
+            ScrollView {
+                VStack(alignment: .leading, spacing: NativeMetrics.groupSpacing) {
+                    tiles(series.points, start: series.start)
+                    chartBlock(series.points)
+                    tableBlock(series.points, start: series.start)
                 }
-                .padding(.bottom, NativeMetrics.groupSpacing)
-                
-                // Graphique
-                VStack(alignment: .leading) {
-                    Text("Balance")
-                        .font(.title3)
-                        .foregroundColor(.primary)
-                        .padding(12)
-                    
-                    Chart {
-                        ForEach(dataPoints) { point in
-                            LineMark(
-                                x: .value("Date", point.date),
-                                y: .value("Solde", NSDecimalNumber(decimal: point.balance).doubleValue)
-                            )
-                            .interpolationMethod(.catmullRom)
-                            .foregroundStyle(Color.accentColor)
-                            
-                            AreaMark(
-                                x: .value("Date", point.date),
-                                y: .value("Solde", NSDecimalNumber(decimal: point.balance).doubleValue)
-                            )
-                            .interpolationMethod(.catmullRom)
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [Color.accentColor.opacity(0.3), Color.accentColor.opacity(0.05)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                            
-                            PointMark(
-                                x: .value("Date", point.date),
-                                y: .value("Solde", NSDecimalNumber(decimal: point.balance).doubleValue)
-                            )
-                            .symbolSize(30)
-                            .foregroundStyle(Color.accentColor)
-                        }
-                        
-                        // Point sélectionné
-                        if let selectedPoint {
-                            PointMark(
-                                x: .value("Date", selectedPoint.date),
-                                y: .value("Solde", NSDecimalNumber(decimal: selectedPoint.balance).doubleValue)
-                            )
-                            .symbolSize(80)
-                            .foregroundStyle(.red)
-                            
-                            RuleMark(x: .value("Date", selectedPoint.date))
-                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
-                                .foregroundStyle(.gray.opacity(0.5))
-                        }
-                    }
-                    /*.background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color(NSColor.controlBackgroundColor).opacity(0.5))
-                    )*/
-                    .chartLegend(position: .bottomLeading)
-                    .chartXAxis {
-                        AxisMarks(values: .automatic) { value in
-                            AxisGridLine()
-                            AxisValueLabel(format: .dateTime.day().month())
-                        }
-                    }
-                    .chartYAxis {
-                        AxisMarks { value in
-                            AxisGridLine()
-                            AxisValueLabel()
-                        }
-                    }
-                    .chartOverlay { proxy in
-                        GeometryReader { geo in
-                            Rectangle()
-                                .fill(Color.clear)
-                                .contentShape(Rectangle())
-                                .onHover { hovering in
-                                    if !hovering { selectedPoint = nil }
-                                }
-                                .onContinuousHover { phase in
-                                    switch phase {
-                                    case .active(let location):
-                                        hoverLocation = location
-                                        if let date: Date = proxy.value(atX: location.x) {
-                                            selectedPoint = nearestPoint(to: date)
-                                        }
-                                    case .ended:
-                                        selectedPoint = nil
-                                    }
-                                }
-                        }
-                    }
-                    .overlay(alignment: .topLeading) {
-                        if let selectedPoint {
-                            GeometryReader { geo in
-                                let tooltipSize = CGSize(width: 160, height: 60)
-                                let x = min(max(hoverLocation.x + 12, 0), geo.size.width - tooltipSize.width)
-                                let y = min(max(hoverLocation.y - tooltipSize.height - 12, 0), geo.size.height - tooltipSize.height)
-                                let tooltipPosition = CGPoint(x: x + tooltipSize.width/2, y: y + tooltipSize.height/2)
-                                
-                                tooltipView(for: selectedPoint)
-                                    .frame(width: tooltipSize.width, height: tooltipSize.height)
-                                    .position(tooltipPosition)
+            }
+        }
+    }
+
+    // MARK: - Chiffres clés
+
+    private func tiles(_ points: [DataPoint], start: Decimal) -> some View {
+        let current = points.last?.balance ?? 0
+        let variation = current - start
+        let highest = points.max { $0.balance < $1.balance }
+        let lowest = points.min { $0.balance < $1.balance }
+
+        return ReportTiles {
+            StatTile(title: "Solde actuel", value: money(current))
+                .privacyBlur(hidden: appSettings.hideAmounts)
+
+            StatTile(
+                title: "Variation",
+                value: signed(variation),
+                valueColor: variation >= 0 ? .green : .red,
+                detail: "sur la période"
+            )
+            .privacyBlur(hidden: appSettings.hideAmounts)
+
+            StatTile(
+                title: "Plus haut",
+                value: money(highest?.balance ?? 0),
+                detail: highest.map { day($0.date) }
+            )
+            .privacyBlur(hidden: appSettings.hideAmounts)
+
+            StatTile(
+                title: "Plus bas",
+                value: money(lowest?.balance ?? 0),
+                detail: lowest.map { day($0.date) }
+            )
+            .privacyBlur(hidden: appSettings.hideAmounts)
+        }
+    }
+
+    // MARK: - Graphique
+
+    private func chartBlock(_ points: [DataPoint]) -> some View {
+        let selected = selectedPoint(in: points)
+        let low = points.map { $0.doubleBalance }.min() ?? 0
+
+        return VStack(alignment: .leading, spacing: 12) {
+            GroupTitle(accountFilterName.map { "Solde de \($0)" } ?? "Solde cumulé des comptes")
+
+            Chart {
+                ForEach(points) { point in
+                    AreaMark(
+                        x: .value("Date", point.date),
+                        yStart: .value("Base", low),
+                        yEnd: .value("Solde", point.doubleBalance)
+                    )
+                    .foregroundStyle(Color.accentColor.opacity(0.14))
+
+                    LineMark(
+                        x: .value("Date", point.date),
+                        y: .value("Solde", point.doubleBalance)
+                    )
+                    .foregroundStyle(Color.accentColor)
+                    .lineStyle(StrokeStyle(lineWidth: 2))
+                }
+
+                if let selected {
+                    RuleMark(x: .value("Date", selected.date))
+                        .foregroundStyle(Color.secondary.opacity(0.35))
+                        .annotation(
+                            position: .top,
+                            overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                        ) {
+                            ReportTooltip {
+                                Text(day(selected.date))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Text(money(selected.balance))
+                                    .fontWeight(.semibold)
                             }
                         }
-                    }
-                    .frame(height: 300)
-                    .padding(24)
-                }
-                .cardBackground(cornerRadius: 12)
-                .padding(.vertical)
-                
-            }
-        }
-    }
-    
-    private var dataPoints: [DataPoint] {
-        // Déterminer le compte à utiliser
-        let accountsToUse: [Account]
-        if let accountID = transactionsController.filters.accountID {
-            guard let account = accountsController.getAccount(id: accountID) else { return [] }
-            accountsToUse = [account]
-        } else {
-            accountsToUse = accountsController.activeAccounts.filter { $0.countsInCashFlow }
-        }
 
-        let includedAccountIDs = Set(accountsToUse.map { $0.id })
-        
-        guard !accountsToUse.isEmpty else { return [] }
-        
-        // Déterminer la période
-        let calendar = Calendar.current
-        let (startDate, endDate): (Date, Date)
-        
-        if let dates = transactionsController.filters.dateRange.dates() {
-            (startDate, endDate) = dates
-        } else {
-            // Par défaut : 30 derniers jours
-            endDate = Date()
-            startDate = calendar.date(byAdding: .day, value: -30, to: endDate)!
-        }
-        
-        // Filtrer les transactions (uniquement les comptes inclus)
-        let relevantTransactions = transactionsController.filteredTransactions
-            .filter { $0.date >= startDate && $0.date < endDate && includedAccountIDs.contains($0.accountID) }
-            .sorted { $0.date < $1.date }
-        
-        guard !relevantTransactions.isEmpty else { return [] }
-        
-        // Calculer les points pour chaque jour
-        var points: [DataPoint] = []
-        var currentDate = startDate
-        
-        // Solde initial au début de la période
-        var balance: Decimal = 0
-        for account in accountsToUse {
-            // Solde initial du compte
-            balance += account.initialBalance
-            
-            // Ajouter les transactions avant la période
-            let previousTransactions = transactionsController.allTransactions
-                .filter { $0.accountID == account.id && $0.date < startDate && $0.status != .skipped }
-            
-            for tx in previousTransactions {
-                balance += tx.signedAmount
+                    PointMark(
+                        x: .value("Date", selected.date),
+                        y: .value("Solde", selected.doubleBalance)
+                    )
+                    .foregroundStyle(Color.accentColor)
+                }
             }
-        }
-        
-        // Générer un point par jour
-        while currentDate <= endDate {
-            // Transactions du jour
-            let dayTransactions = relevantTransactions.filter { tx in
-                calendar.isDate(tx.date, inSameDayAs: currentDate)
+            .chartYScale(domain: .automatic(includesZero: false))
+            .chartYAxis {
+                AxisMarks { _ in
+                    AxisGridLine()
+                    AxisValueLabel()
+                }
             }
-            
-            for tx in dayTransactions {
-                balance += tx.signedAmount
+            .chartXSelection(value: $selectedDate)
+            .frame(height: 260)
+            .privacyBlur(hidden: appSettings.hideAmounts)
+        }
+        .padding(NativeMetrics.groupPadding)
+        .cardBackground()
+    }
+
+    private func selectedPoint(in points: [DataPoint]) -> DataPoint? {
+        guard let selectedDate else { return nil }
+        return points.min { abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate)) }
+    }
+
+    // MARK: - Tableau mensuel
+
+    private func tableBlock(_ points: [DataPoint], start: Decimal) -> some View {
+        let months = monthPoints(points, start: start)
+
+        return ReportTable(
+            columns: ["Mois", "Solde de fin de mois", "Variation"],
+            rows: months.reversed().map { month in
+                ReportRow(id: "\(month.date.timeIntervalSince1970)", cells: [
+                    ReportCell(text: month.date.formatted(.dateTime.month(.wide).year()).capitalized),
+                    ReportCell(text: money(month.balance), color: month.balance < 0 ? .red : .primary),
+                    ReportCell(text: signed(month.variation), color: month.variation >= 0 ? .green : .red)
+                ])
             }
-            
-            points.append(DataPoint(date: currentDate, balance: balance))
-            
-            guard let nextDay = calendar.date(byAdding: .day, value: 1, to: currentDate) else { break }
-            currentDate = nextDay
-        }
-        
-        return points
-    }
-    
-    private var initialBalance: Decimal {
-        guard let first = dataPoints.first else { return 0 }
-        return first.balance
-    }
-    
-    private var currentBalance: Decimal {
-        guard let last = dataPoints.last else { return 0 }
-        return last.balance
-    }
-    
-    private var variation: Decimal {
-        return currentBalance - initialBalance
-    }
-    
-    private func nearestPoint(to date: Date) -> DataPoint? {
-        dataPoints.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }
-    }
-    
-    @ViewBuilder
-    private func tooltipView(for point: DataPoint) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(point.date, format: .dateTime.day().month().year())
-                .font(.caption)
-                .foregroundColor(.secondary)
-            Text(point.balance, format: .currency(code: booksController.currentBook?.currency ?? "EUR"))
-                .font(.headline)
-                .privacyBlur(hidden: appSettings.hideAmounts)
-        }
-        .padding(8)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(NSColor.windowBackgroundColor))
-                .shadow(radius: 4)
         )
     }
-    
-    private var emptyStateView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "chart.line.uptrend.xyaxis")
-                .font(.system(size: 60))
-                .foregroundColor(.gray.opacity(0.5))
-            
-            Text("Aucune donnée à afficher")
-                .font(.title2)
-                .foregroundColor(.secondary)
-            
-            Text("Créez des transactions pour voir l'évolution du solde")
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
+
+    private func monthPoints(_ points: [DataPoint], start: Decimal) -> [MonthPoint] {
+        let calendar = Calendar.current
+        var result: [MonthPoint] = []
+        var previous = start
+
+        let grouped = Dictionary(grouping: points) { point in
+            calendar.date(from: calendar.dateComponents([.year, .month], from: point.date)) ?? point.date
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        for month in grouped.keys.sorted() {
+            guard let last = grouped[month]?.max(by: { $0.date < $1.date }) else { continue }
+            result.append(MonthPoint(date: month, balance: last.balance, variation: last.balance - previous))
+            previous = last.balance
+        }
+        return result
     }
-    
-    @EnvironmentObject var booksController: BooksController
+
+    // MARK: - Données
+
+    private var currency: String {
+        booksController.currentBook?.currency ?? "EUR"
+    }
+
+    private func money(_ amount: Decimal) -> String {
+        amount.formatted(.currency(code: currency))
+    }
+
+    private func signed(_ amount: Decimal) -> String {
+        (amount > 0 ? "+" : "") + money(amount)
+    }
+
+    private func day(_ date: Date) -> String {
+        date.formatted(.dateTime.day().month(.abbreviated).year())
+    }
+
+    /// Nom du compte si le rapport est filtré sur un seul compte
+    private var accountFilterName: String? {
+        transactionsController.filters.accountID.flatMap { accountsController.getAccount(id: $0)?.name }
+    }
+
+    /// Solde jour par jour sur la période, et solde à l'ouverture de la période.
+    /// Sans période choisie, la courbe part de la première transaction.
+    private var series: (points: [DataPoint], start: Decimal) {
+        let accounts: [Account]
+        if let accountID = transactionsController.filters.accountID {
+            guard let account = accountsController.getAccount(id: accountID) else { return ([], 0) }
+            accounts = [account]
+        } else {
+            accounts = accountsController.activeAccounts.filter { $0.countsInCashFlow }
+        }
+        guard !accounts.isEmpty else { return ([], 0) }
+
+        let accountIDs = Set(accounts.map { $0.id })
+        let calendar = Calendar.current
+        let transactions = transactionsController.allTransactions
+            .filter { accountIDs.contains($0.accountID) && $0.status != .skipped }
+        guard let firstDate = transactions.map({ $0.date }).min() else { return ([], 0) }
+
+        let today = calendar.startOfDay(for: Date())
+        var startDate = calendar.startOfDay(for: firstDate)
+        var endDate = today
+        if let dates = transactionsController.filters.dateRange.dates() {
+            startDate = max(startDate, calendar.startOfDay(for: dates.0))
+            // La fin de période est exclusive ; la courbe ne dépasse pas aujourd'hui
+            let lastDay = calendar.date(byAdding: .day, value: -1, to: dates.1) ?? dates.1
+            endDate = min(today, calendar.startOfDay(for: lastDay))
+        }
+        guard startDate <= endDate else { return ([], 0) }
+
+        // Solde à l'ouverture : soldes initiaux et transactions antérieures à la période
+        var balance = accounts.reduce(Decimal(0)) { $0 + $1.initialBalance }
+        var byDay: [Date: Decimal] = [:]
+        for transaction in transactions {
+            let transactionDay = calendar.startOfDay(for: transaction.date)
+            if transactionDay < startDate {
+                balance += transaction.signedAmount
+            } else if transactionDay <= endDate {
+                byDay[transactionDay, default: 0] += transaction.signedAmount
+            }
+        }
+        let start = balance
+
+        var points: [DataPoint] = []
+        var current = startDate
+        while current <= endDate {
+            balance += byDay[current] ?? 0
+            points.append(DataPoint(date: current, balance: balance))
+            guard let next = calendar.date(byAdding: .day, value: 1, to: current) else { break }
+            current = next
+        }
+        return (points, start)
+    }
 }

@@ -35,7 +35,7 @@ struct ReportsView: View {
         HStack(spacing: 0) {
             // Liste des rapports (le titre est dans la barre d'outils)
             List(selection: tabSelection) {
-                Section("Modèles") {
+                Section("Rapports") {
                     ForEach(ReportTab.allCases, id: \.self) { tab in
                         Label(tab.rawValue, systemImage: tab.icon)
                             .tag(Optional(tab))
