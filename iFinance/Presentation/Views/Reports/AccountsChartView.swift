@@ -1,8 +1,11 @@
 import SwiftUI
 import Charts
 
-/// Rapport « Dépenses par compte » : chiffres clés, barres classées, tableau par compte
+/// Rapport « Dépenses par compte » ou « Revenus par compte » selon `flow` :
+/// chiffres clés, barres classées, tableau par compte
 struct AccountsChartView: View {
+    var flow: ReportFlow = .expense
+
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var accountsController: AccountsController
@@ -19,22 +22,22 @@ struct AccountsChartView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: NativeMetrics.groupSpacing) {
                     ReportTiles {
-                        StatTile(title: "Dépenses", value: money(total))
+                        StatTile(title: flow.title, value: money(total))
                             .privacyBlur(hidden: appSettings.hideAmounts)
-                        StatTile(title: "Comptes", value: "\(items.count)", detail: "avec au moins une dépense")
+                        StatTile(title: "Comptes", value: "\(items.count)", detail: "avec au moins \(flow.oneOf)")
                         StatTile(
                             title: "Premier compte",
                             value: items[0].name,
-                            detail: "\(percent(items[0].share)) des dépenses"
+                            detail: "\(percent(items[0].share)) des \(flow.plural)"
                         )
                         StatTile(title: "Moyenne par compte", value: money(total / Decimal(items.count)))
                             .privacyBlur(hidden: appSettings.hideAmounts)
                     }
 
-                    ReportBarsBlock(title: "Dépenses par compte", items: items, money: money)
+                    ReportBarsBlock(title: "\(flow.title) par compte", items: items, money: money, color: flow.color)
 
                     ReportTable(
-                        columns: ["Compte", "Transactions", "Total", "Dépense moyenne", "Part"],
+                        columns: ["Compte", "Transactions", "Total", flow.averageTitle, "Part"],
                         rows: items.map { item in
                             ReportRow(id: item.id.uuidString, cells: [
                                 ReportCell(text: item.name),
@@ -67,7 +70,7 @@ struct AccountsChartView: View {
     /// Dépenses de la période par compte, sur les comptes inclus dans les rapports
     private var breakdown: [ReportBreakdownItem] {
         let expenses = transactionsController.filteredTransactions.filter {
-            $0.type == .debit
+            $0.type == flow.transactionType
                 && $0.status != .skipped
                 && accountsController.isReported($0, accountFilter: transactionsController.filters.accountID)
         }

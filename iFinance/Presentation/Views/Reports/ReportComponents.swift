@@ -4,6 +4,26 @@ import Charts
 // Briques communes aux écrans de rapports : tableau de détail, répartition classée,
 // infobulle de graphique et état vide.
 
+// MARK: - Sens du rapport
+
+/// Sens d'un rapport de répartition : dépenses ou revenus
+enum ReportFlow {
+    case expense
+    case income
+
+    var transactionType: TransactionType { self == .expense ? .debit : .credit }
+    /// « Dépenses » / « Revenus »
+    var title: String { self == .expense ? "Dépenses" : "Revenus" }
+    /// « dépenses » / « revenus »
+    var plural: String { self == .expense ? "dépenses" : "revenus" }
+    /// « une dépense » / « un revenu »
+    var oneOf: String { self == .expense ? "une dépense" : "un revenu" }
+    /// « Dépense moyenne » / « Revenu moyen »
+    var averageTitle: String { self == .expense ? "Dépense moyenne" : "Revenu moyen" }
+    /// Couleur des barres : accent pour les dépenses, vert pour les revenus
+    var color: Color { self == .expense ? .accentColor : .green }
+}
+
 // MARK: - Tableau de détail
 
 struct ReportCell {
@@ -129,6 +149,7 @@ struct ReportBarsBlock: View {
     let title: String
     let items: [ReportBreakdownItem]
     let money: (Decimal) -> String
+    var color: Color = .accentColor
 
     @EnvironmentObject var appSettings: AppSettings
 
@@ -141,7 +162,7 @@ struct ReportBarsBlock: View {
                     x: .value("Montant", item.doubleAmount),
                     y: .value("Nom", item.name)
                 )
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(color)
                 .cornerRadius(3)
                 .annotation(position: .trailing, alignment: .leading, spacing: 6) {
                     Text(money(item.amount))

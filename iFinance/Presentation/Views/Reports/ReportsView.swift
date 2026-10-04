@@ -16,15 +16,18 @@ struct ReportsView: View {
         case categories = "Dépenses par catégorie"
         case payees = "Dépenses par bénéficiaire"
         case accounts = "Dépenses par compte"
+        case incomeCategories = "Revenus par catégorie"
+        case incomePayees = "Revenus par bénéficiaire"
+        case incomeAccounts = "Revenus par compte"
         case balance = "Évolution du solde"
         case monthlyBalance = "Solde mensuel"
 
         var icon: String {
             switch self {
             case .cashFlow: return "chart.bar"
-            case .categories: return "chart.pie"
-            case .payees: return "person.2"
-            case .accounts: return "creditcard"
+            case .categories, .incomeCategories: return "chart.pie"
+            case .payees, .incomePayees: return "person.2"
+            case .accounts, .incomeAccounts: return "creditcard"
             case .balance: return "chart.line.uptrend.xyaxis"
             case .monthlyBalance: return "chart.bar.xaxis"
             }
@@ -38,11 +41,15 @@ struct ReportsView: View {
                 Section("Rapports") {
                     ForEach(ReportTab.allCases, id: \.self) { tab in
                         Label(tab.rawValue, systemImage: tab.icon)
+                            .padding(.vertical, 3)
                             .tag(Optional(tab))
                     }
                 }
             }
             .listStyle(.inset)
+            // Fond de liste limité à la zone sous la barre d'outils (sinon il remonte sous l'en-tête)
+            .scrollContentBackground(.hidden)
+            .background(Color(nsColor: .controlBackgroundColor), ignoresSafeAreaEdges: [])
             .frame(width: 250)
 
             Divider()
@@ -220,6 +227,12 @@ struct ReportsView: View {
             AccountsChartView()
         case .payees:
             PayeesChartView()
+        case .incomeCategories:
+            CategoriesChartView(flow: .income)
+        case .incomeAccounts:
+            AccountsChartView(flow: .income)
+        case .incomePayees:
+            PayeesChartView(flow: .income)
         case .cashFlow:
             CashFlowChartView()
         }

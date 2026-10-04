@@ -1,8 +1,11 @@
 import SwiftUI
 import Charts
 
-/// Rapport « Dépenses par bénéficiaire » : chiffres clés, barres des premiers bénéficiaires, tableau
+/// Rapport « Dépenses par bénéficiaire » ou « Revenus par bénéficiaire » selon `flow` :
+/// chiffres clés, barres des premiers bénéficiaires, tableau
 struct PayeesChartView: View {
+    var flow: ReportFlow = .expense
+
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var accountsController: AccountsController
@@ -18,7 +21,7 @@ struct PayeesChartView: View {
         if items.isEmpty {
             ReportEmptyState(
                 systemImage: "person.2",
-                message: "Aucune dépense avec bénéficiaire sur la période et les comptes choisis."
+                message: "Aucune transaction avec bénéficiaire en \(flow.plural) sur la période et les comptes choisis."
             )
         } else {
             let total = items.total
@@ -28,25 +31,30 @@ struct PayeesChartView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: NativeMetrics.groupSpacing) {
                     ReportTiles {
-                        StatTile(title: "Bénéficiaires", value: "\(items.count)", detail: "avec au moins une dépense")
-                        StatTile(title: "Dépenses", value: money(total))
+                        StatTile(title: flow == .expense ? "Bénéficiaires" : "Sources de revenus", value: "\(items.count)", detail: "avec au moins \(flow.oneOf)")
+                        StatTile(title: flow.title, value: money(total))
                             .privacyBlur(hidden: appSettings.hideAmounts)
                         StatTile(
-                            title: "Premier bénéficiaire",
+                            title: flow == .expense ? "Premier bénéficiaire" : "Première source",
                             value: items[0].name,
-                            detail: "\(percent(items[0].share)) des dépenses"
+                            detail: "\(percent(items[0].share)) des \(flow.plural)"
                         )
                         StatTile(
                             title: top.count == 1 ? "Le premier" : "Les \(top.count) premiers",
                             value: percent(topShare),
-                            detail: "des dépenses"
+                            detail: "des \(flow.plural)"
                         )
                     }
 
-                    ReportBarsBlock(title: "Bénéficiaires où vous dépensez le plus", items: top, money: money)
+                    ReportBarsBlock(
+                        title: flow == .expense ? "Bénéficiaires où vous dépensez le plus" : "D'où viennent vos revenus",
+                        items: top,
+                        money: money,
+                        color: flow.color
+                    )
 
                     ReportTable(
-                        columns: ["Bénéficiaire", "Transactions", "Total", "Dépense moyenne", "Part"],
+                        columns: ["Bénéficiaire", "Transactions", "Total", flow.averageTitle, "Part"],
                         rows: items.prefix(Self.tableCount).map { item in
                             ReportRow(id: item.id.uuidString, cells: [
                                 ReportCell(text: item.name),
@@ -82,7 +90,7 @@ struct PayeesChartView: View {
     /// Dépenses de la période par bénéficiaire, sur les comptes inclus dans les rapports
     private var breakdown: [ReportBreakdownItem] {
         let expenses = transactionsController.filteredTransactions.filter {
-            $0.type == .debit
+            $0.type == flow.transactionType
                 && $0.status != .skipped
                 && $0.payeeID != nil
                 && accountsController.isReported($0, accountFilter: transactionsController.filters.accountID)

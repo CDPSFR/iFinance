@@ -216,14 +216,18 @@ struct InvestmentStatCard: View {
                 .font(.title3)
                 .fontWeight(.semibold)
                 .foregroundColor(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
                 .privacyBlur(hidden: appSettings.hideAmounts)
 
-            if let detail {
-                Text(detail)
-                    .font(.caption)
-                    .foregroundColor(color)
-                    .privacyBlur(hidden: appSettings.hideAmounts)
-            }
+            // La ligne de complément est toujours réservée : toutes les tuiles ont la même hauteur
+            Text(detail ?? " ")
+                .font(.caption)
+                .foregroundColor(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .privacyBlur(hidden: detail != nil && appSettings.hideAmounts)
+                .accessibilityHidden(detail == nil)
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)

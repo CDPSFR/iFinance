@@ -277,10 +277,13 @@ struct BooksSettingsTab: View {
 struct AccountsSettingsTab: View {
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var accountsController: AccountsController
+    @EnvironmentObject var transactionsController: TransactionsController
 
     @State private var selection: Account.ID?
     @State private var showAccountForm = false
     @State private var accountToEdit: Account?
+    @State private var accountToDelete: Account?
+    @State private var showDeleteConfirmation = false
 
     private var accounts: [Account] {
         accountsController.accounts.sorted { lhs, rhs in
@@ -360,6 +363,15 @@ struct AccountsSettingsTab: View {
                 }
                 .help("Nouveau compte")
 
+                Button {
+                    accountToDelete = selectedAccount
+                    showDeleteConfirmation = selectedAccount != nil
+                } label: {
+                    Image(systemName: "minus")
+                }
+                .disabled(selectedAccount == nil)
+                .help("Supprimer le compte")
+
                 Spacer()
 
                 if let account = selectedAccount {
@@ -383,6 +395,14 @@ struct AccountsSettingsTab: View {
         .sheet(isPresented: $showAccountForm) {
             AccountFormView(isPresented: $showAccountForm)
         }
+        .alert("Supprimer le compte ?", isPresented: $showDeleteConfirmation, presenting: accountToDelete) { account in
+            Button("Annuler", role: .cancel) { }
+            Button("Supprimer", role: .destructive) {
+                Task { await delete(account) }
+            }
+        } message: { account in
+            Text(deleteMessage(for: account))
+        }
         .sheet(item: $accountToEdit) { account in
             AccountFormView(
                 isPresented: Binding(
@@ -392,6 +412,21 @@ struct AccountsSettingsTab: View {
                 accountToEdit: account
             )
         }
+    }
+
+    private func deleteMessage(for account: Account) -> String {
+        let count = transactionsController.allTransactions.filter { $0.accountID == account.id }.count
+        let transactions = count == 0
+            ? "Il ne contient aucune transaction."
+            : "Ses \(count) transaction\(count > 1 ? "s" : "") seront supprimées avec lui."
+        return "Le compte « \(account.name) » sera supprimé définitivement. \(transactions) Pour garder l'historique, clôturez plutôt le compte."
+    }
+
+    private func delete(_ account: Account) async {
+        await accountsController.deleteAccount(id: account.id)
+        if selection == account.id { selection = nil }
+        // Les transactions du compte disparaissent avec lui : on recharge la liste
+        await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
     }
 
     /// Case à cocher centrée qui enregistre le compte modifié

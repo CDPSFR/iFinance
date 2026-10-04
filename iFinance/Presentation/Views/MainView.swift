@@ -274,6 +274,10 @@ struct MainView: View {
                     }
                 }
             }
+            // Filet sous la barre d'outils, sur toutes les pages : sépare l'en-tête du contenu
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Divider()
+            }
             .navigationTitle(windowTitle)
             .navigationSubtitle(booksController.currentBook?.name ?? "")
             .onChange(of: selectedTab) { oldValue, newValue in

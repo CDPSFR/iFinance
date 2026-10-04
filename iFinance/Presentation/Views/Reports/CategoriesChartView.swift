@@ -1,9 +1,12 @@
 import SwiftUI
 import Charts
 
-/// Rapport « Dépenses par catégorie » : chiffres clés, anneau de répartition, tableau par catégorie.
+/// Rapport « Dépenses par catégorie » ou « Revenus par catégorie » selon `flow` :
+/// chiffres clés, anneau de répartition, tableau par catégorie.
 /// Les sous-catégories sont regroupées sous leur catégorie parente.
 struct CategoriesChartView: View {
+    var flow: ReportFlow = .expense
+
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var accountsController: AccountsController
@@ -20,7 +23,7 @@ struct CategoriesChartView: View {
         if items.isEmpty {
             ReportEmptyState(
                 systemImage: "chart.pie",
-                message: "Aucune dépense catégorisée sur la période et les comptes choisis."
+                message: "Aucune transaction catégorisée en \(flow.plural) sur la période et les comptes choisis."
             )
         } else {
             let total = items.total
@@ -29,20 +32,20 @@ struct CategoriesChartView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: NativeMetrics.groupSpacing) {
                     ReportTiles {
-                        StatTile(title: "Dépenses", value: money(total))
+                        StatTile(title: flow.title, value: money(total))
                             .privacyBlur(hidden: appSettings.hideAmounts)
                         StatTile(title: "Moyenne mensuelle", value: money(total / Decimal(months)), detail: "sur \(months) mois")
                             .privacyBlur(hidden: appSettings.hideAmounts)
                         StatTile(
                             title: "Première catégorie",
                             value: items[0].name,
-                            detail: "\(percent(items[0].share)) des dépenses"
+                            detail: "\(percent(items[0].share)) des \(flow.plural)"
                         )
                         StatTile(title: "Catégories", value: "\(items.count)")
                     }
 
                     ReportDonutBlock(
-                        title: "Répartition des dépenses",
+                        title: "Répartition des \(flow.plural)",
                         items: slices(items),
                         total: total,
                         money: money
@@ -82,7 +85,7 @@ struct CategoriesChartView: View {
     /// Dépenses catégorisées de la période, sur les comptes inclus dans les rapports
     private var expenses: [Transaction] {
         transactionsController.filteredTransactions.filter {
-            $0.type == .debit
+            $0.type == flow.transactionType
                 && $0.status != .skipped
                 && $0.categoryID != nil
                 && accountsController.isReported($0, accountFilter: transactionsController.filters.accountID)
