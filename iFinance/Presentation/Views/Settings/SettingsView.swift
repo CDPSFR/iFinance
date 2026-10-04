@@ -53,7 +53,8 @@ struct SettingsView: View {
                                 icon: "folder.fill",
                                 iconColor: .teal,
                                 label: "Catégories",
-                                destination: Destination.categories
+                                destination: Destination.categories,
+                                isLast: true
                             )
                         }
 
@@ -65,6 +66,10 @@ struct SettingsView: View {
                                 destination: Destination.budgets,
                                 isLast: true
                             )
+                        }
+
+                        settingsSection(title: "Apparence") {
+                            themeRow
                         }
 
                         settingsSection(title: "Confidentialité") {
@@ -106,7 +111,8 @@ struct SettingsView: View {
 
                 Spacer()
             }
-            .background(Color(nsColor: .windowBackgroundColor))
+            // Fond légèrement teinté pour détacher les cartes (blanc sur blanc depuis macOS 26)
+            .background(Color(nsColor: .windowBackgroundColor).overlay(Color.primary.opacity(0.045)))
             .navigationDestination(for: Destination.self) { destination in
                 switch destination {
                 case .accounts:
@@ -183,7 +189,16 @@ struct SettingsView: View {
                 content()
             }
             .background(Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(8)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(.separator.opacity(0.6))
+            )
             .padding(.horizontal, 16)
         }
         .padding(.bottom, 8)
@@ -207,6 +222,42 @@ struct SettingsView: View {
         if !isLast {
             Divider().padding(.leading, 54)
         }
+    }
+
+    // MARK: - Theme row
+
+    private var themeRow: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "circle.lefthalf.filled")
+                .font(.subheadline)
+                .foregroundColor(.white)
+                .frame(width: 28, height: 28)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.gray))
+
+            Text("Thème")
+                .font(.body)
+                .foregroundColor(.primary)
+
+            Spacer()
+
+            Picker("Thème", selection: Binding(
+                get: { appSettings.theme },
+                set: { theme in
+                    appSettings.theme = theme
+                    theme.apply()
+                }
+            )) {
+                ForEach(AppTheme.allCases) { theme in
+                    Text(theme.displayName).tag(theme)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 7)
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     // MARK: - Toggle row

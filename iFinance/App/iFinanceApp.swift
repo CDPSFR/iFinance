@@ -20,6 +20,9 @@ struct iFinanceApp: App {
                 .environmentObject(appState.investmentsController)
                 .environmentObject(appState.savingsPlansController)
                 .frame(minWidth: 1000, minHeight: 700)
+                // NSApp.appearance plutôt que preferredColorScheme : revenir à « Système » fonctionne
+                .onAppear { appSettings.theme.apply() }
+                .onChange(of: appSettings.theme) { _, theme in theme.apply() }
         }
         .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unified)
