@@ -43,8 +43,7 @@ struct BudgetsView: View {
                 }
             }
             .padding(8)
-            .background(Color(NSColor.controlBackgroundColor))
-            .cornerRadius(8)
+            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
             .padding(.horizontal)
             .padding(.vertical, 7)
 
@@ -79,10 +78,7 @@ struct BudgetsView: View {
                             }
                         }
                     }
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color(NSColor.controlBackgroundColor))
-                    )
+                    .cardBackground(cornerRadius: 10)
                     .padding(.horizontal)
                     .padding(.top, 12)
                     .padding(.bottom, 16)
@@ -124,6 +120,7 @@ struct BudgetsView: View {
                 }
             }
         }
+        .pageBackground()
     }
 
     private var emptyStateView: some View {

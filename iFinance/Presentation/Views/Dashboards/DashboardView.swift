@@ -150,6 +150,7 @@ struct DashboardView: View {
                 Spacer()
             }
         }
+        .pageBackground()
     }
     
     // MARK: - Computed Properties
@@ -269,6 +270,8 @@ struct DashboardCard: View {
             Text(value)
                 .font(.title)
                 .fontWeight(.bold)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
             
             Text(title)
                 .font(.caption)
@@ -276,8 +279,7 @@ struct DashboardCard: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(12)
+        .cardBackground(cornerRadius: 12)
     }
 }
 
@@ -318,8 +320,7 @@ struct AccountSummaryRow: View {
                 .privacyBlur(hidden: appSettings.hideAmounts)
         }
         .padding()
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(12)
+        .cardBackground(cornerRadius: 12)
     }
 }
 
@@ -341,7 +342,6 @@ struct TopCategoryRow: View {
                 .foregroundColor(.red)
         }
         .padding()
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(8)
+        .cardBackground(cornerRadius: 8)
     }
 }

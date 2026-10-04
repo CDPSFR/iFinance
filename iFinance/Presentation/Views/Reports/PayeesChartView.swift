@@ -124,6 +124,8 @@ struct PayeesChartView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
+                .cardBackground(cornerRadius: 12)
+                .padding(.vertical)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

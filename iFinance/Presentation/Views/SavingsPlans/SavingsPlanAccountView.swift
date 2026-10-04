@@ -115,6 +115,7 @@ struct SavingsPlanAccountView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .pageBackground()
     }
 
     private func header(for account: Account, summary: SavingsPlanSummary) -> some View {
@@ -237,8 +238,7 @@ struct SavingsPlanAccountView: View {
                             Divider()
                         }
                     }
-                    .background(Color(NSColor.controlBackgroundColor))
-                    .cornerRadius(12)
+                    .cardBackground(cornerRadius: 12)
                 }
                 .padding()
             }
@@ -375,8 +375,7 @@ struct SavingsPlanAccountView: View {
                         .padding(.top, 4)
                 }
                 .padding()
-                .background(Color(NSColor.controlBackgroundColor))
-                .cornerRadius(12)
+                .cardBackground(cornerRadius: 12)
             }
             .padding()
         }
@@ -447,8 +446,7 @@ struct PlanEvolutionChart: View {
             }
         }
         .padding()
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(12)
+        .cardBackground(cornerRadius: 12)
     }
 
     private func double(_ value: Decimal) -> Double {
@@ -513,8 +511,7 @@ struct OriginTotalCard: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(10)
+        .cardBackground(cornerRadius: 10)
     }
 }
 

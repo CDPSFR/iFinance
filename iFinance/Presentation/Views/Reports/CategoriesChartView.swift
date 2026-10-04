@@ -130,6 +130,8 @@ struct CategoriesChartView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
+                .cardBackground(cornerRadius: 12)
+                .padding(.vertical)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -265,9 +267,6 @@ struct StatisticCardView: View {
         }
         .frame(maxWidth: .infinity)
         .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(NSColor.controlBackgroundColor).opacity(0.5))
-        )
+        .cardBackground(cornerRadius: 12)
     }
 }

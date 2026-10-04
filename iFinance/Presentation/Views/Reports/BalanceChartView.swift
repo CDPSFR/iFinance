@@ -150,10 +150,7 @@ struct BalanceChartView: View {
                     .frame(height: 300)
                     .padding(24)
                 }
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(NSColor.controlBackgroundColor).opacity(0.5))
-                )
+                .cardBackground(cornerRadius: 12)
                 .padding(.vertical)
                 
             }

@@ -68,7 +68,6 @@ struct ReportsView: View {
                 }
                 .padding(.horizontal)
             }
-            .background(Color(NSColor.controlBackgroundColor))
             .padding(.vertical, 8)
             
             Divider()
@@ -146,6 +145,7 @@ struct ReportsView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .padding()
         }
+        .pageBackground()
     }
     
     @ViewBuilder

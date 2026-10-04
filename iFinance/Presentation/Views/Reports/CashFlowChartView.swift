@@ -119,7 +119,8 @@ struct CashFlowChartView: View {
                 }
                 .padding()
                 .frame(height: 300)
-                .padding(.bottom, 4)
+                .cardBackground(cornerRadius: 12)
+                .padding(.vertical)
             }
         }
     }

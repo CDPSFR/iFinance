@@ -67,6 +67,7 @@ struct InvestmentAccountView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .pageBackground()
     }
 
     private func header(for account: Account) -> some View {
@@ -230,7 +231,6 @@ struct InvestmentStatCard: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(12)
+        .cardBackground(cornerRadius: 12)
     }
 }

@@ -30,9 +30,6 @@ struct StatisticCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(NSColor.controlBackgroundColor).opacity(0.5))
-        )
+        .cardBackground(cornerRadius: 12)
     }
 }

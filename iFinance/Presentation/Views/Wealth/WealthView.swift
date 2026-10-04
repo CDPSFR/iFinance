@@ -84,6 +84,7 @@ struct WealthView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .pageBackground()
     }
 
     // MARK: - Computed Properties
@@ -204,7 +205,6 @@ struct WealthGroupSection: View {
             }
         }
         .padding()
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(12)
+        .cardBackground(cornerRadius: 12)
     }
 }

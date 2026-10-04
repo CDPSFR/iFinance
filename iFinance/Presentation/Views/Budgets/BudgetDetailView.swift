@@ -103,6 +103,7 @@ struct BudgetDetailView: View {
         .sheet(isPresented: $showAdjustSheet) {
             adjustSheet
         }
+        .pageBackground()
     }
 
     // MARK: - Period Card
@@ -200,10 +201,7 @@ struct BudgetDetailView: View {
             }
         }
         .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(NSColor.controlBackgroundColor))
-        )
+        .cardBackground(cornerRadius: 10)
     }
 
     // MARK: - Transaction List
@@ -229,10 +227,7 @@ struct BudgetDetailView: View {
                         }
                     }
                 }
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color(NSColor.controlBackgroundColor))
-                )
+                .cardBackground(cornerRadius: 10)
             }
         }
     }
@@ -333,10 +328,7 @@ struct BudgetDetailView: View {
                     }
                 }
             }
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(NSColor.controlBackgroundColor))
-            )
+            .cardBackground(cornerRadius: 10)
         }
     }
 
