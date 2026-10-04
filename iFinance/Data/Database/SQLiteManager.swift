@@ -2,6 +2,12 @@ import Foundation
 import SQLite3
 
 class SQLiteManager {
+    /// Demande à SQLite de copier le texte lié. Sans cela (destructeur nil = SQLITE_STATIC),
+    /// SQLite garde un pointeur vers une chaîne temporaire déjà libérée au moment du step :
+    /// une valeur liée peut alors être lue corrompue, par exemple l'id d'un WHERE, et la
+    /// requête ne modifie aucune ligne sans signaler d'erreur.
+    private static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
     private var db: OpaquePointer?
     private let dbPath: String
     
@@ -99,7 +105,7 @@ class SQLiteManager {
             
             switch parameter {
             case let value as String:
-                sqlite3_bind_text(statement, bindIndex, (value as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(statement, bindIndex, value, -1, SQLiteManager.transient)
             case let value as Int:
                 sqlite3_bind_int64(statement, bindIndex, Int64(value))
             case let value as Int64:
@@ -112,7 +118,7 @@ class SQLiteManager {
                 sqlite3_bind_int(statement, bindIndex, value ? 1 : 0)
             case let value as Date:
                 let iso8601 = ISO8601DateFormatter().string(from: value)
-                sqlite3_bind_text(statement, bindIndex, (iso8601 as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(statement, bindIndex, iso8601, -1, SQLiteManager.transient)
             case is NSNull:
                 sqlite3_bind_null(statement, bindIndex)
             case Optional<Any>.none:
@@ -150,7 +156,7 @@ class SQLiteManager {
             
             switch parameter {
             case let value as String:
-                sqlite3_bind_text(statement, bindIndex, (value as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(statement, bindIndex, value, -1, SQLiteManager.transient)
             case let value as Int:
                 sqlite3_bind_int64(statement, bindIndex, Int64(value))
             case let value as Int64:
@@ -163,7 +169,7 @@ class SQLiteManager {
                 sqlite3_bind_int(statement, bindIndex, value ? 1 : 0)
             case let value as Date:
                 let iso8601 = ISO8601DateFormatter().string(from: value)
-                sqlite3_bind_text(statement, bindIndex, (iso8601 as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(statement, bindIndex, iso8601, -1, SQLiteManager.transient)
             case is NSNull:
                 sqlite3_bind_null(statement, bindIndex)
             case Optional<Any>.none:
