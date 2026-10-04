@@ -39,7 +39,7 @@ struct MonthlyBalanceChartView: View {
                 emptyStateView
             } else {
                 // Statistiques
-                HStack(spacing: 40) {
+                HStack(spacing: NativeMetrics.groupSpacing) {
                     StatisticCard(
                         title: "Solde moyen",
                         value: averageBalance,
@@ -58,9 +58,7 @@ struct MonthlyBalanceChartView: View {
                         color: .red
                     )
                 }
-                .padding()
-
-                Divider()
+                .padding(.bottom, NativeMetrics.groupSpacing)
 
                 // Graphique
                 let hideAmounts = appSettings.hideAmounts

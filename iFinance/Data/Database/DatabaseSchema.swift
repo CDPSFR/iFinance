@@ -11,6 +11,7 @@ struct DatabaseSchema {
         createRecurringTemplatesTable,
         createBudgetsTable,
         createBudgetVersionsTable,
+        createAnnualBudgetEntriesTable,
         createInvestmentPositionsTable,
         createInvestmentTransactionsTable,
         createAccountValuationsTable,
@@ -50,6 +51,7 @@ struct DatabaseSchema {
         // Indexes pour Budgets
         "CREATE INDEX IF NOT EXISTS idx_budgets_book ON budgets(book_id);",
         "CREATE INDEX IF NOT EXISTS idx_budget_versions_budget ON budget_versions(budget_id);",
+        "CREATE INDEX IF NOT EXISTS idx_annual_budget_book_year ON annual_budget_entries(book_id, year);",
         
         // Indexes pour Recurring Templates
         "CREATE INDEX IF NOT EXISTS idx_recurring_book ON recurring_templates(book_id);",
@@ -217,6 +219,22 @@ struct DatabaseSchema {
     );
     """
     
+    // MARK: - Budget annuel
+
+    /// Montant prévu par catégorie, par année et par mois (1 à 12)
+    static let createAnnualBudgetEntriesTable: String = """
+    CREATE TABLE IF NOT EXISTS annual_budget_entries (
+        book_id TEXT NOT NULL,
+        category_id TEXT NOT NULL,
+        year INTEGER NOT NULL,
+        month INTEGER NOT NULL,
+        amount TEXT NOT NULL,
+        PRIMARY KEY (book_id, category_id, year, month),
+        FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE,
+        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+    );
+    """
+
     // MARK: - Investment Positions
     
     private static let createInvestmentPositionsTable = """

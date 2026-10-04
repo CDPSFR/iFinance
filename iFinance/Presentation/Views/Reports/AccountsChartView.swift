@@ -32,7 +32,7 @@ struct AccountsChartView: View {
                 emptyStateView
             } else {
                 // Statistiques globales
-                HStack(spacing: 40) {
+                HStack(spacing: NativeMetrics.groupSpacing) {
                     StatisticCardView(
                         title: "Total dépenses",
                         value: totalExpenses,
@@ -57,7 +57,6 @@ struct AccountsChartView: View {
                 .padding()
                 .frame(height: 120)
                 
-                Divider()
                 
                 if let highestAccount = accountData.max(by: { $1.amount > $0.amount }) {
                     ChartPopOverView(highestAccount.amount, highestAccount.accountName)

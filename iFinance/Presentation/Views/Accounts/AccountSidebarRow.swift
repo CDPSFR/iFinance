@@ -5,6 +5,7 @@ struct AccountSidebarRow: View {
     let balance: Decimal
     let isClosed: Bool
     @EnvironmentObject var appSettings: AppSettings
+    @AppStorage(SettingsKeys.showSidebarBalances) private var showBalance = true
 
     var body: some View {
         HStack(spacing: 8) {
@@ -25,11 +26,13 @@ struct AccountSidebarRow: View {
 
             Spacer()
 
-            Text(balance, format: .currency(code: account.currency))
-                .font(.caption)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-                .privacyBlur(hidden: appSettings.hideAmounts)
+            if showBalance {
+                Text(balance, format: .currency(code: account.currency))
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .privacyBlur(hidden: appSettings.hideAmounts)
+            }
         }
     }
 }

@@ -1,37 +1,102 @@
 import SwiftUI
+import Charts
+
+// MARK: - Ligne de tableau
+
+/// Catégorie ou sous-catégorie enrichie de son activité, pour le tableau hiérarchique
+struct CategoryTableRow: Identifiable {
+    let id: UUID
+    let category: Category
+    let isParent: Bool
+    let count: Int
+    let monthTotal: Decimal
+    let monthlyAverage: Decimal
+    /// Part du total du mois (0...1)
+    let share: Double
+    var children: [CategoryTableRow] = []
+}
+
+// MARK: - Liste des catégories
 
 struct CategoryListView: View {
     @EnvironmentObject var bookController: BooksController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var transactionsController: TransactionsController
-    
-    // AJOUT: Binding pour contrôler la navigation
+    @EnvironmentObject var appSettings: AppSettings
+
+    /// Navigation vers les transactions de la catégorie
     @Binding var selectedTab: MainView.SidebarItem
-    
+
+    /// Famille affichée : dépenses ou revenus
+    enum Kind: String, CaseIterable, Identifiable {
+        case expense
+        case income
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .expense: return "Dépenses"
+            case .income: return "Revenus"
+            }
+        }
+    }
+
+    @State private var kind: Kind = .expense
     @State private var showCategoryForm = false
     @State private var categoryToEdit: Category?
     @State private var parentForNewCategory: UUID?
     @State private var categoryToDelete: Category?
     @State private var showDeleteConfirmation = false
-    @State private var showDefaultCategoriesAlert = false
     @State private var searchQuery = ""
-    @State private var navigateToTransactions = false
-    @State private var selectedCategoryForNavigation: UUID?
-    
+    @State private var selection: Set<UUID> = []
+    @State private var expanded: Set<UUID> = []
+    @AppStorage("showCategoryInspector") private var showInspector = true
+
     var body: some View {
+        let roots = rootRows
+
         VStack(spacing: 0) {
-            // Contenu
             if categoriesController.isLoading {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if categoriesController.categories.isEmpty {
+            } else if roots.isEmpty {
                 emptyCategoriesView
             } else {
-                categoriesScrollView
+                categoryTable(roots)
+                TableStatusBar(items: statusItems(roots))
             }
         }
-        .pageBackground()
         .searchable(text: $searchQuery, prompt: "Rechercher une catégorie")
+        .inspector(isPresented: $showInspector) {
+            inspectorContent(roots)
+                .inspectorColumnWidth(min: 240, ideal: 280, max: 380)
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .automatic) {
+                Picker("Type", selection: $kind) {
+                    ForEach(Kind.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .help("Afficher les catégories de dépenses ou de revenus")
+
+                Button {
+                    toggleAll(roots)
+                } label: {
+                    Label("Tout déplier ou replier", systemImage: "chevron.up.chevron.down")
+                }
+                .help("Tout déplier ou replier")
+
+                Button {
+                    showInspector.toggle()
+                } label: {
+                    Label("Inspecteur", systemImage: "sidebar.right")
+                }
+                .help("Afficher ou masquer l'inspecteur")
+            }
+        }
         .sheet(isPresented: $showCategoryForm, onDismiss: { parentForNewCategory = nil }) {
             CategoryFormView(
                 isPresented: $showCategoryForm,
@@ -50,7 +115,10 @@ struct CategoryListView: View {
         .alert("Supprimer la catégorie ?", isPresented: $showDeleteConfirmation, presenting: categoryToDelete) { category in
             Button("Annuler", role: .cancel) { }
             Button("Supprimer", role: .destructive) {
-                Task { await categoriesController.deleteCategory(id: category.id) }
+                Task {
+                    await categoriesController.deleteCategory(id: category.id)
+                    selection.remove(category.id)
+                }
             }
         } message: { category in
             if categoriesController.hasSubcategories(category.id) {
@@ -64,174 +132,451 @@ struct CategoryListView: View {
                 await categoriesController.loadCategories(for: bookID)
             }
         }
-        .onChange(of: bookController.currentBook?.id) { oldValue, newValue in
+        .onChange(of: bookController.currentBook?.id) { _, newValue in
             if let bookID = newValue {
+                selection.removeAll()
+                expanded.removeAll()
                 Task {
                     await categoriesController.loadCategories(for: bookID)
                 }
             }
         }
-        .onChange(of: navigateToTransactions) { oldValue, newValue in
-            if newValue, let categoryID = selectedCategoryForNavigation {
-                // Appliquer le filtre de catégorie
-                var filters = transactionsController.filters
-                filters.categoryID = categoryID
-                transactionsController.updateFilters(filters)
-                
-                // 🔴 NAVIGATION: Changer vers la vue des transactions
-                selectedTab = .allTransactions
-                
-                // Réinitialiser la navigation
-                navigateToTransactions = false
-                selectedCategoryForNavigation = nil
-            }
+        .onChange(of: kind) { _, _ in
+            selection.removeAll()
         }
     }
-    
-    private var emptyCategoriesView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "folder.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.gray.opacity(0.5))
-            
-            if searchQuery.isEmpty {
-                Text("Aucune catégorie")
-                    .font(.title2)
-                    .foregroundColor(.secondary)
-                
-                Text("Créez vos catégories pour organiser vos transactions")
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                
-                Button {
-                    showCategoryForm = true
-                } label: {
-                    Label("Créer une catégorie", systemImage: "plus")
-                }
-                .buttonStyle(.borderedProminent)
-            } else {
-                Text("Aucun résultat")
-                    .font(.title2)
-                    .foregroundColor(.secondary)
-                
-                Text("Aucune catégorie ne correspond à \"\(searchQuery)\"")
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
-    }
-    
-    private var categoriesScrollView: some View {
-        let stats = categoryStats()
-        let currency = bookController.currentBook?.currency ?? "EUR"
 
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                categorySection(title: "Dépenses", roots: filteredExpenseCategories, stats: stats, currency: currency)
-                categorySection(title: "Revenus", roots: filteredIncomeCategories, stats: stats, currency: currency)
+    // MARK: - Tableau
+
+    private func categoryTable(_ roots: [CategoryTableRow]) -> some View {
+        Table(of: CategoryTableRow.self, selection: $selection) {
+            TableColumn("Catégorie") { row in
+                HStack(spacing: 7) {
+                    if row.isParent {
+                        Circle()
+                            .fill(Color(hex: row.category.displayColor))
+                            .frame(width: 9, height: 9)
+                    }
+                    Text(row.category.name)
+                        .fontWeight(row.isParent ? .semibold : .regular)
+                }
             }
-            .padding(.bottom)
+            .width(min: 180, ideal: 260)
+
+            TableColumn("Transactions") { row in
+                Text("\(row.count)")
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .width(min: 80, ideal: 100)
+
+            TableColumn("Ce mois") { row in
+                Text(row.monthTotal, format: .currency(code: currency))
+                    .monospacedDigit()
+                    .fontWeight(row.isParent ? .semibold : .regular)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .privacyBlur(hidden: appSettings.hideAmounts)
+            }
+            .width(min: 100, ideal: 120)
+
+            TableColumn("Moyenne mensuelle") { row in
+                Text(row.monthlyAverage, format: .currency(code: currency))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .privacyBlur(hidden: appSettings.hideAmounts)
+            }
+            .width(min: 120, ideal: 140)
+
+            TableColumn(kind == .expense ? "Part des dépenses" : "Part des revenus") { row in
+                ProgressView(value: row.share)
+                    .progressViewStyle(.linear)
+                    .controlSize(.small)
+                    .tint(Color(hex: row.category.displayColor))
+            }
+            .width(min: 120, ideal: 220)
+        } rows: {
+            ForEach(roots) { root in
+                DisclosureTableRow(root, isExpanded: expansionBinding(for: root.id)) {
+                    ForEach(root.children) { child in
+                        TableRow(child)
+                    }
+                }
+            }
         }
+        .contextMenu(forSelectionType: UUID.self) { items in
+            if items.count == 1, let id = items.first, let category = categoriesController.getCategory(id: id) {
+                Button {
+                    showTransactions(for: category)
+                } label: {
+                    Label("Afficher les transactions", systemImage: "list.bullet")
+                }
+
+                Button {
+                    categoryToEdit = category
+                } label: {
+                    Label("Modifier", systemImage: "pencil")
+                }
+
+                if category.isRoot {
+                    Button {
+                        parentForNewCategory = category.id
+                        showCategoryForm = true
+                    } label: {
+                        Label("Nouvelle sous-catégorie", systemImage: "plus")
+                    }
+                }
+
+                Divider()
+
+                Button(role: .destructive) {
+                    categoryToDelete = category
+                    showDeleteConfirmation = true
+                } label: {
+                    Label("Supprimer", systemImage: "trash")
+                }
+            }
+        } primaryAction: { items in
+            // Double-clic : transactions de la catégorie
+            if let id = items.first, let category = categoriesController.getCategory(id: id) {
+                showTransactions(for: category)
+            }
+        }
+    }
+
+    /// Pendant une recherche, tout est déplié pour montrer les sous-catégories trouvées
+    private func expansionBinding(for id: UUID) -> Binding<Bool> {
+        Binding(
+            get: { !searchQuery.isEmpty || expanded.contains(id) },
+            set: { isExpanded in
+                if isExpanded {
+                    expanded.insert(id)
+                } else {
+                    expanded.remove(id)
+                }
+            }
+        )
+    }
+
+    private func toggleAll(_ roots: [CategoryTableRow]) {
+        let ids = Set(roots.map { $0.id })
+        if ids.isSubset(of: expanded) {
+            expanded.subtract(ids)
+        } else {
+            expanded.formUnion(ids)
+        }
+    }
+
+    // MARK: - Inspecteur
+
+    private func selectedRow(in roots: [CategoryTableRow]) -> CategoryTableRow? {
+        guard selection.count == 1, let id = selection.first else { return nil }
+        for root in roots {
+            if root.id == id { return root }
+            if let child = root.children.first(where: { $0.id == id }) { return child }
+        }
+        return nil
     }
 
     @ViewBuilder
-    private func categorySection(title: String, roots: [Category], stats: [UUID: CategoryStats], currency: String) -> some View {
-        if !roots.isEmpty {
-            Text(title)
-                .font(.title3.weight(.semibold))
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
-                .padding(.bottom, 4)
+    private func inspectorContent(_ roots: [CategoryTableRow]) -> some View {
+        if let row = selectedRow(in: roots) {
+            inspectorDetail(row)
+        } else {
+            ContentUnavailableView(
+                "Aucune sélection",
+                systemImage: "sidebar.right",
+                description: Text("Sélectionnez une catégorie pour afficher son détail.")
+            )
+        }
+    }
 
-            ForEach(roots) { parentCategory in
-                CategoryGroupView(
-                    parentCategory: parentCategory,
-                    subcategories: getFilteredSubcategories(for: parentCategory.id),
-                    stats: stats,
-                    currency: currency,
-                    onEdit: { category in
+    private func inspectorDetail(_ row: CategoryTableRow) -> some View {
+        let category = row.category
+        let color = Color(hex: category.displayColor)
+        let parent = category.parentID.flatMap { categoriesController.getCategory(id: $0) }
+        let history = monthlyHistory(for: row)
+        let description = category.description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        func money(_ value: Decimal) -> String {
+            appSettings.hideAmounts ? "•••" : value.formatted(.currency(code: currency))
+        }
+
+        return InspectorContainer {
+            HStack(spacing: 10) {
+                Image(systemName: category.displayIcon)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(color)
+                    )
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(category.name)
+                        .font(.headline)
+                    Text(row.isParent
+                         ? "Catégorie · \(row.children.count) sous-catégorie\(row.children.count > 1 ? "s" : "")"
+                         : "Sous-catégorie de \(parent?.name ?? "—")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            InspectorSection {
+                InspectorRow("Type", value: category.isIncome ? "Revenu" : "Dépense")
+                InspectorRow("Parente", value: parent?.name ?? "Aucune")
+                InspectorRow("Opérations", value: "\(row.count)")
+                InspectorRow("Ce mois", value: money(row.monthTotal))
+                InspectorRow("Moyenne", value: "\(money(row.monthlyAverage)) par mois")
+            }
+
+            if !description.isEmpty {
+                InspectorSection(title: "Description") {
+                    Text(description)
+                        .textSelection(.enabled)
+                }
+            }
+
+            InspectorSection(title: "6 derniers mois") {
+                Chart(history, id: \.month) { item in
+                    BarMark(
+                        x: .value("Mois", item.month, unit: .month),
+                        y: .value("Montant", item.amount)
+                    )
+                    .foregroundStyle(color)
+                }
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .month)) { _ in
+                        AxisValueLabel(format: .dateTime.month(.abbreviated), centered: true)
+                    }
+                }
+                .chartYAxis(.hidden)
+                .frame(height: 96)
+                .privacyBlur(hidden: appSettings.hideAmounts)
+            }
+
+            if row.isParent {
+                InspectorSection(title: "Sous-catégories") {
+                    if row.children.isEmpty {
+                        Text("Aucune sous-catégorie")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(row.children) { child in
+                            HStack {
+                                Text(child.category.name)
+                                Spacer()
+                                Text(money(child.monthTotal))
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    Button("Nouvelle sous-catégorie…") {
+                        parentForNewCategory = category.id
+                        showCategoryForm = true
+                    }
+                }
+            }
+
+            InspectorSection {
+                Button("Afficher les transactions") {
+                    showTransactions(for: category)
+                }
+
+                HStack(spacing: 8) {
+                    Button("Modifier…") {
                         categoryToEdit = category
-                    },
-                    onDelete: { category in
+                    }
+
+                    Button("Supprimer…", role: .destructive) {
                         categoryToDelete = category
                         showDeleteConfirmation = true
-                    },
-                    onAddSubcategory: { parent in
-                        parentForNewCategory = parent.id
-                        showCategoryForm = true
-                    },
-                    onSelectCategory: { category in
-                        selectedCategoryForNavigation = category.id
-                        navigateToTransactions = true
                     }
-                )
+                }
             }
         }
     }
 
-    // MARK: - Filtered Categories
-    private var filteredExpenseCategories: [Category] {
-        let rootCategories = categoriesController.expenseCategories.filter { $0.isRoot }
-        
-        if searchQuery.isEmpty {
-            return rootCategories
-        }
-        
-        // Garder les parents qui correspondent OU qui ont des enfants qui correspondent
-        return rootCategories.filter { parent in
-            categoryMatchesSearch(parent) || hasMatchingSubcategories(parentID: parent.id)
-        }
+    // MARK: - Données
+
+    private var currency: String {
+        bookController.currentBook?.currency ?? "EUR"
     }
-    
-    private var filteredIncomeCategories: [Category] {
-        let rootCategories = categoriesController.incomeCategories.filter { $0.isRoot }
-        
-        if searchQuery.isEmpty {
-            return rootCategories
-        }
-        
-        // Garder les parents qui correspondent OU qui ont des enfants qui correspondent
-        return rootCategories.filter { parent in
-            categoryMatchesSearch(parent) || hasMatchingSubcategories(parentID: parent.id)
-        }
+
+    /// Activité d'une catégorie sur les transactions chargées
+    private struct Activity {
+        var count = 0
+        var month: Decimal = 0                  // Mois en cours
+        var year: Decimal = 0                   // 12 derniers mois, mois en cours inclus
+        var perMonth: [Date: Decimal] = [:]     // Par début de mois, sur 12 mois
     }
-    
-    private func getFilteredSubcategories(for parentID: UUID) -> [Category] {
-        let subcategories = categoriesController.getSubcategories(for: parentID)
-        
-        // Si la catégorie parente correspond, on affiche toutes ses sous-catégories
-        if searchQuery.isEmpty || categoriesController.getCategory(id: parentID).map(categoryMatchesSearch) == true {
-            return subcategories
-        }
-        
-        return subcategories.filter { category in
-            categoryMatchesSearch(category)
-        }
+
+    private var monthStart: Date {
+        let calendar = Calendar.current
+        return calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
     }
-    
-    private func categoryMatchesSearch(_ category: Category) -> Bool {
-        category.name.localizedCaseInsensitiveContains(searchQuery) ||
-        category.description?.localizedCaseInsensitiveContains(searchQuery) == true
-    }
-    
-    private func hasMatchingSubcategories(parentID: UUID) -> Bool {
-        let subcategories = categoriesController.getSubcategories(for: parentID)
-        return subcategories.contains { categoryMatchesSearch($0) }
-    }
-    
-    // MARK: - Category Stats
-    private func categoryStats() -> [UUID: CategoryStats] {
-        var stats: [UUID: CategoryStats] = [:]
+
+    /// Montants positifs dans la famille affichée : dépenses pour les dépenses, revenus pour les revenus
+    private func activity() -> [UUID: Activity] {
+        let calendar = Calendar.current
+        let start = monthStart
+        let yearStart = calendar.date(byAdding: .month, value: -11, to: start) ?? start
+        let sign: Decimal = kind == .income ? 1 : -1
+        var result: [UUID: Activity] = [:]
 
         for transaction in transactionsController.allTransactions where transaction.status != .skipped {
             guard let categoryID = transaction.categoryID else { continue }
-            stats[categoryID, default: CategoryStats()].count += 1
-            stats[categoryID, default: CategoryStats()].total += transaction.signedAmount
+            var entry = result[categoryID, default: Activity()]
+            let value = transaction.signedAmount * sign
+
+            entry.count += 1
+            if transaction.date >= start {
+                entry.month += value
+            }
+            if transaction.date >= yearStart {
+                entry.year += value
+                let key = calendar.date(from: calendar.dateComponents([.year, .month], from: transaction.date)) ?? start
+                entry.perMonth[key, default: 0] += value
+            }
+            result[categoryID] = entry
         }
 
-        return stats
+        return result
+    }
+
+    private func matchesSearch(_ category: Category) -> Bool {
+        category.name.localizedCaseInsensitiveContains(searchQuery) ||
+        category.description?.localizedCaseInsensitiveContains(searchQuery) == true
+    }
+
+    /// Catégories racines de la famille affichée, avec leurs sous-catégories et leur activité
+    private var rootRows: [CategoryTableRow] {
+        let stats = activity()
+        let source = kind == .income ? categoriesController.incomeCategories : categoriesController.expenseCategories
+        let roots = source
+            .filter { $0.isRoot }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+
+        // Total du mois par catégorie racine (elle-même + toutes ses sous-catégories)
+        func groupActivity(_ root: Category) -> Activity {
+            let ids = [root.id] + categoriesController.getSubcategories(for: root.id).map { $0.id }
+            var total = Activity()
+            for id in ids {
+                guard let entry = stats[id] else { continue }
+                total.count += entry.count
+                total.month += entry.month
+                total.year += entry.year
+            }
+            return total
+        }
+
+        let groups = roots.map { ($0, groupActivity($0)) }
+        let monthTotal = groups.reduce(Decimal(0)) { $0 + max($1.1.month, 0) }
+
+        func share(_ amount: Decimal) -> Double {
+            guard monthTotal > 0, amount > 0 else { return 0 }
+            return min(1, Double(truncating: NSDecimalNumber(decimal: amount / monthTotal)))
+        }
+
+        var rows: [CategoryTableRow] = []
+
+        for (root, group) in groups {
+            let subcategories = categoriesController.getSubcategories(for: root.id)
+            let rootMatches = searchQuery.isEmpty || matchesSearch(root)
+            let visible = rootMatches ? subcategories : subcategories.filter { matchesSearch($0) }
+
+            // Recherche : garder la catégorie si elle ou l'une de ses sous-catégories correspond
+            guard rootMatches || !visible.isEmpty else { continue }
+
+            let children = visible.map { subcategory -> CategoryTableRow in
+                let entry = stats[subcategory.id] ?? Activity()
+                return CategoryTableRow(
+                    id: subcategory.id,
+                    category: subcategory,
+                    isParent: false,
+                    count: entry.count,
+                    monthTotal: entry.month,
+                    monthlyAverage: entry.year / 12,
+                    share: share(entry.month)
+                )
+            }
+
+            rows.append(
+                CategoryTableRow(
+                    id: root.id,
+                    category: root,
+                    isParent: true,
+                    count: group.count,
+                    monthTotal: group.month,
+                    monthlyAverage: group.year / 12,
+                    share: share(group.month),
+                    children: children
+                )
+            )
+        }
+
+        return rows
+    }
+
+    /// Totaux des six derniers mois pour la ligne (sous-catégories incluses pour une catégorie)
+    private func monthlyHistory(for row: CategoryTableRow) -> [(month: Date, amount: Double)] {
+        let calendar = Calendar.current
+        let stats = activity()
+        var ids = [row.id]
+        if row.isParent {
+            ids += categoriesController.getSubcategories(for: row.id).map { $0.id }
+        }
+
+        return (0..<6).reversed().compactMap { offset in
+            guard let month = calendar.date(byAdding: .month, value: -offset, to: monthStart) else { return nil }
+            let total = ids.reduce(Decimal(0)) { $0 + (stats[$1]?.perMonth[month] ?? 0) }
+            return (month, max(0, NSDecimalNumber(decimal: total).doubleValue))
+        }
+    }
+
+    private func statusItems(_ roots: [CategoryTableRow]) -> [String] {
+        let subcategories = roots.reduce(0) { $0 + $1.children.count }
+        var items = [
+            "\(roots.count) catégorie\(roots.count > 1 ? "s" : "") · \(subcategories) sous-catégorie\(subcategories > 1 ? "s" : "")"
+        ]
+
+        if !appSettings.hideAmounts {
+            let total = roots.reduce(Decimal(0)) { $0 + $1.monthTotal }
+            let label = kind == .expense ? "de dépenses ce mois" : "de revenus ce mois"
+            items.append("\(total.formatted(.currency(code: currency))) \(label)")
+        }
+        return items
+    }
+
+    /// Filtre les transactions sur la catégorie puis bascule sur la liste des transactions
+    private func showTransactions(for category: Category) {
+        var filters = transactionsController.filters
+        filters.categoryID = category.id
+        transactionsController.updateFilters(filters)
+        selectedTab = .allTransactions
+    }
+
+    // MARK: - État vide
+
+    @ViewBuilder
+    private var emptyCategoriesView: some View {
+        if searchQuery.isEmpty {
+            ContentUnavailableView {
+                Label(kind == .expense ? "Aucune catégorie de dépenses" : "Aucune catégorie de revenus", systemImage: "tag")
+            } description: {
+                Text("Créez vos catégories pour organiser vos transactions.")
+            } actions: {
+                Button("Créer une catégorie") {
+                    showCategoryForm = true
+                }
+            }
+        } else {
+            ContentUnavailableView.search(text: searchQuery)
+        }
     }
 }
 

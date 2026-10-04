@@ -33,6 +33,7 @@ struct BudgetsView: View {
     @State private var budgetToDelete: Budget? = nil
     @State private var showDeleteConfirmation = false
     @State private var budgetToOpen: Budget? = nil
+    @State private var showAnnualBudget = false
     @State private var searchText = ""
     @State private var selection: Set<Budget.ID> = []
     @State private var sortOrder = [KeyPathComparator(\BudgetTableRow.name, comparator: .localizedStandard)]
@@ -64,6 +65,14 @@ struct BudgetsView: View {
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button {
+                    showAnnualBudget = true
+                } label: {
+                    Label("Budget annuel", systemImage: "calendar")
+                }
+                .help("Afficher le budget annuel, mois par mois")
+            }
+            ToolbarItem(placement: .automatic) {
+                Button {
                     showInspector.toggle()
                 } label: {
                     Label("Inspecteur", systemImage: "sidebar.right")
@@ -73,6 +82,9 @@ struct BudgetsView: View {
         }
         .navigationDestination(item: $budgetToOpen) { budget in
             BudgetDetailView(budget: budget)
+        }
+        .navigationDestination(isPresented: $showAnnualBudget) {
+            AnnualBudgetView()
         }
         .task {
             await reload()

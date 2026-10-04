@@ -17,11 +17,18 @@ struct iFinanceApp: App {
                 .environmentObject(appState.categoriesController)
                 .environmentObject(appState.payeesController)
                 .environmentObject(appState.budgetsController)
+                .environmentObject(appState.annualBudgetController)
                 .environmentObject(appState.investmentsController)
                 .environmentObject(appState.savingsPlansController)
                 .frame(minWidth: 1000, minHeight: 700)
                 // NSApp.appearance plutôt que preferredColorScheme : revenir à « Système » fonctionne
-                .onAppear { appSettings.theme.apply() }
+                .onAppear {
+                    appSettings.theme.apply()
+                    // Réglage « Masquer les montants à l'ouverture »
+                    if UserDefaults.standard.bool(forKey: SettingsKeys.hideAmountsAtLaunch) {
+                        appSettings.hideAmounts = true
+                    }
+                }
                 .onChange(of: appSettings.theme) { _, theme in theme.apply() }
         }
         .windowToolbarStyle(.unified)
@@ -37,6 +44,22 @@ struct iFinanceApp: App {
                 Divider()
                 creationButton(.book)
             }
+        }
+
+        // Fenêtre Réglages (⌘,), avec les mêmes contrôleurs que la fenêtre principale
+        Settings {
+            SettingsView()
+                .environmentObject(appState)
+                .environmentObject(appSettings)
+                .environmentObject(appState.bookController)
+                .environmentObject(appState.accountsController)
+                .environmentObject(appState.transactionsController)
+                .environmentObject(appState.categoriesController)
+                .environmentObject(appState.payeesController)
+                .environmentObject(appState.budgetsController)
+                .environmentObject(appState.annualBudgetController)
+                .environmentObject(appState.investmentsController)
+                .environmentObject(appState.savingsPlansController)
         }
     }
 
@@ -83,4 +106,3 @@ enum CreationCommand: String, CaseIterable, Identifiable {
         }
     }
 }
-

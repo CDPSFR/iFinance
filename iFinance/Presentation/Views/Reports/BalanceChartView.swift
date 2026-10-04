@@ -21,7 +21,7 @@ struct BalanceChartView: View {
                 emptyStateView
             } else {
                 // Statistiques
-                HStack(spacing: 40) {
+                HStack(spacing: NativeMetrics.groupSpacing) {
                     StatisticCard(
                         title: "Solde actuel",
                         value: currentBalance,
@@ -40,9 +40,7 @@ struct BalanceChartView: View {
                         color: variation >= 0 ? .green : .red
                     )
                 }
-                .padding(.vertical)
-                
-                Divider()
+                .padding(.bottom, NativeMetrics.groupSpacing)
                 
                 // Graphique
                 VStack(alignment: .leading) {

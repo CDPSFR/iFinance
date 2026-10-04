@@ -33,7 +33,7 @@ struct PayeesChartView: View {
                 emptyStateView
             } else {
                 // Statistiques globales
-                HStack(spacing: 40) {
+                HStack(spacing: NativeMetrics.groupSpacing) {
                     StatisticCardView(
                         title: "Total dépenses",
                         value: totalExpenses,
@@ -58,7 +58,6 @@ struct PayeesChartView: View {
                 .padding()
                 .frame(height: 120)
                 
-                Divider()
                 
                 if let highestPayee = payeeData.max(by: { $1.amount > $0.amount }) {
                     ChartPopOverView(highestPayee.amount, highestPayee.payeeName)

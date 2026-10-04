@@ -28,7 +28,7 @@ struct CategoriesChartView: View {
                 emptyStateView
             } else {
                 // Statistiques globales
-                HStack(spacing: 40) {
+                HStack(spacing: NativeMetrics.groupSpacing) {
                     StatisticCardView(
                         title: "Total dépenses",
                         value: totalExpenses,
@@ -53,7 +53,6 @@ struct CategoriesChartView: View {
                 .padding()
                 .frame(height: 120)
                 
-                Divider()
                 
                 if let highestCategory = categoryData.max(by: { $1.amount > $0.amount }) {
                     ChartPopOverView(highestCategory.amount, highestCategory.categoryName)
@@ -247,26 +246,26 @@ struct StatisticCardView: View {
     @EnvironmentObject var appSettings: AppSettings
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .font(.caption)
                 .foregroundColor(.secondary)
 
             if isCurrency {
                 Text(value, format: .currency(code: "EUR"))
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(color)
+                    .font(.title2.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(color)
                     .privacyBlur(hidden: appSettings.hideAmounts)
             } else {
                 Text("\(NSDecimalNumber(decimal: value).intValue)")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(color)
+                    .font(.title2.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(color)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .cardBackground(cornerRadius: 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(NativeMetrics.groupPadding)
+        .cardBackground()
     }
 }
