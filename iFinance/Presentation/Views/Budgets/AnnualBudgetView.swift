@@ -178,6 +178,8 @@ struct AnnualBudgetView: View {
                 .padding(.leading, 16)
             Text("Année")
                 .frame(width: Self.yearWidth)
+                .frame(maxHeight: .infinity)
+                .overlay(alignment: .trailing) { yearSeparator }
             ForEach(0..<12, id: \.self) { index in
                 Text(symbols[index].capitalized)
                     .fontWeight(index == currentMonthIndex ? .semibold : .regular)
@@ -191,6 +193,13 @@ struct AnnualBudgetView: View {
         .frame(height: 28)
         .background(.bar)
         .overlay(alignment: .bottom) { Divider() }
+    }
+
+    /// Filet vertical entre la colonne Année et janvier
+    private var yearSeparator: some View {
+        Rectangle()
+            .fill(Color(nsColor: .separatorColor))
+            .frame(width: 1)
     }
 
     private func sectionTitle(_ title: String) -> some View {
@@ -228,6 +237,7 @@ struct AnnualBudgetView: View {
                 isBold: true
             )
             .frame(width: Self.yearWidth)
+            .overlay(alignment: .trailing) { yearSeparator }
 
             ForEach(0..<12, id: \.self) { index in
                 monthCell(line, index: index)
