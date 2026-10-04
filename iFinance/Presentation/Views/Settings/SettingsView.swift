@@ -38,10 +38,13 @@ struct SettingsView: View {
             DataSettingsTab()
                 .tabItem { Label("Données", systemImage: "cylinder.split.1x2") }
 
+            BackupSettingsTab()
+                .tabItem { Label("Sauvegardes", systemImage: "clock.arrow.circlepath") }
+
             PrivacySettingsTab()
                 .tabItem { Label("Confidentialité", systemImage: "lock") }
         }
-        .frame(width: 720, height: 520)
+        .frame(width: 720, height: 560)
     }
 }
 

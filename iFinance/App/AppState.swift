@@ -30,10 +30,16 @@ class AppState: ObservableObject {
     let budgetsController: BudgetsController
     let annualBudgetController: AnnualBudgetController
     let projectsController: ProjectsController
+
+    // Sauvegardes de la base
+    let backupManager: BackupManager
     let investmentsController: InvestmentsController
     let savingsPlansController: SavingsPlansController
 
     init() {
+        // Une restauration demandée à la session précédente s'applique avant d'ouvrir la base
+        BackupManager.applyPendingRestoreIfNeeded()
+
         // Initialiser la base de données
         do {
             self.db = try SQLiteManager(dbName: "iFinance.sqlite")
@@ -67,6 +73,7 @@ class AppState: ObservableObject {
         self.budgetsController = BudgetsController(repository: budgetRepository)
         self.annualBudgetController = AnnualBudgetController(repository: annualBudgetRepository)
         self.projectsController = ProjectsController(repository: projectRepository)
+        self.backupManager = BackupManager(db: db)
         self.investmentsController = InvestmentsController(
             positionRepository: investmentPositionRepository,
             transactionRepository: investmentTransactionRepository
