@@ -11,7 +11,7 @@ class BookRepository: BookRepositoryProtocol {
     
     func fetchAll() async throws -> [Book] {
         let sql = """
-        SELECT id, name, currency, created_at, updated_at, archived_at
+        SELECT id, name, currency, created_at, updated_at, archived_at, color
         FROM books
         ORDER BY created_at DESC;
         """
@@ -24,7 +24,7 @@ class BookRepository: BookRepositoryProtocol {
     
     func fetchActive() async throws -> [Book] {
         let sql = """
-        SELECT id, name, currency, created_at, updated_at, archived_at
+        SELECT id, name, currency, created_at, updated_at, archived_at, color
         FROM books
         WHERE archived_at IS NULL
         ORDER BY created_at DESC;
@@ -38,7 +38,7 @@ class BookRepository: BookRepositoryProtocol {
     
     func fetchArchived() async throws -> [Book] {
         let sql = """
-        SELECT id, name, currency, created_at, updated_at, archived_at
+        SELECT id, name, currency, created_at, updated_at, archived_at, color
         FROM books
         WHERE archived_at IS NOT NULL
         ORDER BY archived_at DESC;
@@ -52,7 +52,7 @@ class BookRepository: BookRepositoryProtocol {
     
     func fetch(id: UUID) async throws -> Book? {
         let sql = """
-        SELECT id, name, currency, created_at, updated_at, archived_at
+        SELECT id, name, currency, created_at, updated_at, archived_at, color
         FROM books
         WHERE id = ?;
         """
@@ -67,8 +67,8 @@ class BookRepository: BookRepositoryProtocol {
         let dto = BookMapper.toDTO(book)
         
         let sql = """
-        INSERT INTO books (id, name, currency, created_at, updated_at, archived_at)
-        VALUES (?, ?, ?, ?, ?, ?);
+        INSERT INTO books (id, name, currency, created_at, updated_at, archived_at, color)
+        VALUES (?, ?, ?, ?, ?, ?, ?);
         """
         
         try db.execute(sql: sql, parameters: [
@@ -77,7 +77,8 @@ class BookRepository: BookRepositoryProtocol {
             dto.currency,
             dto.createdAt,
             dto.updatedAt,
-            dto.archivedAt ?? NSNull()
+            dto.archivedAt ?? NSNull(),
+            dto.color ?? NSNull()
         ])
     }
     
@@ -91,7 +92,7 @@ class BookRepository: BookRepositoryProtocol {
         
         let sql = """
         UPDATE books
-        SET name = ?, currency = ?, updated_at = ?, archived_at = ?
+        SET name = ?, currency = ?, updated_at = ?, archived_at = ?, color = ?
         WHERE id = ?;
         """
         
@@ -100,6 +101,7 @@ class BookRepository: BookRepositoryProtocol {
             dto.currency,
             dto.updatedAt,
             dto.archivedAt ?? NSNull(),
+            dto.color ?? NSNull(),
             dto.id
         ])
     }

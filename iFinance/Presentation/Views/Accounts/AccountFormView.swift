@@ -15,6 +15,9 @@ struct AccountFormView: View {
     @State private var iban: String
     @State private var bic: String
     @State private var isExcludedFromReports: Bool
+    @State private var initialBalanceDate: Date
+    @State private var isHiddenFromSidebar: Bool
+    @State private var isExcludedFromBudgets: Bool
     @State private var isCreating = false
     
     let availableCurrencies = ["EUR", "USD", "GBP", "CHF", "CAD", "JPY", "AUD"]
@@ -32,6 +35,9 @@ struct AccountFormView: View {
         _iban = State(initialValue: accountToEdit?.iban ?? "")
         _bic = State(initialValue: accountToEdit?.bic ?? "")
         _isExcludedFromReports = State(initialValue: accountToEdit?.isExcludedFromReports ?? false)
+        _initialBalanceDate = State(initialValue: accountToEdit?.initialBalanceDate ?? accountToEdit?.createdAt ?? Date())
+        _isHiddenFromSidebar = State(initialValue: accountToEdit?.isHiddenFromSidebar ?? false)
+        _isExcludedFromBudgets = State(initialValue: accountToEdit?.isExcludedFromBudgets ?? false)
     }
     
     var body: some View {
@@ -42,9 +48,10 @@ struct AccountFormView: View {
                     .font(.headline)
 
                 if let book = bookController.currentBook {
-                    Text("Livre « \(book.name) »")
+                    Text("Ajouté au livre « \(book.name) ». Le solde est tenu à la main ou par import de fichier.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -80,6 +87,8 @@ struct AccountFormView: View {
                     TextField("Solde initial", text: $initialBalance, prompt: Text("0,00"))
                         .multilineTextAlignment(.trailing)
                         .monospacedDigit()
+
+                    DatePicker("Date du solde", selection: $initialBalanceDate, displayedComponents: .date)
                 }
 
                 Section("Coordonnées bancaires") {
@@ -89,7 +98,14 @@ struct AccountFormView: View {
                 }
 
                 Section {
-                    Toggle("Exclure du tableau de bord et des rapports", isOn: $isExcludedFromReports)
+                    Toggle("Inclure dans le patrimoine net", isOn: inverted($isExcludedFromReports))
+
+                    Toggle("Afficher dans la barre latérale", isOn: inverted($isHiddenFromSidebar))
+
+                    Toggle(isOn: $isExcludedFromBudgets) {
+                        Text("Compte hors budget")
+                        Text("Ses dépenses ne consomment pas les budgets.")
+                    }
                 }
             }
             .formStyle(.grouped)
@@ -115,7 +131,15 @@ struct AccountFormView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
         }
-        .frame(width: 480, height: 600)
+        .frame(width: 520, height: 700)
+    }
+
+    /// Options affichées à l'endroit (« inclure », « afficher ») mais stockées à l'envers
+    private func inverted(_ binding: Binding<Bool>) -> Binding<Bool> {
+        Binding(
+            get: { !binding.wrappedValue },
+            set: { binding.wrappedValue = !$0 }
+        )
     }
 
     private func saveAccount() {
@@ -137,6 +161,9 @@ struct AccountFormView: View {
                 updated.iban = iban.isEmpty ? nil : iban
                 updated.bic = bic.isEmpty ? nil : bic
                 updated.isExcludedFromReports = isExcludedFromReports
+                updated.initialBalanceDate = initialBalanceDate
+                updated.isHiddenFromSidebar = isHiddenFromSidebar
+                updated.isExcludedFromBudgets = isExcludedFromBudgets
 
                 await accountsController.updateAccount(updated)
             } else {
@@ -149,7 +176,10 @@ struct AccountFormView: View {
                     currency: currency,
                     iban: iban.isEmpty ? nil : iban,
                     bic: bic.isEmpty ? nil : bic,
-                    isExcludedFromReports: isExcludedFromReports
+                    isExcludedFromReports: isExcludedFromReports,
+                    initialBalanceDate: initialBalanceDate,
+                    isHiddenFromSidebar: isHiddenFromSidebar,
+                    isExcludedFromBudgets: isExcludedFromBudgets
                 )
             }
             

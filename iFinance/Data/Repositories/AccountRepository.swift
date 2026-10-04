@@ -11,7 +11,7 @@ class AccountRepository: AccountRepositoryProtocol {
     
     func fetchAll(for bookID: UUID) async throws -> [Account] {
         let sql = """
-        SELECT id, book_id, name, bank, type, initial_balance, currency, iban, bic, is_excluded_from_reports, is_closed, created_at
+        SELECT id, book_id, name, bank, type, initial_balance, currency, iban, bic, is_excluded_from_reports, initial_balance_date, is_hidden_from_sidebar, is_excluded_from_budgets, is_closed, created_at
         FROM accounts
         WHERE book_id = ?
         ORDER BY created_at DESC;
@@ -25,7 +25,7 @@ class AccountRepository: AccountRepositoryProtocol {
     
     func fetchActive(for bookID: UUID) async throws -> [Account] {
         let sql = """
-        SELECT id, book_id, name, bank, type, initial_balance, currency, iban, bic, is_excluded_from_reports, is_closed, created_at
+        SELECT id, book_id, name, bank, type, initial_balance, currency, iban, bic, is_excluded_from_reports, initial_balance_date, is_hidden_from_sidebar, is_excluded_from_budgets, is_closed, created_at
         FROM accounts
         WHERE book_id = ? AND is_closed = 0
         ORDER BY created_at DESC;
@@ -39,7 +39,7 @@ class AccountRepository: AccountRepositoryProtocol {
     
     func fetchClosed(for bookID: UUID) async throws -> [Account] {
         let sql = """
-        SELECT id, book_id, name, bank, type, initial_balance, currency, iban, bic, is_excluded_from_reports, is_closed, created_at
+        SELECT id, book_id, name, bank, type, initial_balance, currency, iban, bic, is_excluded_from_reports, initial_balance_date, is_hidden_from_sidebar, is_excluded_from_budgets, is_closed, created_at
         FROM accounts
         WHERE book_id = ? AND is_closed = 1
         ORDER BY created_at DESC;
@@ -53,7 +53,7 @@ class AccountRepository: AccountRepositoryProtocol {
     
     func fetch(id: UUID) async throws -> Account? {
         let sql = """
-        SELECT id, book_id, name, bank, type, initial_balance, currency, iban, bic, is_excluded_from_reports, is_closed, created_at
+        SELECT id, book_id, name, bank, type, initial_balance, currency, iban, bic, is_excluded_from_reports, initial_balance_date, is_hidden_from_sidebar, is_excluded_from_budgets, is_closed, created_at
         FROM accounts
         WHERE id = ?;
         """
@@ -68,8 +68,8 @@ class AccountRepository: AccountRepositoryProtocol {
         let dto = AccountMapper.toDTO(account)
         
         let sql = """
-        INSERT INTO accounts (id, book_id, name, bank, type, initial_balance, currency, iban, bic, is_excluded_from_reports, is_closed, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        INSERT INTO accounts (id, book_id, name, bank, type, initial_balance, currency, iban, bic, is_excluded_from_reports, initial_balance_date, is_hidden_from_sidebar, is_excluded_from_budgets, is_closed, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
 
         try db.execute(sql: sql, parameters: [
@@ -83,6 +83,9 @@ class AccountRepository: AccountRepositoryProtocol {
             dto.iban ?? NSNull(),
             dto.bic ?? NSNull(),
             dto.isExcludedFromReports ? 1 : 0,
+            dto.initialBalanceDate ?? NSNull(),
+            dto.isHiddenFromSidebar ? 1 : 0,
+            dto.isExcludedFromBudgets ? 1 : 0,
             dto.isClosed ? 1 : 0,
             dto.createdAt
         ])
@@ -95,7 +98,7 @@ class AccountRepository: AccountRepositoryProtocol {
         
         let sql = """
         UPDATE accounts
-        SET name = ?, bank = ?, type = ?, initial_balance = ?, currency = ?, iban = ?, bic = ?, is_excluded_from_reports = ?, is_closed = ?
+        SET name = ?, bank = ?, type = ?, initial_balance = ?, currency = ?, iban = ?, bic = ?, is_excluded_from_reports = ?, initial_balance_date = ?, is_hidden_from_sidebar = ?, is_excluded_from_budgets = ?, is_closed = ?
         WHERE id = ?;
         """
 
@@ -108,6 +111,9 @@ class AccountRepository: AccountRepositoryProtocol {
             dto.iban ?? NSNull(),
             dto.bic ?? NSNull(),
             dto.isExcludedFromReports ? 1 : 0,
+            dto.initialBalanceDate ?? NSNull(),
+            dto.isHiddenFromSidebar ? 1 : 0,
+            dto.isExcludedFromBudgets ? 1 : 0,
             dto.isClosed ? 1 : 0,
             dto.id
         ])

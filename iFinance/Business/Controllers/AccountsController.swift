@@ -70,7 +70,10 @@ class AccountsController: ObservableObject {
         currency: String,
         iban: String? = nil,
         bic: String? = nil,
-        isExcludedFromReports: Bool = false
+        isExcludedFromReports: Bool = false,
+        initialBalanceDate: Date? = nil,
+        isHiddenFromSidebar: Bool = false,
+        isExcludedFromBudgets: Bool = false
     ) async {
         let account = Account(
             bookID: bookID,
@@ -81,7 +84,10 @@ class AccountsController: ObservableObject {
             currency: currency,
             iban: iban,
             bic: bic,
-            isExcludedFromReports: isExcludedFromReports
+            isExcludedFromReports: isExcludedFromReports,
+            initialBalanceDate: initialBalanceDate,
+            isHiddenFromSidebar: isHiddenFromSidebar,
+            isExcludedFromBudgets: isExcludedFromBudgets
         )
         
         do {
@@ -173,6 +179,11 @@ class AccountsController: ObservableObject {
     }
 
     // MARK: - Reports
+
+    /// IDs des comptes dont les dépenses ne consomment pas les budgets
+    var budgetExcludedAccountIDs: Set<UUID> {
+        Set((activeAccounts + closedAccounts).filter { $0.isExcludedFromBudgets }.map { $0.id })
+    }
 
     /// IDs des comptes actifs inclus dans les rapports de dépenses / cash-flow
     var cashFlowAccountIDs: Set<UUID> {

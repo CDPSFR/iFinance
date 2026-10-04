@@ -175,6 +175,9 @@ struct Account: Identifiable, Codable, Equatable, Hashable {
     var iban: String? = nil
     var bic: String? = nil
     var isExcludedFromReports: Bool = false
+    var initialBalanceDate: Date? = nil      // Date à laquelle le solde initial a été relevé
+    var isHiddenFromSidebar: Bool = false    // Masqué de la barre latérale
+    var isExcludedFromBudgets: Bool = false  // Ses dépenses ne consomment pas les budgets
     var isClosed: Bool = false
     var createdAt: Date = Date()
 
@@ -182,7 +185,7 @@ struct Account: Identifiable, Codable, Equatable, Hashable {
     var currentBalance: Decimal = 0
 
     enum CodingKeys: String, CodingKey {
-        case id, bookID, name, bank, type, initialBalance, currency, iban, bic, isExcludedFromReports, isClosed, createdAt
+        case id, bookID, name, bank, type, initialBalance, currency, iban, bic, isExcludedFromReports, initialBalanceDate, isHiddenFromSidebar, isExcludedFromBudgets, isClosed, createdAt
         // currentBalance n'est pas sérialisé
     }
 

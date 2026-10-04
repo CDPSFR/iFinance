@@ -8,4 +8,5 @@ struct BookDTO {
     let createdAt: String  // ISO8601
     let updatedAt: String  // ISO8601
     let archivedAt: String?  // ISO8601 nullable
+    let color: String?  // Code hex nullable
 }

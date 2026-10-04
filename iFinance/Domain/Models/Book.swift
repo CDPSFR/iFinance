@@ -7,6 +7,7 @@ struct Book: Identifiable, Codable, Equatable, Hashable {
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
     var archivedAt: Date? = nil
+    var color: String? = nil  // Couleur du livre, code hex (#0A66D8) ; nil = couleur d'accent
     
     var isArchived: Bool {
         return archivedAt != nil

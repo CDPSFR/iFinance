@@ -342,7 +342,7 @@ struct MainView: View {
     }
 
     private var activeAccountGroups: [(group: AccountGroup, accounts: [Account])] {
-        Dictionary(grouping: accountsController.activeAccounts) { $0.type.group }
+        Dictionary(grouping: accountsController.activeAccounts.filter { !$0.isHiddenFromSidebar }) { $0.type.group }
             .map { ($0.key, $0.value) }
             .sorted { $0.group.sortOrder < $1.group.sortOrder }
     }

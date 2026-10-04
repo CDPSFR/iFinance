@@ -21,7 +21,12 @@ struct DatabaseSchema {
         // Accounts
         "ALTER TABLE accounts ADD COLUMN iban TEXT;",
         "ALTER TABLE accounts ADD COLUMN bic TEXT;",
-        "ALTER TABLE accounts ADD COLUMN is_excluded_from_reports INTEGER NOT NULL DEFAULT 0;"
+        "ALTER TABLE accounts ADD COLUMN is_excluded_from_reports INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE accounts ADD COLUMN initial_balance_date TEXT;",
+        "ALTER TABLE accounts ADD COLUMN is_hidden_from_sidebar INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE accounts ADD COLUMN is_excluded_from_budgets INTEGER NOT NULL DEFAULT 0;",
+        // Books
+        "ALTER TABLE books ADD COLUMN color TEXT;"
     ]
 
     static let createIndexStatements: [String] = [
@@ -70,7 +75,8 @@ struct DatabaseSchema {
         currency TEXT NOT NULL DEFAULT 'EUR',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        archived_at TEXT
+        archived_at TEXT,
+        color TEXT
     );
     """
     
@@ -88,6 +94,9 @@ struct DatabaseSchema {
         iban TEXT,
         bic TEXT,
         is_excluded_from_reports INTEGER NOT NULL DEFAULT 0,
+        initial_balance_date TEXT,
+        is_hidden_from_sidebar INTEGER NOT NULL DEFAULT 0,
+        is_excluded_from_budgets INTEGER NOT NULL DEFAULT 0,
         is_closed INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE

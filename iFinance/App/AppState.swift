@@ -70,6 +70,11 @@ class AppState: ObservableObject {
             categoriesController?.getSubcategories(for: categoryID).map { $0.id } ?? []
         }
 
+        // Les comptes marqués « hors budget » ne consomment pas les budgets
+        budgetsController.excludedAccountIDs = { [weak accountsController] in
+            accountsController?.budgetExcludedAccountIDs ?? []
+        }
+
         print("✅ iFinance AppState initialisé")
     }
 }

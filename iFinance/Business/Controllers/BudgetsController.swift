@@ -11,6 +11,9 @@ class BudgetsController: ObservableObject {
     private let repository: BudgetRepositoryProtocol
     private var currentBookID: UUID?
 
+    /// Comptes hors budget : leurs transactions ne sont pas comptées. Branché par AppState.
+    var excludedAccountIDs: () -> Set<UUID> = { [] }
+
     init(repository: BudgetRepositoryProtocol) {
         self.repository = repository
     }
@@ -119,10 +122,12 @@ class BudgetsController: ObservableObject {
         guard let version = budget.currentVersion else { return 0 }
         let window = budget.period.currentWindow(anchor: budget.anchorDate)
         let categorySet = Set(budget.categoryIDs)
+        let excludedAccounts = excludedAccountIDs()
 
         return transactions
             .filter { tx in
-                tx.date >= window.start
+                !excludedAccounts.contains(tx.accountID)
+                && tx.date >= window.start
                 && tx.date < window.end
                 && tx.signedAmount < 0
                 && tx.categoryID.map { categorySet.contains($0) } ?? false

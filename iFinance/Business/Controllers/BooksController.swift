@@ -80,8 +80,8 @@ class BooksController: ObservableObject {
     
     // MARK: - Create Book
     
-    func createBook(name: String, currency: String = "EUR") async {
-        let book = Book(name: name, currency: currency)
+    func createBook(name: String, currency: String = "EUR", color: String? = nil) async {
+        let book = Book(name: name, currency: currency, color: color)
         
         do {
             try await repository.create(book)

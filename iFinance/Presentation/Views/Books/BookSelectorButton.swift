@@ -20,7 +20,7 @@ struct BookSelectorButton: View {
                         .frame(width: 30, height: 30)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.accentColor)
+                                .fill(book.color.map { Color(hex: $0) } ?? Color.accentColor)
                         )
 
                     VStack(alignment: .leading, spacing: 1) {

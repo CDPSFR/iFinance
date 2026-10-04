@@ -39,9 +39,11 @@ struct BudgetDetailView: View {
 
     private var periodTransactions: [Transaction] {
         let categorySet = Set(budget.categoryIDs)
+        let excludedAccounts = budgetsController.excludedAccountIDs()
         return transactionsController.allTransactions
             .filter { tx in
-                tx.date >= window.start
+                !excludedAccounts.contains(tx.accountID)
+                && tx.date >= window.start
                 && tx.date < window.end
                 && tx.signedAmount < 0
                 && tx.categoryID.map { categorySet.contains($0) } ?? false

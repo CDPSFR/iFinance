@@ -14,7 +14,8 @@ struct BookMapper {
             currency: book.currency,
             createdAt: dateFormatter.string(from: book.createdAt),
             updatedAt: dateFormatter.string(from: book.updatedAt),
-            archivedAt: book.archivedAt.map { dateFormatter.string(from: $0) }
+            archivedAt: book.archivedAt.map { dateFormatter.string(from: $0) },
+            color: book.color
         )
     }
     
@@ -34,7 +35,8 @@ struct BookMapper {
             currency: dto.currency,
             createdAt: createdAt,
             updatedAt: updatedAt,
-            archivedAt: archivedAt
+            archivedAt: archivedAt,
+            color: dto.color
         )
     }
     
@@ -54,7 +56,8 @@ struct BookMapper {
             currency: currency,
             createdAt: createdAtStr,
             updatedAt: updatedAtStr,
-            archivedAt: row["archived_at"] as? String
+            archivedAt: row["archived_at"] as? String,
+            color: row["color"] as? String
         )
         
         return fromDTO(dto)

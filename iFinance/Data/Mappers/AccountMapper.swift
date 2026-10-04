@@ -18,6 +18,9 @@ struct AccountMapper {
             iban: account.iban,
             bic: account.bic,
             isExcludedFromReports: account.isExcludedFromReports,
+            initialBalanceDate: account.initialBalanceDate.map { dateFormatter.string(from: $0) },
+            isHiddenFromSidebar: account.isHiddenFromSidebar,
+            isExcludedFromBudgets: account.isExcludedFromBudgets,
             isClosed: account.isClosed,
             createdAt: dateFormatter.string(from: account.createdAt)
         )
@@ -42,6 +45,9 @@ struct AccountMapper {
             iban: dto.iban,
             bic: dto.bic,
             isExcludedFromReports: dto.isExcludedFromReports,
+            initialBalanceDate: dto.initialBalanceDate.flatMap { dateFormatter.date(from: $0) },
+            isHiddenFromSidebar: dto.isHiddenFromSidebar,
+            isExcludedFromBudgets: dto.isExcludedFromBudgets,
             isClosed: dto.isClosed,
             createdAt: createdAt
         )
@@ -71,6 +77,9 @@ struct AccountMapper {
             iban: row["iban"] as? String,
             bic: row["bic"] as? String,
             isExcludedFromReports: isExcludedInt == 1,
+            initialBalanceDate: row["initial_balance_date"] as? String,
+            isHiddenFromSidebar: (row["is_hidden_from_sidebar"] as? Int64 ?? 0) == 1,
+            isExcludedFromBudgets: (row["is_excluded_from_budgets"] as? Int64 ?? 0) == 1,
             isClosed: isClosedInt == 1,
             createdAt: createdAtStr
         )
