@@ -18,12 +18,12 @@ struct FilterBadge: View {
                     .font(.caption2)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Retirer le filtre \(text)")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .background(Color.blue.opacity(0.1))
-        .foregroundColor(.blue)
-        .cornerRadius(12)
+        .background(Color.accentColor.opacity(0.12), in: Capsule())
+        .foregroundStyle(Color.accentColor)
     }
 }
 

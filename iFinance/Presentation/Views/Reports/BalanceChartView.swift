@@ -31,7 +31,7 @@ struct BalanceChartView: View {
                     StatisticCard(
                         title: "Solde initial",
                         value: initialBalance,
-                        color: .blue
+                        color: .primary
                     )
                     
                     StatisticCard(
@@ -58,7 +58,7 @@ struct BalanceChartView: View {
                                 y: .value("Solde", NSDecimalNumber(decimal: point.balance).doubleValue)
                             )
                             .interpolationMethod(.catmullRom)
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(Color.accentColor)
                             
                             AreaMark(
                                 x: .value("Date", point.date),
@@ -67,7 +67,7 @@ struct BalanceChartView: View {
                             .interpolationMethod(.catmullRom)
                             .foregroundStyle(
                                 LinearGradient(
-                                    colors: [.blue.opacity(0.3), .blue.opacity(0.05)],
+                                    colors: [Color.accentColor.opacity(0.3), Color.accentColor.opacity(0.05)],
                                     startPoint: .top,
                                     endPoint: .bottom
                                 )
@@ -78,7 +78,7 @@ struct BalanceChartView: View {
                                 y: .value("Solde", NSDecimalNumber(decimal: point.balance).doubleValue)
                             )
                             .symbolSize(30)
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(Color.accentColor)
                         }
                         
                         // Point sélectionné

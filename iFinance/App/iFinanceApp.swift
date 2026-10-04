@@ -24,7 +24,6 @@ struct iFinanceApp: App {
                 .onAppear { appSettings.theme.apply() }
                 .onChange(of: appSettings.theme) { _, theme in theme.apply() }
         }
-        .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unified)
     }
 }

@@ -9,7 +9,7 @@ struct AccountSidebarRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: account.type.icon)
-                .foregroundColor(isClosed ? .gray : account.type.color)
+                .foregroundStyle(isClosed ? Color.secondary : Color.accentColor)
                 .frame(width: 20)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -27,7 +27,8 @@ struct AccountSidebarRow: View {
 
             Text(balance, format: .currency(code: account.currency))
                 .font(.caption)
-                .foregroundColor(isClosed ? .gray : (balance >= 0 ? .green : .red))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
                 .privacyBlur(hidden: appSettings.hideAmounts)
         }
     }

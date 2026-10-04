@@ -39,7 +39,7 @@ struct CategoriesChartView: View {
                     StatisticCardView(
                         title: "Nombre de catégories",
                         value: Decimal(categoryData.count),
-                        color: .blue,
+                        color: .primary,
                         isCurrency: false
                     )
                     

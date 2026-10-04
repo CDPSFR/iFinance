@@ -1,77 +1,83 @@
 import SwiftUI
 
+/// Sélecteur de livre en tête de barre latérale : pastille, nom, sous-titre, chevrons.
+/// Un clic ouvre la liste des livres ; le clic droit propose la création d'un livre.
 struct BookSelectorButton: View {
     @EnvironmentObject var booksController: BooksController
+    @EnvironmentObject var accountsController: AccountsController
     @Binding var showBookSelector: Bool
     @Binding var showBookForm: Bool
-    
+
     var body: some View {
-        VStack(spacing: 8) {
-            if let book = booksController.currentBook {
-                // Livre actuel
-                Button {
-                    showBookSelector = true
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "book.closed.fill")
-                            .foregroundColor(.blue)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(book.name)
-                                .font(.body)
-                                .fontWeight(.semibold)
-                                .lineLimit(1)
-                            
-                            Text(book.currency)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        Spacer()
-                        
-                        Image(systemName: "chevron.up.chevron.down")
+        if let book = booksController.currentBook {
+            Button {
+                showBookSelector = true
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "book.closed.fill")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(Color.accentColor)
+                        )
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(book.name)
+                            .fontWeight(.semibold)
+                            .lineLimit(1)
+
+                        Text(subtitle(for: book))
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    //.background(Color(NSColor.controlBackgroundColor))
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                    )
+
+                    Spacer(minLength: 4)
+
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
-                
-                // Bouton nouveau livre
+                .padding(.leading, 8)
+                .padding(.trailing, 10)
+                .frame(maxWidth: .infinity, minHeight: 46)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color.primary.opacity(0.06))
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .help("Changer de livre de comptes")
+            .accessibilityLabel("Changer de livre de comptes, livre actuel : \(book.name)")
+            .contextMenu {
+                Button("Changer de livre…") { showBookSelector = true }
+                Button("Nouveau livre…") { showBookForm = true }
+            }
+        } else {
+            VStack(spacing: 8) {
+                Text("Aucun livre")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Button {
                     showBookForm = true
                 } label: {
-                    Label("Nouveau livre", systemImage: "plus.circle")
-                        .font(.caption)
-                        .frame(maxWidth: .infinity)
+                    Label("Créer un livre", systemImage: "plus")
                 }
-                .buttonStyle(.borderless)
-            } else {
-                // Aucun livre
-                VStack(spacing: 8) {
-                    Text("Aucun livre")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Button {
-                        showBookForm = true
-                    } label: {
-                        Label("Créer un livre", systemImage: "plus.circle.fill")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
         }
+    }
+
+    private func subtitle(for book: Book) -> String {
+        let count = accountsController.activeAccounts.count
+        let accounts = count > 1 ? "\(count) comptes" : "\(count) compte"
+        return "\(book.currency) · \(accounts)"
     }
 }

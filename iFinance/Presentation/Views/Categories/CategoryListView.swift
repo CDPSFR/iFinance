@@ -20,40 +20,6 @@ struct CategoryListView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Titre
-            HStack {
-                Text("Catégories")
-                    .font(.system(size: 34, weight: .bold))
-                Spacer()
-            }
-            .padding(.horizontal)
-            .padding(.top, 16)
-            .padding(.bottom, 8)
-            
-            // Barre de recherche
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(.secondary)
-                
-                TextField("Rechercher une catégorie...", text: $searchQuery)
-                    .textFieldStyle(.plain)
-                
-                if !searchQuery.isEmpty {
-                    Button {
-                        searchQuery = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 7)
-            .background(.quaternary.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-            
             // Contenu
             if categoriesController.isLoading {
                 ProgressView()
@@ -64,8 +30,8 @@ struct CategoryListView: View {
                 categoriesScrollView
             }
         }
-        // Fond légèrement teinté pour détacher les cartes (blanc sur blanc depuis macOS 26)
-        .background(Color(nsColor: .windowBackgroundColor).overlay(Color.primary.opacity(0.045)))
+        .pageBackground()
+        .searchable(text: $searchQuery, prompt: "Rechercher une catégorie")
         .sheet(isPresented: $showCategoryForm, onDismiss: { parentForNewCategory = nil }) {
             CategoryFormView(
                 isPresented: $showCategoryForm,
@@ -340,15 +306,7 @@ struct CategoryGroupView: View {
             }
             .buttonStyle(.plain)
         }
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(nsColor: .controlBackgroundColor))
-                .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(.separator.opacity(0.6))
-        )
+        .cardBackground()
         .padding(.horizontal, 16)
         .padding(.vertical, 6)
     }

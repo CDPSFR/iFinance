@@ -11,19 +11,8 @@ struct WealthView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                // Header
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Patrimoine")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-
-                    if let book = booksController.currentBook {
-                        Text(book.name)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding()
+                // Marge haute (le titre est dans la barre d'outils)
+                Color.clear.frame(height: 0)
 
                 // Totaux
                 LazyVGrid(columns: [

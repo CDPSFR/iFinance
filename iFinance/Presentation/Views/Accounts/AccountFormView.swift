@@ -35,109 +35,89 @@ struct AccountFormView: View {
     }
     
     var body: some View {
-        VStack(spacing: 20) {
-            // Header
-            HStack {
-                Text(accountToEdit == nil ? "Nouveau Compte" : "Modifier le compte")
-                    .font(.title)
-                    .fontWeight(.bold)
-                
-                Spacer()
-                
-                Button {
-                    isPresented = false
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
+        VStack(spacing: 0) {
+            // En-tête de feuille
+            VStack(alignment: .leading, spacing: 2) {
+                Text(accountToEdit == nil ? "Nouveau compte" : "Modifier le compte")
+                    .font(.headline)
+
+                if let book = bookController.currentBook {
+                    Text("Livre « \(book.name) »")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
             }
-            
-            Divider()
-            
-            // Formulaire
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+
+            // Formulaire groupé : étiquettes à gauche, contrôles à droite
             Form {
                 Section {
-                    TextField("Nom du compte", text: $name)
-                        .textFieldStyle(.roundedBorder)
-                    
-                    TextField("Banque (optionnel)", text: $bank)
-                        .textFieldStyle(.roundedBorder)
-                }
-                
-                Section {
-                    Picker("Type de compte", selection: $selectedType) {
+                    Picker("Type", selection: $selectedType) {
                         ForEach(AccountGroup.allCases, id: \.self) { group in
                             Section(group.displayName) {
                                 ForEach(group.types, id: \.self) { type in
-                                    HStack {
-                                        Image(systemName: type.icon)
-                                        Text(type.displayName)
-                                    }
-                                    .tag(type)
+                                    Label(type.displayName, systemImage: type.icon)
+                                        .tag(type)
                                 }
                             }
                         }
                     }
-                    .pickerStyle(.menu)
-                }
-                
-                Section {
-                    HStack {
-                        Text("Solde initial")
-                        Spacer()
-                        TextField("0.00", text: $initialBalance)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 150)
-                            .multilineTextAlignment(.trailing)
-                    }
 
+                    TextField("Nom", text: $name, prompt: Text("Nom du compte"))
+
+                    TextField("Établissement", text: $bank, prompt: Text("Facultatif"))
+                }
+
+                Section {
                     Picker("Devise", selection: $currency) {
                         ForEach(availableCurrencies, id: \.self) { curr in
                             Text(curr).tag(curr)
                         }
                     }
-                    .pickerStyle(.menu)
+
+                    TextField("Solde initial", text: $initialBalance, prompt: Text("0,00"))
+                        .multilineTextAlignment(.trailing)
+                        .monospacedDigit()
                 }
 
                 Section("Coordonnées bancaires") {
-                    TextField("IBAN (optionnel)", text: $iban)
-                        .textFieldStyle(.roundedBorder)
+                    TextField("IBAN", text: $iban, prompt: Text("Facultatif"))
 
-                    TextField("BIC (optionnel)", text: $bic)
-                        .textFieldStyle(.roundedBorder)
+                    TextField("BIC", text: $bic, prompt: Text("Facultatif"))
                 }
 
-                Section("Options") {
+                Section {
                     Toggle("Exclure du tableau de bord et des rapports", isOn: $isExcludedFromReports)
                 }
             }
             .formStyle(.grouped)
-            
-            Spacer()
-            
-            // Boutons
-            HStack {
+
+            Divider()
+
+            // Boutons : action par défaut à droite
+            HStack(spacing: 8) {
+                Spacer()
+
                 Button("Annuler") {
                     isPresented = false
                 }
                 .keyboardShortcut(.cancelAction)
-                
-                Spacer()
-                
-                Button(accountToEdit == nil ? "Créer" : "Modifier") {
+
+                Button(accountToEdit == nil ? "Créer" : "Enregistrer") {
                     saveAccount()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
                 .keyboardShortcut(.defaultAction)
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
         }
-        .padding()
-        .frame(width: 500, height: 640)
+        .frame(width: 480, height: 600)
     }
-    
+
     private func saveAccount() {
         guard !name.trimmingCharacters(in: .whitespaces).isEmpty,
               let bookID = bookController.currentBook?.id else { return }

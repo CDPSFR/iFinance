@@ -12,147 +12,111 @@ struct DashboardView: View {
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                // Header
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Vue d'ensemble")
-                            .font(.largeTitle)
-                            .fontWeight(.bold)
-                        
-                        if let book = booksController.currentBook {
-                            Text(book.name)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    // Date du jour
-                    Text(Date(), style: .date)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                .padding()
-                
-                // Cartes récapitulatives
-                LazyVGrid(columns: [
-                    GridItem(.flexible()),
-                    GridItem(.flexible()),
-                    GridItem(.flexible()),
-                    GridItem(.flexible())
-                ], spacing: 16) {
-                    // Liquidités (comptes courants, cartes)
-                    DashboardCard(
-                        title: "Liquidités",
-                        value: totalBalance,
-                        icon: "banknote",
-                        color: .blue
-                    )
-                    .privacyBlur(hidden: appSettings.hideAmounts)
-
-                    // Patrimoine net (tous les comptes)
-                    DashboardCard(
+            VStack(alignment: .leading, spacing: NativeMetrics.groupSpacing) {
+                // Chiffres clés (le titre est dans la barre d'outils)
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 190), spacing: NativeMetrics.groupSpacing)],
+                    spacing: NativeMetrics.groupSpacing
+                ) {
+                    StatTile(
                         title: "Patrimoine net",
                         value: formatted(valuation.total(of: wealthAccounts)),
-                        icon: "building.columns",
-                        color: .purple
-                    )
-                    .privacyBlur(hidden: appSettings.hideAmounts)
-                    
-                    // Nombre de comptes
-                    DashboardCard(
-                        title: "Comptes actifs",
-                        value: "\(accountsController.activeAccounts.count)",
-                        icon: "creditcard",
-                        color: .green
-                    )
-                    
-                    // Transactions ce mois
-                    DashboardCard(
-                        title: "Transactions ce mois",
-                        value: "\(transactionsThisMonth)",
-                        icon: "list.bullet",
-                        color: .orange
-                    )
-                }
-                .padding(.horizontal)
-                
-                // Dépenses ce mois
-                LazyVGrid(columns: [
-                    GridItem(.flexible()),
-                    GridItem(.flexible())
-                ], spacing: 16) {
-                    DashboardCard(
-                        title: "Dépenses ce mois",
-                        value: expensesThisMonth,
-                        icon: "arrow.down.circle",
-                        color: .red
+                        detail: accountsDetail
                     )
                     .privacyBlur(hidden: appSettings.hideAmounts)
 
-                    DashboardCard(
+                    StatTile(
+                        title: "Liquidités",
+                        value: totalBalance,
+                        detail: "Comptes courants et cartes"
+                    )
+                    .privacyBlur(hidden: appSettings.hideAmounts)
+
+                    StatTile(
                         title: "Revenus ce mois",
                         value: incomeThisMonth,
-                        icon: "arrow.up.circle",
-                        color: .green
+                        detail: monthName
+                    )
+                    .privacyBlur(hidden: appSettings.hideAmounts)
+
+                    StatTile(
+                        title: "Dépenses ce mois",
+                        value: expensesThisMonth,
+                        detail: "\(transactionsThisMonth) transaction\(transactionsThisMonth > 1 ? "s" : "") ce mois"
                     )
                     .privacyBlur(hidden: appSettings.hideAmounts)
                 }
-                .padding(.horizontal)
-                
-                // Liste des comptes
-                if !accountsController.activeAccounts.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("Vos comptes")
-                                .font(.headline)
-                            
-                            Spacer()
-                            
-                            Button {
-                                // Navigation vers liste des comptes (à implémenter si besoin)
-                            } label: {
-                                Text("Voir tout")
-                                    .font(.caption)
-                                    .foregroundColor(.blue)
+
+                HStack(alignment: .top, spacing: NativeMetrics.groupSpacing) {
+                    // Comptes
+                    if !accountsController.activeAccounts.isEmpty {
+                        VStack(alignment: .leading, spacing: 0) {
+                            GroupTitle("Comptes")
+                                .padding(.bottom, 8)
+
+                            ForEach(Array(accountsController.activeAccounts.enumerated()), id: \.element.id) { index, account in
+                                if index > 0 {
+                                    Divider()
+                                }
+                                DashboardAccountRow(account: account)
                             }
-                            .buttonStyle(.plain)
                         }
-                        .padding(.horizontal)
-                        
-                        ForEach(accountsController.activeAccounts) { account in
-                            AccountSummaryRow(account: account)
-                                .padding(.horizontal)
+                        .padding(NativeMetrics.groupPadding)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .cardBackground()
+                    }
+
+                    // Top catégories ce mois
+                    if !topCategories.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            GroupTitle("Top catégories ce mois")
+
+                            ForEach(topCategories, id: \.category) { item in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text(item.category)
+                                            .lineLimit(1)
+                                        Spacer()
+                                        Text(item.amount, format: .currency(code: booksController.currentBook?.currency ?? "EUR"))
+                                            .monospacedDigit()
+                                            .privacyBlur(hidden: appSettings.hideAmounts)
+                                    }
+
+                                    ProgressView(value: fraction(of: item.amount))
+                                        .progressViewStyle(.linear)
+                                        .controlSize(.small)
+                                }
+                            }
                         }
+                        .padding(NativeMetrics.groupPadding)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .cardBackground()
                     }
                 }
-                
-                // Top catégories ce mois (si transactions disponibles)
-                if !transactionsController.allTransactions.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Top catégories ce mois")
-                            .font(.headline)
-                            .padding(.horizontal)
-                        
-                        ForEach(topCategories, id: \.category) { item in
-                            TopCategoryRow(
-                                category: item.category,
-                                amount: item.amount,
-                                currency: booksController.currentBook?.currency ?? "EUR"
-                            )
-                            .padding(.horizontal)
-                        }
-                    }
-                }
-                
-                Spacer()
             }
+            .padding(NativeMetrics.pagePadding)
         }
         .pageBackground()
     }
-    
+
+    // MARK: - Présentation
+
+    private var accountsDetail: String {
+        let count = accountsController.activeAccounts.count
+        return "\(count) compte\(count > 1 ? "s" : "") actif\(count > 1 ? "s" : "")"
+    }
+
+    private var monthName: String {
+        Date().formatted(.dateTime.month(.wide).year()).capitalized
+    }
+
+    /// Part d'un montant par rapport à la première catégorie, pour la barre de progression
+    private func fraction(of amount: Decimal) -> Double {
+        guard let maximum = topCategories.first?.amount, maximum > 0 else { return 0 }
+        let ratio = NSDecimalNumber(decimal: amount / maximum).doubleValue
+        return min(max(ratio, 0), 1)
+    }
+
     // MARK: - Computed Properties
     
     private var valuation: AccountValuation {
@@ -343,5 +307,48 @@ struct TopCategoryRow: View {
         }
         .padding()
         .cardBackground(cornerRadius: 8)
+    }
+}
+
+/// Ligne de compte du tableau de bord : icône, nom, banque, solde
+struct DashboardAccountRow: View {
+    let account: Account
+    @EnvironmentObject var transactionsController: TransactionsController
+    @EnvironmentObject var investmentsController: InvestmentsController
+    @EnvironmentObject var savingsPlansController: SavingsPlansController
+    @EnvironmentObject var appSettings: AppSettings
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: account.type.icon)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(account.name)
+                    .lineLimit(1)
+
+                if let bank = account.bank, !bank.isEmpty {
+                    Text(bank)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            let balance = AccountValuation(
+                transactionsController: transactionsController,
+                investmentsController: investmentsController,
+                savingsPlansController: savingsPlansController
+            ).value(of: account)
+
+            Text(balance, format: .currency(code: account.currency))
+                .monospacedDigit()
+                .foregroundStyle(balance >= 0 ? Color.primary : Color.red)
+                .privacyBlur(hidden: appSettings.hideAmounts)
+        }
+        .padding(.vertical, 6)
     }
 }

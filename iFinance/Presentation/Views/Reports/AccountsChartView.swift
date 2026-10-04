@@ -43,7 +43,7 @@ struct AccountsChartView: View {
                     StatisticCardView(
                         title: "Nombre de comptes",
                         value: Decimal(accountData.count),
-                        color: .blue,
+                        color: .primary,
                         isCurrency: false
                     )
                     

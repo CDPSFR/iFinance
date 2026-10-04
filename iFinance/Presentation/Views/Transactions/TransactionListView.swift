@@ -19,50 +19,41 @@ struct TransactionListView: View {
     @State private var showBulkDeleteConfirmation = false
     @State private var showBulkCategorize = false
     @State private var transactionToConvert: Transaction?
+    @AppStorage("showTransactionInspector") private var showInspector = true
     @State private var sortOrder = [KeyPathComparator(\TransactionRow.date, order: .reverse)]
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(headerTitle)
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                    
+            // Bandeau du compte sélectionné (le titre est dans la barre d'outils)
+            if let accountID = transactionsController.filters.accountID,
+               let account = accountsController.getAccount(id: accountID) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(headerSubtitle)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Text(headerBalanceLabel(for: account))
+                        .foregroundStyle(.secondary)
+
+                    let balance = AccountValuation(
+                        transactionsController: transactionsController,
+                        investmentsController: investmentsController,
+                        savingsPlansController: savingsPlansController
+                    ).cash(of: account)
+
+                    Text(balance, format: .currency(code: account.currency))
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                        .foregroundStyle(balance >= 0 ? Color.primary : Color.red)
+                        .privacyBlur(hidden: appSettings.hideAmounts)
                 }
-                
-                Spacer()
-                
-                // Solde (si compte spécifique)
-                if let accountID = transactionsController.filters.accountID,
-                   let account = accountsController.getAccount(id: accountID) {
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text(headerBalanceLabel(for: account))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        let balance = AccountValuation(
-                            transactionsController: transactionsController,
-                            investmentsController: investmentsController,
-                            savingsPlansController: savingsPlansController
-                        ).cash(of: account)
-                        
-                        Text(balance, format: .currency(code: account.currency))
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(balance >= 0 ? .green : .red)
-                            .privacyBlur(hidden: appSettings.hideAmounts)
-                    }
-                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+
+                Divider()
             }
-            .padding()
-            
-            Divider()
-            
+
             // Badges filtres actifs
             if transactionsController.filters.isActive {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -132,14 +123,13 @@ struct TransactionListView: View {
                         } label: {
                             Text("Tout effacer")
                                 .font(.caption)
-                                .foregroundColor(.red)
+                                .foregroundStyle(Color.accentColor)
                         }
                         .buttonStyle(.plain)
                     }
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
                 }
-                .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
                 
                 Divider()
             }
@@ -152,6 +142,21 @@ struct TransactionListView: View {
                 emptyStateView
             } else {
                 transactionTable
+                TableStatusBar(items: statusItems)
+            }
+        }
+        .inspector(isPresented: $showInspector) {
+            inspectorContent
+                .inspectorColumnWidth(min: 240, ideal: 280, max: 380)
+        }
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    showInspector.toggle()
+                } label: {
+                    Label("Inspecteur", systemImage: "sidebar.right")
+                }
+                .help("Afficher ou masquer l'inspecteur")
             }
         }
         .sheet(item: $transactionToEdit) { transaction in
@@ -253,51 +258,24 @@ struct TransactionListView: View {
     
     private var transactionTable: some View {
         Table(tableRows, selection: $selectedTransactions, sortOrder: $sortOrder) {
-            // Colonne Type (icône)
-            TableColumn("") { row in
-                Image(systemName: row.typeIcon)
-                    .foregroundColor(row.typeColor)
-                    .frame(width: 20)
-            }
-            .width(30)
-            
             // Colonne Date
             TableColumn("Date", value: \.date) { row in
-                Text(row.date, style: .date)
-                    .font(.body)
+                Text(row.date, format: .dateTime.day().month(.abbreviated).year())
+                    .foregroundStyle(.secondary)
             }
-            .width(min: 100, ideal: 120)
-            
-            // Colonne Compte
-            TableColumn("Compte", value: \.accountName) { row in
-                HStack(spacing: 6) {
-                    Image(systemName: row.accountIcon)
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                    Text(row.accountName)
-                        .font(.body)
-                }
-            }
-            .width(min: 120, ideal: 150)
-            
+            .width(min: 90, ideal: 110)
+
             // Colonne Bénéficiaire
             TableColumn("Bénéficiaire", value: \.payeeNameForSort) { row in
                 if let payeeName = row.payeeName {
-                    HStack(spacing: 6) {
-                        Image(systemName: "person.crop.circle")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text(payeeName)
-                            .font(.body)
-                    }
+                    Text(payeeName)
                 } else {
                     Text("—")
-                        .font(.body)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .width(min: 150, ideal: 200)
-            
+            .width(min: 150, ideal: 220)
+
             // Colonne Catégorie
             TableColumn("Catégorie", value: \.categoryNameForSort) { row in
                 if let categoryName = row.categoryName {
@@ -308,21 +286,27 @@ struct TransactionListView: View {
                                 .frame(width: 8, height: 8)
                         }
                         Text(categoryName)
-                            .font(.body)
                     }
                 } else {
                     Text("—")
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .width(min: 120, ideal: 180)
+            .width(min: 120, ideal: 200)
+
+            // Colonne Compte
+            TableColumn("Compte", value: \.accountName) { row in
+                Text(row.accountName)
+                    .foregroundStyle(.secondary)
+            }
+            .width(min: 100, ideal: 140)
             
             // Colonne Montant
             TableColumn("Montant", value: \.amount) { row in
                 Text(row.amount, format: .currency(code: row.currency))
-                    .font(.body)
-                    .fontWeight(.medium)
-                    .foregroundColor(row.typeColor)
+                    .monospacedDigit()
+                    .foregroundStyle(row.amount > 0 ? Color.green : Color.primary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
                     .privacyBlur(hidden: appSettings.hideAmounts)
             }
             .width(min: 100, ideal: 120)
@@ -331,8 +315,9 @@ struct TransactionListView: View {
             if transactionsController.filters.accountID != nil {
                 TableColumn("Solde", value: \.balance) { row in
                     Text(row.balance, format: .currency(code: row.currency))
-                        .font(.body)
-                        .foregroundColor(row.balance >= 0 ? .green : .red)
+                        .monospacedDigit()
+                        .foregroundStyle(row.balance >= 0 ? Color.secondary : Color.red)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
                         .privacyBlur(hidden: appSettings.hideAmounts)
                 }
                 .width(min: 100, ideal: 120)
@@ -384,6 +369,124 @@ struct TransactionListView: View {
         }
     }
     
+    // MARK: - Inspecteur
+
+    private var selectedTransaction: Transaction? {
+        guard selectedTransactions.count == 1, let id = selectedTransactions.first else { return nil }
+        return transactionsController.filteredTransactions.first { $0.id == id }
+    }
+
+    @ViewBuilder
+    private var inspectorContent: some View {
+        if let transaction = selectedTransaction {
+            inspectorDetail(transaction)
+        } else if selectedTransactions.count > 1 {
+            ContentUnavailableView(
+                "\(selectedTransactions.count) transactions sélectionnées",
+                systemImage: "checklist",
+                description: Text("Clic droit pour catégoriser ou supprimer la sélection.")
+            )
+        } else {
+            ContentUnavailableView(
+                "Aucune sélection",
+                systemImage: "sidebar.right",
+                description: Text("Sélectionnez une transaction pour afficher son détail.")
+            )
+        }
+    }
+
+    private func inspectorDetail(_ transaction: Transaction) -> some View {
+        let account = accountsController.getAccount(id: transaction.accountID)
+        let currency = account?.currency ?? "EUR"
+        let payee = transaction.payeeID.flatMap { payeesController.getPayee(id: $0) }
+        let categoryPath = transaction.categoryID.map { categoriesController.getCategoryPath(for: $0) } ?? "—"
+        let amountText = appSettings.hideAmounts
+            ? "•••"
+            : transaction.signedAmount.formatted(.currency(code: currency))
+        let memo = transaction.memo?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        return InspectorContainer {
+            InspectorHeader(
+                title: payee?.name ?? transaction.type.displayName,
+                value: amountText,
+                valueColor: transaction.type == .credit ? .green : .primary
+            )
+
+            InspectorSection {
+                InspectorRow("Date", value: transaction.date.formatted(date: .long, time: .omitted))
+                InspectorRow("Compte", value: account?.name ?? "Inconnu")
+                InspectorRow("Catégorie", value: categoryPath)
+                InspectorRow("Type", value: transaction.type.displayName)
+                InspectorRow(label: "Pointée") {
+                    Toggle("Rapprochée avec le relevé", isOn: reconciledBinding(for: transaction))
+                        .toggleStyle(.checkbox)
+                }
+            }
+
+            InspectorSection(title: "Note") {
+                Text(memo.isEmpty ? "Aucune note" : memo)
+                    .foregroundStyle(memo.isEmpty ? .secondary : .primary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, minHeight: 84, alignment: .topLeading)
+                    .padding(8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color.primary.opacity(0.06))
+                    )
+            }
+
+            InspectorSection {
+                HStack(spacing: 8) {
+                    Button("Modifier…") {
+                        transactionToEdit = transaction
+                    }
+
+                    if transaction.type == .debit {
+                        Button("Convertir en transfert…") {
+                            transactionToConvert = transaction
+                        }
+                    }
+                }
+
+                Button("Supprimer…", role: .destructive) {
+                    transactionToDelete = transaction
+                    showDeleteConfirmation = true
+                }
+            }
+        }
+    }
+
+    private func reconciledBinding(for transaction: Transaction) -> Binding<Bool> {
+        Binding(
+            get: { transaction.isReconciled },
+            set: { newValue in
+                var updated = transaction
+                updated.isReconciled = newValue
+                Task {
+                    await transactionsController.updateTransaction(updated)
+                    await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
+                }
+            }
+        )
+    }
+
+    // MARK: - Barre d'état
+
+    private var statusItems: [String] {
+        let transactions = transactionsController.filteredTransactions
+        let count = transactions.count
+        var items = ["\(count) transaction\(count > 1 ? "s" : "")"]
+
+        guard !appSettings.hideAmounts else { return items }
+
+        let currency = booksController.currentBook?.currency ?? "EUR"
+        let credits = transactions.filter { $0.type == .credit }.reduce(Decimal(0)) { $0 + abs($1.amount) }
+        let debits = transactions.filter { $0.type == .debit }.reduce(Decimal(0)) { $0 + abs($1.amount) }
+        items.append("Entrées \(credits.formatted(.currency(code: currency)))")
+        items.append("Sorties \(debits.formatted(.currency(code: currency)))")
+        return items
+    }
+
     // MARK: - Table Rows
     
     private var tableRows: [TransactionRow] {

@@ -94,7 +94,7 @@ struct DuplicateDetectionView: View {
                 Button("Tout cocher (garder 1)") { preselectDuplicates() }
                     .buttonStyle(.plain)
                     .font(.subheadline)
-                    .foregroundColor(.blue)
+                    .foregroundStyle(Color.accentColor)
             }
             .padding(.horizontal)
             .padding(.vertical, 8)

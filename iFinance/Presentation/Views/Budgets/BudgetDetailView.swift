@@ -72,7 +72,7 @@ struct BudgetDetailView: View {
         VStack(spacing: 0) {
             HStack {
                 Text(budget.name)
-                    .font(.system(size: 34, weight: .bold))
+                    .font(.title2.weight(.semibold))
                 Spacer()
                 HStack(spacing: 8) {
                     Button("Ajuster") { showAdjustSheet = true }
@@ -114,7 +114,7 @@ struct BudgetDetailView: View {
                 Button { goToPreviousPeriod() } label: {
                     Image(systemName: "chevron.left")
                         .font(.caption.weight(.semibold))
-                        .foregroundColor(.blue)
+                        .foregroundStyle(Color.accentColor)
                 }
                 .buttonStyle(.plain)
                 .disabled(window.start <= budget.anchorDate)
@@ -127,7 +127,7 @@ struct BudgetDetailView: View {
                         .foregroundColor(.secondary)
                     Text("\(window.start, format: .dateTime.day().month()) – \(window.end, format: .dateTime.day().month().year())")
                         .font(.caption)
-                        .foregroundColor(isCurrentPeriod ? .blue : .secondary)
+                        .foregroundStyle(isCurrentPeriod ? Color.accentColor : Color.secondary)
                 }
 
                 Spacer()
@@ -135,14 +135,14 @@ struct BudgetDetailView: View {
                 Button { goToNextPeriod() } label: {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
-                        .foregroundColor(isCurrentPeriod ? .secondary : .blue)
+                        .foregroundStyle(isCurrentPeriod ? Color.secondary : Color.accentColor)
                 }
                 .buttonStyle(.plain)
                 .disabled(isCurrentPeriod)
             }
 
             ProgressView(value: progress)
-                .tint(isOverBudget ? .red : (progress > 0.8 ? .orange : .blue))
+                .tint(isOverBudget ? Color.red : (progress > 0.8 ? Color.orange : Color.accentColor))
 
             HStack {
                 VStack(alignment: .leading) {
@@ -186,7 +186,7 @@ struct BudgetDetailView: View {
                                 .font(.caption)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
-                                .background(Color.blue.opacity(0.12))
+                                .background(Color.accentColor.opacity(0.12))
                                 .cornerRadius(6)
                         }
                     }

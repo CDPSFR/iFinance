@@ -23,23 +23,13 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
-                // Titre
-                HStack {
-                    Text("Paramètres")
-                        .font(.system(size: 34, weight: .bold))
-                    Spacer()
-                }
-                .padding(.horizontal)
-                .padding(.top, 16)
-                .padding(.bottom, 16)
-
                 // Contenu
                 ScrollView {
                     VStack(spacing: 0) {
                         settingsSection(title: "Données") {
                             settingsRow(
                                 icon: "creditcard.fill",
-                                iconColor: .blue,
+                                iconColor: .accentColor,
                                 label: "Comptes",
                                 destination: Destination.accounts
                             )
@@ -88,7 +78,7 @@ struct SettingsView: View {
                         settingsSection(title: "Outils") {
                             actionRow(
                                 icon: "arrow.down.doc.fill",
-                                iconColor: .blue,
+                                iconColor: .accentColor,
                                 label: "Importer un fichier QIF",
                                 action: { showQIFImport = true }
                             )
@@ -111,8 +101,7 @@ struct SettingsView: View {
 
                 Spacer()
             }
-            // Fond légèrement teinté pour détacher les cartes (blanc sur blanc depuis macOS 26)
-            .background(Color(nsColor: .windowBackgroundColor).overlay(Color.primary.opacity(0.045)))
+            .pageBackground()
             .navigationDestination(for: Destination.self) { destination in
                 switch destination {
                 case .accounts:
@@ -180,25 +169,16 @@ struct SettingsView: View {
     private func settingsSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.headline)
-                .foregroundColor(.secondary)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 20)
-                .padding(.top, 8)
+                .padding(.top, 12)
 
             VStack(spacing: 0) {
                 content()
             }
-            .background(Color(nsColor: .controlBackgroundColor))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-                    .shadow(color: .black.opacity(0.08), radius: 3, y: 1)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(.separator.opacity(0.6))
-            )
+            .clipShape(RoundedRectangle(cornerRadius: NativeMetrics.groupCornerRadius, style: .continuous))
+            .cardBackground()
             .padding(.horizontal, 16)
         }
         .padding(.bottom, 8)
@@ -257,7 +237,6 @@ struct SettingsView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 7)
-        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     // MARK: - Toggle row
@@ -289,7 +268,6 @@ struct SettingsView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 7)
-        .background(Color(nsColor: .controlBackgroundColor))
 
         if !isLast {
             Divider().padding(.leading, 54)
@@ -342,7 +320,6 @@ struct SettingsView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 7)
-        .background(Color(nsColor: .controlBackgroundColor))
         .contentShape(Rectangle())
     }
 }

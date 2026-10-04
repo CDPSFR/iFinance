@@ -44,7 +44,7 @@ struct PayeesChartView: View {
                     StatisticCardView(
                         title: "Nombre de bénéficiaires",
                         value: Decimal(payeeData.count),
-                        color: .blue,
+                        color: .primary,
                         isCurrency: false
                     )
                     

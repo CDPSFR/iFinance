@@ -17,61 +17,37 @@ struct ReportsView: View {
         case categories = "Dépenses par catégorie"
         case accounts = "Dépenses par compte"
         case payees = "Dépenses par bénéficiaire"
-        case cashFlow = "Cash Flow - Revenus vs Dépenses"
+        case cashFlow = "Revenus et dépenses"
         
         var icon: String {
             switch self {
             case .balance: return "chart.line.uptrend.xyaxis"
             case .monthlyBalance: return "chart.bar.xaxis"
-            case .categories: return "chart.pie.fill"
-            case .accounts: return "creditcard.fill"
-            case .payees: return "person.2.fill"
-            case .cashFlow: return "chart.bar.fill"
+            case .categories: return "chart.pie"
+            case .accounts: return "creditcard"
+            case .payees: return "person.2"
+            case .cashFlow: return "chart.bar"
             }
         }
     }
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("Rapports")
-                    .font(.system(size: 34, weight: .bold))
-                
-                Spacer()
-            }
-            .padding()
-            
-            Divider()
-            
-            // Tabs
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 0) {
+        HStack(spacing: 0) {
+            // Liste des rapports (le titre est dans la barre d'outils)
+            List(selection: tabSelection) {
+                Section("Modèles") {
                     ForEach(ReportTab.allCases, id: \.self) { tab in
-                        Button {
-                            selectedTab = tab
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: tab.icon)
-                                    .font(.body)
-                                Text(tab.rawValue)
-                                    .font(.caption)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(selectedTab == tab ? Color.blue.opacity(0.1) : Color.clear)
-                            .foregroundColor(selectedTab == tab ? .blue : .secondary)
-                            .cornerRadius(6)
-                        }
-                        .buttonStyle(.plain)
+                        Label(tab.rawValue, systemImage: tab.icon)
+                            .tag(Optional(tab))
                     }
                 }
-                .padding(.horizontal)
             }
-            .padding(.vertical, 8)
-            
+            .listStyle(.inset)
+            .frame(width: 250)
+
             Divider()
-            
+
+            VStack(spacing: 0) {
             // Badges filtres actifs
             if transactionsController.filters.isActive {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -128,14 +104,13 @@ struct ReportsView: View {
                         } label: {
                             Text("Tout effacer")
                                 .font(.caption)
-                                .foregroundColor(.red)
+                                .foregroundStyle(Color.accentColor)
                         }
                         .buttonStyle(.plain)
                     }
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
                 }
-                .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
                 
                 Divider()
             }
@@ -143,9 +118,22 @@ struct ReportsView: View {
             // Contenu du graphique
             contentView
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .padding()
+                .padding(NativeMetrics.pagePadding)
+            }
         }
         .pageBackground()
+    }
+
+    /// Sélection de la liste : jamais vide
+    private var tabSelection: Binding<ReportTab?> {
+        Binding(
+            get: { selectedTab },
+            set: { newValue in
+                if let newValue {
+                    selectedTab = newValue
+                }
+            }
+        )
     }
     
     @ViewBuilder

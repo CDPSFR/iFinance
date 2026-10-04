@@ -10,26 +10,26 @@ struct StatisticCard: View {
     @EnvironmentObject var appSettings: AppSettings
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .font(.caption)
                 .foregroundColor(.secondary)
 
             if isCurrency {
                 Text(value, format: .currency(code: "EUR"))
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(color)
+                    .font(.title2.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(color)
                     .privacyBlur(hidden: appSettings.hideAmounts)
             } else {
                 Text("\(NSDecimalNumber(decimal: value).intValue)")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(color)
+                    .font(.title2.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(color)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .cardBackground(cornerRadius: 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(NativeMetrics.groupPadding)
+        .cardBackground()
     }
 }

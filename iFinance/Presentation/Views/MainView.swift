@@ -106,12 +106,21 @@ struct MainView: View {
     // MARK: - Sidebar
     private var sidebar: some View {
         VStack(spacing: 0) {
+            // Sélecteur de livre, en tête de barre latérale
+            BookSelectorButton(
+                showBookSelector: $showBookSelector,
+                showBookForm: $showBookForm
+            )
+            .padding(.horizontal, 10)
+            .padding(.top, 4)
+            .padding(.bottom, 6)
+
             List(selection: $selectedTab) {
 
                 // Vue d'ensemble
                 Section {
                     NavigationLink(value: SidebarItem.dashboard) {
-                        Label("Vue d'ensemble", systemImage: "chart.pie")
+                        Label("Vue d'ensemble", systemImage: "square.grid.2x2")
                     }
 
                     NavigationLink(value: SidebarItem.wealth) {
@@ -119,7 +128,7 @@ struct MainView: View {
                     }
 
                     NavigationLink(value: SidebarItem.allTransactions) {
-                        Label("Toutes les transactions", systemImage: "list.bullet.rectangle")
+                        Label("Toutes les transactions", systemImage: "list.bullet")
                     }
                 }
 
@@ -154,35 +163,27 @@ struct MainView: View {
                 // Organisation
                 Section("Organisation") {
                     NavigationLink(value: SidebarItem.categories) {
-                        Label("Catégories", systemImage: "folder.fill")
+                        Label("Catégories", systemImage: "tag")
                     }
 
                     NavigationLink(value: SidebarItem.payees) {
-                        Label("Bénéficiaires", systemImage: "person.crop.circle.fill")
+                        Label("Bénéficiaires", systemImage: "person.2")
                     }
 
                     NavigationLink(value: SidebarItem.budgets) {
-                        Label("Budgets", systemImage: "target")
+                        Label("Budgets", systemImage: "chart.pie")
                     }
 
                     NavigationLink(value: SidebarItem.reports) {
-                        Label("Rapports", systemImage: "chart.line.uptrend.xyaxis")
+                        Label("Rapports", systemImage: "chart.bar")
                     }
 
                     NavigationLink(value: SidebarItem.settings) {
-                        Label("Paramètres", systemImage: "gear")
+                        Label("Paramètres", systemImage: "gearshape")
                     }
                 }
             }
             .listStyle(.sidebar)
-            .navigationTitle("iFinance")
-
-            // Sélecteur de livre
-            BookSelectorButton(
-                showBookSelector: $showBookSelector,
-                showBookForm: $showBookForm
-            )
-            .padding(8)
         }
     }
 
@@ -228,6 +229,8 @@ struct MainView: View {
                     SettingsView()
                 }
             }
+            .navigationTitle(windowTitle)
+            .navigationSubtitle(booksController.currentBook?.name ?? "")
             .onChange(of: selectedTab) { oldValue, newValue in
                 // Gérer le filtrage selon le cas
                 switch newValue {
@@ -254,12 +257,13 @@ struct MainView: View {
                     Button {
                         showFilterForm = true
                     } label: {
-                        Label("Filtres", systemImage: "line.3.horizontal.decrease.circle")
+                        Label("Filtres", systemImage: transactionsController.filters.isActive
+                              ? "line.3.horizontal.decrease.circle.fill"
+                              : "line.3.horizontal.decrease")
                     }
                     .keyboardShortcut("f", modifiers: .command)
-                    .background(transactionsController.filters.isActive ? Color.blue.opacity(0.2) : Color.clear)
-                    .foregroundColor(transactionsController.filters.isActive ? .blue : .primary)
-                    .cornerRadius(6)
+                    .foregroundStyle(transactionsController.filters.isActive ? Color.accentColor : Color.primary)
+                    .help("Filtrer les transactions")
                 }
 
                 // Menu dropdown pour créer différents éléments
@@ -293,7 +297,15 @@ struct MainView: View {
                     Button {
                         showBudgetForm = true
                     } label: {
-                        Label("Nouveau budget", systemImage: "target")
+                        Label("Nouveau budget", systemImage: "chart.pie")
+                    }
+
+                    Divider()
+
+                    Button {
+                        showBookForm = true
+                    } label: {
+                        Label("Nouveau livre", systemImage: "book.closed")
                     }
                 } label: {
                     Image(systemName: "plus")
@@ -310,6 +322,21 @@ struct MainView: View {
     }
 
     // MARK: - Helpers
+    /// Titre affiché dans la barre d'outils unifiée
+    private var windowTitle: String {
+        switch selectedTab {
+        case .dashboard: return "Vue d'ensemble"
+        case .wealth: return "Patrimoine"
+        case .allTransactions: return "Transactions"
+        case .account(let id): return accountsController.getAccount(id: id)?.name ?? "Compte"
+        case .categories: return "Catégories"
+        case .payees: return "Bénéficiaires"
+        case .budgets: return "Budgets"
+        case .reports: return "Rapports"
+        case .settings: return "Paramètres"
+        }
+    }
+
     private var valuation: AccountValuation {
         AccountValuation(transactionsController: transactionsController, investmentsController: investmentsController, savingsPlansController: savingsPlansController)
     }

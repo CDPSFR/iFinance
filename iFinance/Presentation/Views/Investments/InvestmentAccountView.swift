@@ -85,10 +85,6 @@ struct InvestmentAccountView: View {
         return VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(account.name)
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-
                     Text(account.bank.map { "\(account.type.displayName) · \($0)" } ?? account.type.displayName)
                         .font(.subheadline)
                         .foregroundColor(.secondary)

@@ -11,52 +11,45 @@ struct BookFormView: View {
     let availableCurrencies = ["EUR", "USD", "GBP", "CHF", "CAD", "JPY", "AUD"]
     
     var body: some View {
-        VStack(spacing: 20) {
-            // Header
-            HStack {
-                Text("Nouveau Livre")
-                    .font(.title)
-                    .fontWeight(.bold)
-                
-                Spacer()
-                
-                Button {
-                    isPresented = false
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
+        VStack(spacing: 0) {
+            // En-tête de feuille
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Nouveau livre de comptes")
+                    .font(.headline)
+
+                Text("Un livre regroupe ses propres comptes, catégories, budgets et bénéficiaires.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            
-            Divider()
-            
-            // Formulaire
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+
             Form {
-                TextField("Nom du livre", text: $name)
-                    .textFieldStyle(.roundedBorder)
-                
-                Picker("Devise", selection: $currency) {
-                    ForEach(availableCurrencies, id: \.self) { curr in
-                        Text(curr).tag(curr)
+                Section {
+                    TextField("Nom", text: $name, prompt: Text("Nom du livre"))
+
+                    Picker("Devise principale", selection: $currency) {
+                        ForEach(availableCurrencies, id: \.self) { curr in
+                            Text(curr).tag(curr)
+                        }
                     }
                 }
-                .pickerStyle(.menu)
             }
             .formStyle(.grouped)
-            
-            Spacer()
-            
-            // Boutons
-            HStack {
+
+            Divider()
+
+            // Boutons : action par défaut à droite
+            HStack(spacing: 8) {
+                Spacer()
+
                 Button("Annuler") {
                     isPresented = false
                 }
                 .keyboardShortcut(.cancelAction)
-                
-                Spacer()
-                
+
                 Button("Créer") {
                     createBook()
                 }
@@ -64,11 +57,12 @@ struct BookFormView: View {
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
                 .keyboardShortcut(.defaultAction)
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
         }
-        .padding()
-        .frame(width: 400, height: 300)
+        .frame(width: 440, height: 260)
     }
-    
+
     private func createBook() {
         guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         
