@@ -8,6 +8,7 @@ struct TransactionListView: View {
     @EnvironmentObject var savingsPlansController: SavingsPlansController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var payeesController: PayeesController
+    @EnvironmentObject var projectsController: ProjectsController
     @EnvironmentObject var appSettings: AppSettings
     
     @State private var showTransactionForm = false
@@ -134,20 +135,21 @@ struct TransactionListView: View {
                 Divider()
             }
             
-            // Table des transactions
-            if transactionsController.isLoading {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if transactionsController.filteredTransactions.isEmpty {
-                emptyStateView
-            } else {
-                transactionTable
-                TableStatusBar(items: statusItems)
+            // L'inspecteur se loge sous l'en-tête de la page
+            SidePanelLayout(isPresented: $showInspector) {
+                // Table des transactions
+                if transactionsController.isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if transactionsController.filteredTransactions.isEmpty {
+                    emptyStateView
+                } else {
+                    transactionTable
+                    TableStatusBar(items: statusItems)
+                }
+            } panel: {
+                inspectorContent
             }
-        }
-        .inspector(isPresented: $showInspector) {
-            inspectorContent
-                .inspectorColumnWidth(min: 240, ideal: 280, max: 380)
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
@@ -416,6 +418,17 @@ struct TransactionListView: View {
                 InspectorRow("Date", value: transaction.date.formatted(date: .long, time: .omitted))
                 InspectorRow("Compte", value: account?.name ?? "Inconnu")
                 InspectorRow("Catégorie", value: categoryPath)
+                InspectorRow(label: "Projet") {
+                    Picker("Projet", selection: projectBinding(for: transaction)) {
+                        Text("Aucun").tag(UUID?.none)
+                        Divider()
+                        ForEach(projectsController.selectableProjects(including: transaction.projectID)) { project in
+                            Text(project.name).tag(UUID?.some(project.id))
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
                 InspectorRow("Type", value: transaction.type.displayName)
                 InspectorRow(label: "Pointée") {
                     Toggle("Rapprochée avec le relevé", isOn: reconciledBinding(for: transaction))
@@ -454,6 +467,20 @@ struct TransactionListView: View {
                 }
             }
         }
+    }
+
+    private func projectBinding(for transaction: Transaction) -> Binding<UUID?> {
+        Binding(
+            get: { projectsController.project(id: transaction.projectID)?.id },
+            set: { newValue in
+                var updated = transaction
+                updated.projectID = newValue
+                Task {
+                    await transactionsController.updateTransaction(updated)
+                    await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
+                }
+            }
+        )
     }
 
     private func reconciledBinding(for transaction: Transaction) -> Binding<Bool> {

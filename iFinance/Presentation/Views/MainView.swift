@@ -11,6 +11,7 @@ struct MainView: View {
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var payeesController: PayeesController
     @EnvironmentObject var budgetsController: BudgetsController
+    @EnvironmentObject var projectsController: ProjectsController
 
     // MARK: - State
     @State private var showTransactionForm = false
@@ -43,6 +44,7 @@ struct MainView: View {
         case categories
         case payees
         case budgets
+        case projects
         case reports
         case settings
 
@@ -55,6 +57,7 @@ struct MainView: View {
             case .categories: return "categories"
             case .payees: return "payees"
             case .budgets: return "budgets"
+            case .projects: return "projects"
             case .reports: return "reports"
             case .settings: return "settings"
             }
@@ -114,6 +117,7 @@ struct MainView: View {
                 await investmentsController.load(for: accountsController.activeAccounts)
                 await savingsPlansController.load(for: accountsController.activeAccounts)
                 await budgetsController.loadBudgets(for: bookID)
+                await projectsController.loadProjects(for: bookID)
             }
         }
     }
@@ -187,6 +191,10 @@ struct MainView: View {
                         Label("Budgets", systemImage: "chart.pie")
                     }
 
+                    NavigationLink(value: SidebarItem.projects) {
+                        Label("Projets", systemImage: "folder")
+                    }
+
                     NavigationLink(value: SidebarItem.reports) {
                         Label("Rapports", systemImage: "chart.bar")
                     }
@@ -238,6 +246,10 @@ struct MainView: View {
                     CategoryListView(selectedTab: $selectedTab)
                 case .payees:
                     PayeeListView(selectedTab: $selectedTab)
+                case .projects:
+                    NavigationStack {
+                        ProjectsView()
+                    }
                 case .budgets:
                     NavigationStack {
                         BudgetsView()
@@ -358,6 +370,7 @@ struct MainView: View {
         case .categories: return "Catégories"
         case .payees: return "Bénéficiaires"
         case .budgets: return "Budgets"
+        case .projects: return "Projets"
         case .reports: return "Rapports"
         case .settings: return "Paramètres"
         }

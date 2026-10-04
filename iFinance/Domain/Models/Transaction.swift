@@ -114,6 +114,7 @@ struct Transaction: Identifiable, Codable, Equatable, Hashable {
     var isReconciled: Bool = false
     var recurringTemplateID: UUID?   // Lien vers template récurrent
     var status: TransactionStatus = .cleared
+    var projectID: UUID?             // Projet auquel la transaction est rattachée
     
     // Helper pour savoir si c'est un transfert
     var isTransfer: Bool {

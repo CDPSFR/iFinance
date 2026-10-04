@@ -53,15 +53,16 @@ struct BudgetsView: View {
             } else {
                 summaryHeader
                 Divider()
-                budgetTable
-                TableStatusBar(items: statusItems)
+                // L'inspecteur se loge sous l'en-tête
+                SidePanelLayout(isPresented: $showInspector) {
+                    budgetTable
+                    TableStatusBar(items: statusItems)
+                } panel: {
+                    inspectorContent
+                }
             }
         }
         .searchable(text: $searchText, prompt: "Rechercher un budget")
-        .inspector(isPresented: $showInspector) {
-            inspectorContent
-                .inspectorColumnWidth(min: 240, ideal: 280, max: 380)
-        }
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button {

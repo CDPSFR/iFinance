@@ -57,21 +57,22 @@ struct CategoryListView: View {
         let roots = rootRows
 
         VStack(spacing: 0) {
-            if categoriesController.isLoading {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if roots.isEmpty {
-                emptyCategoriesView
-            } else {
-                categoryTable(roots)
-                TableStatusBar(items: statusItems(roots))
+            // L'inspecteur se loge sous l'en-tête de la page
+            SidePanelLayout(isPresented: $showInspector) {
+                if categoriesController.isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if roots.isEmpty {
+                    emptyCategoriesView
+                } else {
+                    categoryTable(roots)
+                    TableStatusBar(items: statusItems(roots))
+                }
+            } panel: {
+                inspectorContent(roots)
             }
         }
         .searchable(text: $searchQuery, prompt: "Rechercher une catégorie")
-        .inspector(isPresented: $showInspector) {
-            inspectorContent(roots)
-                .inspectorColumnWidth(min: 240, ideal: 280, max: 380)
-        }
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
                 Picker("Type", selection: $kind) {

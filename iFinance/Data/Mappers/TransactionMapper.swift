@@ -20,7 +20,8 @@ struct TransactionMapper {
             memo: transaction.memo,
             isReconciled: transaction.isReconciled,
             recurringTemplateID: transaction.recurringTemplateID?.uuidString,
-            status: transaction.status.rawValue
+            status: transaction.status.rawValue,
+            projectID: transaction.projectID?.uuidString
         )
     }
     
@@ -46,7 +47,8 @@ struct TransactionMapper {
             memo: dto.memo,
             isReconciled: dto.isReconciled,
             recurringTemplateID: dto.recurringTemplateID.flatMap { UUID(uuidString: $0) },
-            status: status
+            status: status,
+            projectID: dto.projectID.flatMap { UUID(uuidString: $0) }
         )
     }
     
@@ -74,7 +76,8 @@ struct TransactionMapper {
             memo: row["memo"] as? String,
             isReconciled: isReconciledInt == 1,
             recurringTemplateID: row["recurring_template_id"] as? String,
-            status: statusStr
+            status: statusStr,
+            projectID: row["project_id"] as? String
         )
         
         return fromDTO(dto)

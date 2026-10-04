@@ -41,21 +41,22 @@ struct PayeeListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if payeesController.isLoading {
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if tableRows.isEmpty {
-                emptyPayeesView
-            } else {
-                payeeTable
-                TableStatusBar(items: statusItems)
+            // L'inspecteur se loge sous l'en-tête de la page
+            SidePanelLayout(isPresented: $showInspector) {
+                if payeesController.isLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if tableRows.isEmpty {
+                    emptyPayeesView
+                } else {
+                    payeeTable
+                    TableStatusBar(items: statusItems)
+                }
+            } panel: {
+                inspectorContent
             }
         }
         .searchable(text: $searchQuery, prompt: "Rechercher un bénéficiaire")
-        .inspector(isPresented: $showInspector) {
-            inspectorContent
-                .inspectorColumnWidth(min: 240, ideal: 280, max: 380)
-        }
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button {

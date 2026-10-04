@@ -12,6 +12,7 @@ struct DatabaseSchema {
         createBudgetsTable,
         createBudgetVersionsTable,
         createAnnualBudgetEntriesTable,
+        createProjectsTable,
         createInvestmentPositionsTable,
         createInvestmentTransactionsTable,
         createAccountValuationsTable,
@@ -27,7 +28,9 @@ struct DatabaseSchema {
         "ALTER TABLE accounts ADD COLUMN is_hidden_from_sidebar INTEGER NOT NULL DEFAULT 0;",
         "ALTER TABLE accounts ADD COLUMN is_excluded_from_budgets INTEGER NOT NULL DEFAULT 0;",
         // Books
-        "ALTER TABLE books ADD COLUMN color TEXT;"
+        "ALTER TABLE books ADD COLUMN color TEXT;",
+        // Transactions
+        "ALTER TABLE transactions ADD COLUMN project_id TEXT;"
     ]
 
     static let createIndexStatements: [String] = [
@@ -50,6 +53,7 @@ struct DatabaseSchema {
         
         // Indexes pour Budgets
         "CREATE INDEX IF NOT EXISTS idx_budgets_book ON budgets(book_id);",
+        "CREATE INDEX IF NOT EXISTS idx_projects_book ON projects(book_id);",
         "CREATE INDEX IF NOT EXISTS idx_budget_versions_budget ON budget_versions(budget_id);",
         "CREATE INDEX IF NOT EXISTS idx_annual_budget_book_year ON annual_budget_entries(book_id, year);",
         
@@ -155,6 +159,7 @@ struct DatabaseSchema {
         is_reconciled INTEGER NOT NULL DEFAULT 0,
         recurring_template_id TEXT,
         status TEXT NOT NULL DEFAULT 'cleared',
+        project_id TEXT,
         FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
         FOREIGN KEY (to_account_id) REFERENCES accounts(id) ON DELETE SET NULL,
         FOREIGN KEY (linked_transaction_id) REFERENCES transactions(id) ON DELETE SET NULL,
@@ -232,6 +237,25 @@ struct DatabaseSchema {
         PRIMARY KEY (book_id, category_id, year, month),
         FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE,
         FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+    );
+    """
+
+    // MARK: - Projets
+
+    /// Regroupement de transactions autour d'un même thème (voyage, achat, travaux)
+    static let createProjectsTable: String = """
+    CREATE TABLE IF NOT EXISTS projects (
+        id TEXT PRIMARY KEY,
+        book_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        color TEXT,
+        start_date TEXT,
+        end_date TEXT,
+        budget TEXT,
+        is_completed INTEGER NOT NULL DEFAULT 0,
+        note TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
     );
     """
 

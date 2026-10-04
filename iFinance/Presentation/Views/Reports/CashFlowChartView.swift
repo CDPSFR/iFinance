@@ -125,8 +125,8 @@ struct CashFlowChartView: View {
                 }
             }
             .chartForegroundStyleScale([
-                "Revenus": Color.accentColor,
-                "Dépenses": Color.orange
+                "Revenus": Color.green,
+                "Dépenses": Color.red
             ])
             .chartXAxis {
                 AxisMarks(values: .stride(by: .month)) { _ in

@@ -1,5 +1,8 @@
 import SwiftUI
+import Charts
 
+/// Détail d'un budget : chiffres de la période, rythme de dépense, périodes précédentes,
+/// transactions, et inspecteur (catégories, réglages, historique des montants).
 struct BudgetDetailView: View {
     let budget: Budget
 
@@ -7,38 +10,83 @@ struct BudgetDetailView: View {
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var payeesController: PayeesController
+    @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var appSettings: AppSettings
+    @Environment(\.dismiss) private var dismiss
 
     @State private var versions: [BudgetVersion] = []
     @State private var showEditForm = false
     @State private var showAdjustSheet = false
+    @State private var showDeleteConfirmation = false
     @State private var adjustAmount: String = ""
     @State private var adjustNote: String = ""
     @State private var adjustDate: Date = Date()
     @State private var referenceDate: Date = Date()
+    @State private var selectedHistoryLabel: String?
+    @AppStorage("showBudgetDetailInspector") private var showInspector = true
 
-    private var window: (start: Date, end: Date) {
-        budget.period.currentWindow(anchor: budget.anchorDate, relativeTo: referenceDate)
+    typealias Window = (start: Date, end: Date)
+
+    /// Dépense d'une période, pour le graphique des périodes précédentes
+    struct PeriodPoint: Identifiable {
+        let start: Date
+        let label: String
+        let spent: Decimal
+        let amount: Decimal
+
+        var id: Date { start }
+        var kind: String { spent > amount && amount > 0 ? "Dépassé" : "Dans le budget" }
     }
+
+    struct PacePoint: Identifiable {
+        let date: Date
+        let value: Double
+        let series: String
+
+        var id: String { "\(series)-\(date.timeIntervalSince1970)" }
+    }
+
+    private static let historyCount = 6
+
+    // MARK: - Période affichée
+
+    /// Budget à jour (nom, catégories, note) après une modification
+    private var current: Budget {
+        budgetsController.budgets.first { $0.id == budget.id } ?? budget
+    }
+
+    private var window: Window {
+        current.period.currentWindow(anchor: current.anchorDate, relativeTo: referenceDate)
+    }
+
     private var isCurrentPeriod: Bool {
-        let current = budget.period.currentWindow(anchor: budget.anchorDate)
-        return window.start == current.start
+        window.start == current.period.currentWindow(anchor: current.anchorDate).start
     }
 
-    /// Version active pour la période affichée
-    private var versionForPeriod: BudgetVersion? {
+    private var canGoBack: Bool { window.start > current.anchorDate }
+
+    private func goToPreviousPeriod() {
+        referenceDate = Calendar.current.date(byAdding: .day, value: -1, to: window.start) ?? window.start
+    }
+
+    private func goToNextPeriod() {
+        referenceDate = window.end
+    }
+
+    /// Montant en vigueur au début d'une période
+    private func amount(for window: Window) -> Decimal {
         let calendar = Calendar.current
-        let windowDay = calendar.startOfDay(for: window.start)
+        let day = calendar.startOfDay(for: window.start)
         return versions
-            .filter { calendar.startOfDay(for: $0.effectiveFrom) <= windowDay }
-            .sorted { $0.effectiveFrom > $1.effectiveFrom }
-            .first
+            .filter { calendar.startOfDay(for: $0.effectiveFrom) <= day }
+            .max { $0.effectiveFrom < $1.effectiveFrom }?
+            .amount ?? 0
     }
-    private var amount: Decimal { versionForPeriod?.amount ?? 0 }
 
-    private var periodTransactions: [Transaction] {
-        let categorySet = Set(budget.categoryIDs)
+    /// Dépenses du budget sur une période, de la plus récente à la plus ancienne
+    private func transactions(in window: Window) -> [Transaction] {
+        let categorySet = Set(current.categoryIDs)
         let excludedAccounts = budgetsController.excludedAccountIDs()
         return transactionsController.allTransactions
             .filter { tx in
@@ -52,285 +100,526 @@ struct BudgetDetailView: View {
             .sorted { $0.date > $1.date }
     }
 
-    private var spent: Decimal {
-        periodTransactions.reduce(Decimal(0)) { $0 + abs($1.signedAmount) }
+    private func total(_ transactions: [Transaction]) -> Decimal {
+        transactions.reduce(Decimal(0)) { $0 + abs($1.signedAmount) }
     }
-    private var remaining: Decimal { amount - spent }
-    private var progress: Double {
-        guard amount > 0 else { return 0 }
-        return min(1.0, Double(truncating: NSDecimalNumber(decimal: spent / amount)))
-    }
-    private var isOverBudget: Bool { spent > amount }
 
-    private func goToPreviousPeriod() {
-        let prev = Calendar.current.date(byAdding: .day, value: -1, to: window.start)!
-        referenceDate = prev
-    }
-    private func goToNextPeriod() {
-        referenceDate = window.end
-    }
+    // MARK: - Body
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(budget.name)
-                    .font(.title2.weight(.semibold))
-                Spacer()
-                HStack(spacing: 8) {
-                    Button("Ajuster") { showAdjustSheet = true }
-                        .buttonStyle(.bordered)
-                    Button { showEditForm = true } label: {
-                        Image(systemName: "pencil")
-                    }
-                    .buttonStyle(.bordered)
-                }
-            }
-            .padding(.horizontal)
-            .padding(.top, 16)
-            .padding(.bottom, 16)
+        let window = self.window
+        let transactions = transactions(in: window)
+        let amount = amount(for: window)
+        let spent = total(transactions)
 
-            ScrollView {
-                VStack(spacing: 16) {
-                    periodCard
-                    transactionList
-                    versionHistory
+        VStack(spacing: 0) {
+            summaryHeader(window: window, amount: amount, spent: spent)
+            Divider()
+
+            // L'inspecteur se loge sous l'en-tête
+            SidePanelLayout(isPresented: $showInspector) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: NativeMetrics.groupSpacing) {
+                        HStack(alignment: .top, spacing: NativeMetrics.groupSpacing) {
+                            paceBlock(window: window, amount: amount, transactions: transactions)
+                            historyBlock(selected: window)
+                        }
+                        transactionsBlock(transactions)
+                    }
+                    .padding(NativeMetrics.pagePadding)
                 }
-                .padding()
+
+                TableStatusBar(items: statusItems(transactions, spent: spent))
+            } panel: {
+                inspectorContent(transactions: transactions, spent: spent)
+            }
+        }
+        .pageBackground()
+        .navigationTitle(current.name)
+        .navigationSubtitle("\(current.period.displayName) · \(periodLabel(window))")
+        .toolbar {
+            ToolbarItemGroup(placement: .automatic) {
+                Button {
+                    goToPreviousPeriod()
+                } label: {
+                    Label("Période précédente", systemImage: "chevron.left")
+                }
+                .disabled(!canGoBack)
+                .help("Période précédente")
+
+                Button {
+                    referenceDate = Date()
+                } label: {
+                    Text(isCurrentPeriod ? "Période en cours" : periodLabel(window))
+                }
+                .help("Revenir à la période en cours")
+
+                Button {
+                    goToNextPeriod()
+                } label: {
+                    Label("Période suivante", systemImage: "chevron.right")
+                }
+                .disabled(isCurrentPeriod)
+                .help("Période suivante")
+
+                Button("Ajuster le montant…") { showAdjustSheet = true }
+                    .help("Changer le montant du budget à partir d'une date")
+
+                Button {
+                    showInspector.toggle()
+                } label: {
+                    Label("Inspecteur", systemImage: "sidebar.right")
+                }
+                .help("Afficher ou masquer l'inspecteur")
             }
         }
         .task { await loadVersions() }
+        .onChange(of: budgetsController.budgets) { _, _ in
+            Task { await loadVersions() }
+        }
         .sheet(isPresented: $showEditForm) {
-            BudgetFormView(isPresented: $showEditForm, budgetToEdit: budget)
+            BudgetFormView(isPresented: $showEditForm, budgetToEdit: current)
         }
         .sheet(isPresented: $showAdjustSheet) {
             adjustSheet
         }
-        .pageBackground()
-    }
-
-    // MARK: - Period Card
-
-    private var periodCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Button { goToPreviousPeriod() } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.accentColor)
-                }
-                .buttonStyle(.plain)
-                .disabled(window.start <= budget.anchorDate)
-
-                Spacer()
-
-                VStack(spacing: 2) {
-                    Text(budget.period.displayName)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    Text("\(window.start, format: .dateTime.day().month()) – \(window.end, format: .dateTime.day().month().year())")
-                        .font(.caption)
-                        .foregroundStyle(isCurrentPeriod ? Color.accentColor : Color.secondary)
-                }
-
-                Spacer()
-
-                Button { goToNextPeriod() } label: {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(isCurrentPeriod ? Color.secondary : Color.accentColor)
-                }
-                .buttonStyle(.plain)
-                .disabled(isCurrentPeriod)
-            }
-
-            ProgressView(value: progress)
-                .tint(isOverBudget ? Color.red : (progress > 0.8 ? Color.orange : Color.accentColor))
-
-            HStack {
-                VStack(alignment: .leading) {
-                    Text("Dépensé")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(spent, format: .currency(code: booksController.currentBook?.currency ?? "EUR"))
-                        .font(.title3).fontWeight(.semibold)
-                        .foregroundColor(isOverBudget ? .red : .primary)
-                        .privacyBlur(hidden: appSettings.hideAmounts)
-                }
-                Spacer()
-                VStack(alignment: .trailing) {
-                    Text("Budget")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Text(amount, format: .currency(code: booksController.currentBook?.currency ?? "EUR"))
-                        .font(.title3).fontWeight(.semibold)
-                        .privacyBlur(hidden: appSettings.hideAmounts)
+        .alert("Supprimer le budget ?", isPresented: $showDeleteConfirmation) {
+            Button("Annuler", role: .cancel) { }
+            Button("Supprimer", role: .destructive) {
+                Task {
+                    await budgetsController.deleteBudget(id: budget.id)
+                    dismiss()
                 }
             }
-
-            if isOverBudget {
-                Label("Dépassé de \(spent - amount, format: .currency(code: booksController.currentBook?.currency ?? "EUR"))", systemImage: "exclamationmark.triangle.fill")
-                    .foregroundColor(.red)
-                    .font(.caption)
-                    .privacyBlur(hidden: appSettings.hideAmounts)
-            } else {
-                Text("\(remaining, format: .currency(code: booksController.currentBook?.currency ?? "EUR")) restants (\(Int(progress * 100))%)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .privacyBlur(hidden: appSettings.hideAmounts)
-            }
-
-            if !budget.categoryIDs.isEmpty {
-                Divider()
-                FlowLayout(spacing: 6) {
-                    ForEach(budget.categoryIDs, id: \.self) { catID in
-                        if let cat = categoriesController.getCategory(id: catID) {
-                            Text(cat.name)
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.accentColor.opacity(0.12))
-                                .cornerRadius(6)
-                        }
-                    }
-                }
-            }
-
-            if let note = budget.note, !note.isEmpty {
-                Divider()
-                Text(note)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .padding()
-        .cardBackground(cornerRadius: 10)
-    }
-
-    // MARK: - Transaction List
-
-    private var transactionList: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Transactions")
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .foregroundColor(.secondary)
-
-            if periodTransactions.isEmpty {
-                Text("Aucune transaction sur cette période")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.vertical, 8)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(periodTransactions.enumerated()), id: \.element.id) { idx, tx in
-                        transactionRow(tx)
-                        if idx < periodTransactions.count - 1 {
-                            Divider().padding(.leading, 52)
-                        }
-                    }
-                }
-                .cardBackground(cornerRadius: 10)
-            }
+        } message: {
+            Text("Le budget « \(current.name) » et son historique de montants seront supprimés. Les transactions ne sont pas touchées.")
         }
     }
 
-    @ViewBuilder
-    private func transactionRow(_ tx: Transaction) -> some View {
-        let currency = booksController.currentBook?.currency ?? "EUR"
-        HStack(spacing: 12) {
-            // Icône catégorie
-            if let catID = tx.categoryID,
-               let cat = categoriesController.getCategory(id: catID),
-               let icon = cat.icon {
-                Image(systemName: icon)
-                    .font(.system(size: 13))
-                    .foregroundColor(.white)
-                    .frame(width: 28, height: 28)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.red.opacity(0.8)))
-            } else {
-                Image(systemName: "arrow.down.circle")
-                    .font(.system(size: 13))
-                    .foregroundColor(.white)
-                    .frame(width: 28, height: 28)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.red.opacity(0.8)))
-            }
+    // MARK: - Grands chiffres
 
-            VStack(alignment: .leading, spacing: 2) {
-                // Libellé : bénéficiaire > mémo > fallback
-                if let payeeID = tx.payeeID,
-                   let payee = payeesController.getPayee(id: payeeID) {
-                    Text(payee.name).font(.body)
-                } else if let memo = tx.memo, !memo.isEmpty {
-                    Text(memo).font(.body)
+    private func summaryHeader(window: Window, amount: Decimal, spent: Decimal) -> some View {
+        let remaining = amount - spent
+        let isOver = spent > amount
+        let calendar = Calendar.current
+        let totalDays = max(calendar.dateComponents([.day], from: window.start, to: window.end).day ?? 1, 1)
+        let today = calendar.startOfDay(for: Date())
+        let daysLeft = max(calendar.dateComponents([.day], from: today, to: window.end).day ?? 0, 0)
+        let elapsed = min(max(Double(totalDays - daysLeft) / Double(totalDays), 0), 1)
+        let ratio = fraction(spent, of: amount)
+        let percent = amount > 0 ? Int((NSDecimalNumber(decimal: spent / amount).doubleValue * 100).rounded()) : 0
+
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 40) {
+                figure("Budget", money(amount), detail: current.period.displayName)
+                figure("Dépensé", money(spent), detail: "\(percent) % du budget")
+                figure(
+                    isOver ? "Dépassement" : "Reste",
+                    money(abs(remaining)),
+                    color: isOver ? .red : .green,
+                    detail: isCurrentPeriod ? "\(daysLeft) jour\(daysLeft > 1 ? "s" : "") restant\(daysLeft > 1 ? "s" : "")" : "Période terminée"
+                )
+                if isCurrentPeriod {
+                    figure(
+                        "Disponible par jour",
+                        money(daysLeft > 0 && remaining > 0 ? remaining / Decimal(daysLeft) : 0),
+                        detail: "Jusqu'à la fin de la période"
+                    )
                 } else {
-                    Text("Transaction").font(.body).foregroundColor(.secondary)
+                    figure("Dépense par jour", money(spent / Decimal(totalDays)), detail: "En moyenne")
                 }
-                // Catégorie + date
-                HStack(spacing: 6) {
-                    if tx.categoryID != nil {
-                        Text(categoriesController.getCategoryPath(for: tx.categoryID!))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text("·").font(.caption).foregroundColor(.secondary)
-                    }
-                    Text(tx.date, format: .dateTime.day().month())
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+                Spacer(minLength: 0)
             }
 
-            Spacer()
+            // Barre de progression avec le repère « aujourd'hui »
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.primary.opacity(0.08))
+                    Capsule()
+                        .fill(isOver ? Color.red : Color.accentColor)
+                        .frame(width: geometry.size.width * ratio)
+                    if isCurrentPeriod {
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(Color.primary)
+                            .frame(width: 2, height: 14)
+                            .offset(x: geometry.size.width * elapsed - 1)
+                    }
+                }
+                .frame(height: geometry.size.height)
+            }
+            .frame(height: 6)
+            .padding(.vertical, 4)
 
-            Text(abs(tx.amount), format: .currency(code: currency))
-                .font(.body)
-                .fontWeight(.medium)
-                .foregroundColor(.red)
+            Text(paceText(ratio: ratio, elapsed: elapsed, isOver: isOver, remaining: remaining))
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 .privacyBlur(hidden: appSettings.hideAmounts)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
     }
 
-    // MARK: - Version History
+    private func paceText(ratio: Double, elapsed: Double, isOver: Bool, remaining: Decimal) -> String {
+        if isCurrentPeriod {
+            if isOver { return "Budget dépassé de \(money(-remaining)) avant la fin de la période." }
+            return ratio <= elapsed
+                ? "Le repère marque aujourd'hui : vous dépensez moins vite que le rythme du budget."
+                : "Le repère marque aujourd'hui : vous dépensez plus vite que le rythme du budget."
+        }
+        return isOver
+            ? "Budget dépassé de \(money(-remaining)) sur cette période."
+            : "Budget respecté, \(money(remaining)) non dépensés."
+    }
 
-    private var versionHistory: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Historique des montants")
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .foregroundColor(.secondary)
+    private func figure(_ title: String, _ value: String, color: Color = .primary, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.title2.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(color)
+                .privacyBlur(hidden: appSettings.hideAmounts)
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
 
-            VStack(spacing: 0) {
-                ForEach(Array(versions.enumerated()), id: \.element.id) { idx, v in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(v.amount, format: .currency(code: booksController.currentBook?.currency ?? "EUR"))
-                                .fontWeight(idx == 0 ? .semibold : .regular)
+    // MARK: - Dépenses cumulées
+
+    private func paceBlock(window: Window, amount: Decimal, transactions: [Transaction]) -> some View {
+        let points = pacePoints(window: window, amount: amount, transactions: transactions)
+
+        return VStack(alignment: .leading, spacing: 12) {
+            GroupTitle("Dépenses cumulées sur la période")
+
+            Chart(points) { point in
+                LineMark(
+                    x: .value("Date", point.date),
+                    y: .value("Montant", point.value),
+                    series: .value("Série", point.series)
+                )
+                .foregroundStyle(by: .value("Série", point.series))
+                .lineStyle(StrokeStyle(lineWidth: 2, dash: point.series == "Rythme du budget" ? [4, 4] : []))
+            }
+            .chartForegroundStyleScale([
+                "Dépensé": Color.accentColor,
+                "Rythme du budget": Color.secondary
+            ])
+            .chartLegend(position: .top, alignment: .trailing)
+            .chartYAxis {
+                AxisMarks { _ in
+                    AxisGridLine()
+                    AxisValueLabel()
+                }
+            }
+            .frame(height: 190)
+            .privacyBlur(hidden: appSettings.hideAmounts)
+        }
+        .padding(NativeMetrics.groupPadding)
+        .cardBackground()
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Cumul jour par jour (jusqu'à aujourd'hui pour la période en cours) et droite du rythme du budget
+    private func pacePoints(window: Window, amount: Decimal, transactions: [Transaction]) -> [PacePoint] {
+        let calendar = Calendar.current
+        var byDay: [Date: Decimal] = [:]
+        for transaction in transactions {
+            byDay[calendar.startOfDay(for: transaction.date), default: 0] += abs(transaction.signedAmount)
+        }
+
+        var points: [PacePoint] = [PacePoint(date: window.start, value: 0, series: "Dépensé")]
+        let lastDay = min(calendar.startOfDay(for: Date()), calendar.date(byAdding: .day, value: -1, to: window.end) ?? window.end)
+        var day = calendar.startOfDay(for: window.start)
+        var cumulated = Decimal(0)
+        while day <= lastDay {
+            cumulated += byDay[day] ?? 0
+            let endOfDay = calendar.date(byAdding: .day, value: 1, to: day) ?? day
+            points.append(PacePoint(date: endOfDay, value: NSDecimalNumber(decimal: cumulated).doubleValue, series: "Dépensé"))
+            day = endOfDay
+        }
+
+        points.append(PacePoint(date: window.start, value: 0, series: "Rythme du budget"))
+        points.append(PacePoint(date: window.end, value: NSDecimalNumber(decimal: amount).doubleValue, series: "Rythme du budget"))
+        return points
+    }
+
+    // MARK: - Périodes précédentes
+
+    private func historyBlock(selected: Window) -> some View {
+        let history = historyPoints
+        let average: Decimal = history.isEmpty ? 0 : history.reduce(Decimal(0)) { $0 + $1.spent } / Decimal(history.count)
+        let currentAmount = history.last?.amount ?? 0
+
+        return VStack(alignment: .leading, spacing: 12) {
+            GroupTitle(title: "\(history.count) dernière\(history.count > 1 ? "s" : "") période\(history.count > 1 ? "s" : "")") {
+                Text("Moyenne : \(money(average))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .privacyBlur(hidden: appSettings.hideAmounts)
+            }
+
+            Chart {
+                ForEach(history) { point in
+                    BarMark(
+                        x: .value("Période", point.label),
+                        y: .value("Dépensé", NSDecimalNumber(decimal: point.spent).doubleValue)
+                    )
+                    .foregroundStyle(by: .value("État", point.kind))
+                    .opacity(point.start == selected.start ? 1 : 0.45)
+                    .cornerRadius(3)
+                }
+
+                if currentAmount > 0 {
+                    RuleMark(y: .value("Budget", NSDecimalNumber(decimal: currentAmount).doubleValue))
+                        .foregroundStyle(Color.secondary)
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                }
+            }
+            .chartForegroundStyleScale([
+                "Dans le budget": Color.accentColor,
+                "Dépassé": Color.red
+            ])
+            .chartXScale(domain: history.map { $0.label })
+            .chartLegend(.hidden)
+            .chartYAxis {
+                AxisMarks { _ in
+                    AxisGridLine()
+                    AxisValueLabel()
+                }
+            }
+            .chartXSelection(value: $selectedHistoryLabel)
+            .onChange(of: selectedHistoryLabel) { _, label in
+                // Un clic sur une barre affiche cette période
+                if let point = history.first(where: { $0.label == label }) {
+                    referenceDate = point.start
+                }
+            }
+            .frame(height: 190)
+            .privacyBlur(hidden: appSettings.hideAmounts)
+        }
+        .padding(NativeMetrics.groupPadding)
+        .cardBackground()
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Les dernières périodes jusqu'à la période en cours, de la plus ancienne à la plus récente
+    private var historyPoints: [PeriodPoint] {
+        let calendar = Calendar.current
+        var result: [PeriodPoint] = []
+        var window = current.period.currentWindow(anchor: current.anchorDate)
+
+        for _ in 0..<Self.historyCount {
+            result.append(PeriodPoint(
+                start: window.start,
+                label: shortLabel(window),
+                spent: total(transactions(in: window)),
+                amount: amount(for: window)
+            ))
+            guard window.start > current.anchorDate,
+                  let previous = calendar.date(byAdding: .day, value: -1, to: window.start) else { break }
+            let previousWindow = current.period.currentWindow(anchor: current.anchorDate, relativeTo: previous)
+            guard previousWindow.start < window.start else { break }
+            window = previousWindow
+        }
+        return result.reversed()
+    }
+
+    // MARK: - Transactions
+
+    @ViewBuilder
+    private func transactionsBlock(_ transactions: [Transaction]) -> some View {
+        GroupTitle("Transactions de la période")
+            .padding(.top, 4)
+
+        if transactions.isEmpty {
+            Text("Aucune transaction sur cette période.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 8)
+        } else {
+            ReportTable(
+                columns: ["Date", "Bénéficiaire", "Catégorie", "Compte", "Montant"],
+                rows: transactions.map { transaction in
+                    ReportRow(id: transaction.id.uuidString, cells: [
+                        ReportCell(text: transaction.date.formatted(.dateTime.day().month(.abbreviated))),
+                        ReportCell(text: payeeName(transaction), isAmount: false),
+                        ReportCell(
+                            text: transaction.categoryID.map { categoriesController.getCategoryPath(for: $0) } ?? "—",
+                            isAmount: false
+                        ),
+                        ReportCell(
+                            text: accountsController.getAccount(id: transaction.accountID)?.name ?? "—",
+                            color: .secondary,
+                            isAmount: false
+                        ),
+                        ReportCell(text: money(abs(transaction.signedAmount)))
+                    ])
+                }
+            )
+        }
+    }
+
+    private func payeeName(_ transaction: Transaction) -> String {
+        if let payeeID = transaction.payeeID, let payee = payeesController.getPayee(id: payeeID) {
+            return payee.name
+        }
+        if let memo = transaction.memo, !memo.isEmpty {
+            return memo
+        }
+        return "—"
+    }
+
+    private func statusItems(_ transactions: [Transaction], spent: Decimal) -> [String] {
+        guard !transactions.isEmpty else { return ["Aucune transaction"] }
+        let count = transactions.count
+        return [
+            "\(count) transaction\(count > 1 ? "s" : "")",
+            appSettings.hideAmounts ? "Moyenne masquée" : "Moyenne : \(money(spent / Decimal(count)))"
+        ]
+    }
+
+    // MARK: - Inspecteur
+
+    private func inspectorContent(transactions: [Transaction], spent: Decimal) -> some View {
+        InspectorContainer {
+            InspectorHeader(title: current.name, caption: current.period.displayName)
+
+            InspectorSection(title: "Catégories couvertes") {
+                let shares = categoryShares(transactions)
+                if shares.isEmpty {
+                    Text("Aucune catégorie")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(shares, id: \.id) { share in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(share.name)
+                                .lineLimit(1)
+                            Spacer(minLength: 8)
+                            Text(money(share.amount))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
                                 .privacyBlur(hidden: appSettings.hideAmounts)
-                            if let note = v.note, !note.isEmpty {
-                                Text(note).font(.caption).foregroundColor(.secondary)
-                            }
                         }
-                        Spacer()
-                        Text(v.effectiveFrom, format: .dateTime.day().month().year())
-                            .font(.caption).foregroundColor(.secondary)
-                        if idx != 0 {
-                            Button {
-                                Task { await budgetsController.deleteVersion(id: v.id) }
-                            } label: {
-                                Image(systemName: "trash").foregroundColor(.red).font(.caption)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    if idx < versions.count - 1 {
-                        Divider().padding(.leading, 12)
+                        ProgressView(value: fraction(share.amount, of: spent))
+                            .progressViewStyle(.linear)
                     }
                 }
             }
-            .cardBackground(cornerRadius: 10)
+
+            InspectorSection {
+                InspectorRow("Période", value: current.period.displayName)
+                InspectorRow("Début", value: current.anchorDate.formatted(.dateTime.day().month(.wide).year()))
+                InspectorRow("Montant", value: money(versions.first?.amount ?? current.currentVersion?.amount ?? 0))
+                InspectorRow("Comptes", value: "Tous sauf « hors budget »")
+            }
+
+            InspectorSection(title: "Historique des montants") {
+                ForEach(Array(versions.enumerated()), id: \.element.id) { index, version in
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(money(version.amount))
+                                .fontWeight(index == 0 ? .semibold : .regular)
+                                .monospacedDigit()
+                                .privacyBlur(hidden: appSettings.hideAmounts)
+                            Text("Depuis le \(version.effectiveFrom.formatted(.dateTime.day().month(.wide).year()))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            if let note = version.note, !note.isEmpty {
+                                Text(note)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer(minLength: 8)
+                        if index == 0 {
+                            Text("En vigueur")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Button {
+                                Task {
+                                    await budgetsController.deleteVersion(id: version.id)
+                                    await loadVersions()
+                                }
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Supprimer ce montant de l'historique")
+                        }
+                    }
+                }
+
+                Button("Ajuster le montant…") { showAdjustSheet = true }
+            }
+
+            if let note = current.note, !note.isEmpty {
+                InspectorSection(title: "Note") {
+                    Text(note)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            InspectorSection {
+                HStack {
+                    Button("Modifier…") { showEditForm = true }
+                    Button("Supprimer…", role: .destructive) { showDeleteConfirmation = true }
+                }
+            }
+        }
+    }
+
+    /// Dépenses de la période par catégorie du budget, les plus élevées d'abord
+    private func categoryShares(_ transactions: [Transaction]) -> [(id: UUID, name: String, amount: Decimal)] {
+        var totals: [UUID: Decimal] = [:]
+        for transaction in transactions {
+            if let categoryID = transaction.categoryID {
+                totals[categoryID, default: 0] += abs(transaction.signedAmount)
+            }
+        }
+        return current.categoryIDs
+            .compactMap { id in
+                categoriesController.getCategory(id: id).map { (id: id, name: $0.name, amount: totals[id] ?? 0) }
+            }
+            .sorted { $0.amount > $1.amount }
+    }
+
+    // MARK: - Helpers
+
+    private var currency: String {
+        booksController.currentBook?.currency ?? "EUR"
+    }
+
+    private func money(_ amount: Decimal) -> String {
+        amount.formatted(.currency(code: currency))
+    }
+
+    private func fraction(_ amount: Decimal, of maximum: Decimal) -> Double {
+        guard maximum > 0 else { return 0 }
+        return min(max(NSDecimalNumber(decimal: amount / maximum).doubleValue, 0), 1)
+    }
+
+    /// « 1 oct. – 31 oct. 2026 » (la fin de fenêtre est exclusive)
+    private func periodLabel(_ window: Window) -> String {
+        let lastDay = Calendar.current.date(byAdding: .day, value: -1, to: window.end) ?? window.end
+        let start = window.start.formatted(.dateTime.day().month(.abbreviated))
+        let end = lastDay.formatted(.dateTime.day().month(.abbreviated).year())
+        return start == lastDay.formatted(.dateTime.day().month(.abbreviated)) ? end : "\(start) – \(end)"
+    }
+
+    /// Étiquette courte d'une période pour l'axe du graphique
+    private func shortLabel(_ window: Window) -> String {
+        switch current.period {
+        case .monthly, .everyTwoMonths, .quarterly, .semiAnnual:
+            return window.start.formatted(.dateTime.month(.abbreviated).year(.twoDigits))
+        default:
+            return window.start.formatted(.dateTime.day().month(.abbreviated))
         }
     }
 
@@ -397,6 +686,7 @@ struct BudgetDetailView: View {
 
     private func loadVersions() async {
         versions = await budgetsController.fetchVersions(for: budget.id)
+            .sorted { $0.effectiveFrom > $1.effectiveFrom }
     }
 }
 

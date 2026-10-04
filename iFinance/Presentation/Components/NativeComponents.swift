@@ -115,6 +115,7 @@ struct TableStatusBar: View {
 // MARK: - Tuile de statistique
 
 /// Tuile compacte : légende, valeur, complément. Alignée à gauche, dans un bloc groupé.
+/// Hauteur constante, avec ou sans complément.
 struct StatTile: View {
     let title: String
     let value: String
@@ -131,11 +132,14 @@ struct StatTile: View {
                 .font(.title2.weight(.semibold))
                 .monospacedDigit()
                 .foregroundStyle(valueColor)
-            if let detail {
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(detailColor)
-            }
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            // La ligne de complément est toujours réservée : toutes les tuiles ont la même hauteur
+            Text(detail ?? " ")
+                .font(.caption)
+                .foregroundStyle(detailColor)
+                .lineLimit(1)
+                .accessibilityHidden(detail == nil)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(NativeMetrics.groupPadding)
@@ -164,5 +168,34 @@ extension GroupTitle where Trailing == EmptyView {
     init(_ title: String) {
         self.title = title
         self.trailing = EmptyView()
+    }
+}
+
+// MARK: - Panneau latéral sous l'en-tête
+
+/// Contenu principal avec un panneau d'inspecteur à droite, logé sous l'en-tête de la page
+/// (contrairement à `.inspector`, qui occupe toute la hauteur de la fenêtre).
+struct SidePanelLayout<Main: View, Panel: View>: View {
+    @Binding var isPresented: Bool
+    var width: CGFloat = 280
+    @ViewBuilder var main: Main
+    @ViewBuilder var panel: Panel
+
+    var body: some View {
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                main
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
+            if isPresented {
+                Divider()
+                panel
+                    .frame(width: width)
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .transition(.move(edge: .trailing))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: isPresented)
     }
 }

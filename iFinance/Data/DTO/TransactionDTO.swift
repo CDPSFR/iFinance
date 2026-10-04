@@ -14,4 +14,5 @@ struct TransactionDTO {
     let isReconciled: Bool
     let recurringTemplateID: String?
     let status: String
+    var projectID: String? = nil
 }

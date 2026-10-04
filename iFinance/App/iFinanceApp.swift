@@ -18,6 +18,7 @@ struct iFinanceApp: App {
                 .environmentObject(appState.payeesController)
                 .environmentObject(appState.budgetsController)
                 .environmentObject(appState.annualBudgetController)
+                .environmentObject(appState.projectsController)
                 .environmentObject(appState.investmentsController)
                 .environmentObject(appState.savingsPlansController)
                 .frame(minWidth: 1000, minHeight: 700)
@@ -58,6 +59,7 @@ struct iFinanceApp: App {
                 .environmentObject(appState.payeesController)
                 .environmentObject(appState.budgetsController)
                 .environmentObject(appState.annualBudgetController)
+                .environmentObject(appState.projectsController)
                 .environmentObject(appState.investmentsController)
                 .environmentObject(appState.savingsPlansController)
         }

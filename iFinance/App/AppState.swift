@@ -16,6 +16,7 @@ class AppState: ObservableObject {
     let payeeRepository: PayeeRepository
     let budgetRepository: BudgetRepository
     let annualBudgetRepository: AnnualBudgetRepository
+    let projectRepository: ProjectRepository
     let investmentPositionRepository: InvestmentPositionRepository
     let investmentTransactionRepository: InvestmentTransactionRepository
     let savingsPlanRepository: SavingsPlanRepository
@@ -28,6 +29,7 @@ class AppState: ObservableObject {
     let payeesController: PayeesController
     let budgetsController: BudgetsController
     let annualBudgetController: AnnualBudgetController
+    let projectsController: ProjectsController
     let investmentsController: InvestmentsController
     let savingsPlansController: SavingsPlansController
 
@@ -51,6 +53,7 @@ class AppState: ObservableObject {
         self.payeeRepository = PayeeRepository(db: db)
         self.budgetRepository = BudgetRepository(db: db)
         self.annualBudgetRepository = AnnualBudgetRepository(db: db)
+        self.projectRepository = ProjectRepository(db: db)
         self.investmentPositionRepository = InvestmentPositionRepository(db: db)
         self.investmentTransactionRepository = InvestmentTransactionRepository(db: db)
         self.savingsPlanRepository = SavingsPlanRepository(db: db)
@@ -63,6 +66,7 @@ class AppState: ObservableObject {
         self.payeesController = PayeesController(repository: payeeRepository)
         self.budgetsController = BudgetsController(repository: budgetRepository)
         self.annualBudgetController = AnnualBudgetController(repository: annualBudgetRepository)
+        self.projectsController = ProjectsController(repository: projectRepository)
         self.investmentsController = InvestmentsController(
             positionRepository: investmentPositionRepository,
             transactionRepository: investmentTransactionRepository

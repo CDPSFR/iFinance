@@ -12,7 +12,7 @@ class TransactionRepository: TransactionRepositoryProtocol {
     func fetchAll(for accountID: UUID) async throws -> [Transaction] {
         let sql = """
         SELECT id, date, amount, account_id, to_account_id, linked_transaction_id,
-               payee_id, category_id, type, memo, is_reconciled, recurring_template_id, status
+               payee_id, category_id, type, memo, is_reconciled, recurring_template_id, status, project_id
         FROM transactions
         WHERE account_id = ?
         ORDER BY date DESC, id DESC;
@@ -31,7 +31,7 @@ class TransactionRepository: TransactionRepositoryProtocol {
         
         let sql = """
         SELECT id, date, amount, account_id, to_account_id, linked_transaction_id,
-               payee_id, category_id, type, memo, is_reconciled, recurring_template_id, status
+               payee_id, category_id, type, memo, is_reconciled, recurring_template_id, status, project_id
         FROM transactions
         WHERE account_id = ? AND date >= ? AND date <= ?
         ORDER BY date ASC, id ASC;
@@ -46,7 +46,7 @@ class TransactionRepository: TransactionRepositoryProtocol {
     func fetch(id: UUID) async throws -> Transaction? {
         let sql = """
         SELECT id, date, amount, account_id, to_account_id, linked_transaction_id,
-               payee_id, category_id, type, memo, is_reconciled, recurring_template_id, status
+               payee_id, category_id, type, memo, is_reconciled, recurring_template_id, status, project_id
         FROM transactions
         WHERE id = ?;
         """
@@ -63,8 +63,8 @@ class TransactionRepository: TransactionRepositoryProtocol {
         let sql = """
         INSERT INTO transactions (
             id, date, amount, account_id, to_account_id, linked_transaction_id,
-            payee_id, category_id, type, memo, is_reconciled, recurring_template_id, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            payee_id, category_id, type, memo, is_reconciled, recurring_template_id, status, project_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
         
         try db.execute(sql: sql, parameters: [
@@ -80,7 +80,8 @@ class TransactionRepository: TransactionRepositoryProtocol {
             dto.memo ?? NSNull(),
             dto.isReconciled ? 1 : 0,
             dto.recurringTemplateID ?? NSNull(),
-            dto.status
+            dto.status,
+            dto.projectID ?? NSNull()
         ])
     }
     
@@ -93,7 +94,7 @@ class TransactionRepository: TransactionRepositoryProtocol {
         UPDATE transactions
         SET date = ?, amount = ?, account_id = ?, to_account_id = ?, linked_transaction_id = ?,
             payee_id = ?, category_id = ?, type = ?, memo = ?, is_reconciled = ?,
-            recurring_template_id = ?, status = ?
+            recurring_template_id = ?, status = ?, project_id = ?
         WHERE id = ?;
         """
         
@@ -110,6 +111,7 @@ class TransactionRepository: TransactionRepositoryProtocol {
             dto.isReconciled ? 1 : 0,
             dto.recurringTemplateID ?? NSNull(),
             dto.status,
+            dto.projectID ?? NSNull(),
             dto.id
         ])
     }
