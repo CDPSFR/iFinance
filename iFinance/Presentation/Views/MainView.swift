@@ -21,18 +21,7 @@ struct MainView: View {
     @State private var showFilterForm = false
     @State private var showBookSelector = false
     @State private var showBookForm = false
-    @State private var selectedTab: SidebarItem = MainView.startTab
-    @AppStorage(SettingsKeys.showClosedAccountsInSidebar) private var showClosedAccounts = true
-
-    /// Écran affiché au lancement, choisi dans Réglages › Général
-    private static var startTab: SidebarItem {
-        switch UserDefaults.standard.string(forKey: SettingsKeys.startScreen) {
-        case "transactions": return .allTransactions
-        case "budgets": return .budgets
-        case "reports": return .reports
-        default: return .dashboard
-        }
-    }
+    @State private var selectedTab: SidebarItem = .dashboard
 
     // MARK: - Sidebar enum
     enum SidebarItem: Hashable, Identifiable {
@@ -134,6 +123,10 @@ struct MainView: View {
                         Label("Vue d'ensemble", systemImage: "square.grid.2x2")
                     }
 
+                    NavigationLink(value: SidebarItem.wealth) {
+                        Label("Patrimoine", systemImage: "building.columns")
+                    }
+
                     NavigationLink(value: SidebarItem.allTransactions) {
                         Label("Toutes les transactions", systemImage: "list.bullet")
                     }
@@ -186,24 +179,13 @@ struct MainView: View {
                     NavigationLink(value: SidebarItem.reports) {
                         Label("Rapports", systemImage: "chart.bar")
                     }
+
+                    NavigationLink(value: SidebarItem.settings) {
+                        Label("Paramètres", systemImage: "gearshape")
+                    }
                 }
             }
             .listStyle(.sidebar)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                // Lien vers la fenêtre Réglages (⌘,), fixé en bas de la barre latérale
-                VStack(spacing: 0) {
-                    Divider()
-                    SettingsLink {
-                        Label("Réglages", systemImage: "gearshape")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 9)
-                }
-            }
         }
     }
 
@@ -246,16 +228,7 @@ struct MainView: View {
                 case .reports:
                     ReportsView()
                 case .settings:
-                    // Les réglages ont leur propre fenêtre (⌘,)
-                    ContentUnavailableView {
-                        Label("Réglages", systemImage: "gearshape")
-                    } description: {
-                        Text("Les réglages s'ouvrent dans une fenêtre séparée.")
-                    } actions: {
-                        SettingsLink {
-                            Text("Ouvrir les réglages")
-                        }
-                    }
+                    SettingsView()
                 }
             }
             .navigationTitle(windowTitle)
@@ -371,8 +344,7 @@ struct MainView: View {
     }
 
     private var sidebarClosedAccounts: [Account] {
-        guard showClosedAccounts else { return [] }
-        return accountsController.closedAccounts.filter { !$0.isHiddenFromSidebar }
+        accountsController.closedAccounts.filter { !$0.isHiddenFromSidebar }
     }
 
     private var activeAccountGroups: [(group: AccountGroup, accounts: [Account])] {
