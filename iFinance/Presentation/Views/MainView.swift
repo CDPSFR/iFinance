@@ -87,6 +87,10 @@ struct MainView: View {
         .task {
             await booksController.loadBooks()
         }
+        .onReceive(NotificationCenter.default.publisher(for: CreationCommand.notification)) { notification in
+            guard let command = notification.object as? CreationCommand else { return }
+            handle(command)
+        }
         .onChange(of: booksController.currentBook?.id) { _, newValue in
             guard let bookID = newValue else { return }
             Task {
@@ -249,6 +253,33 @@ struct MainView: View {
         }
     }
 
+    // MARK: - Commandes de création (menu Fichier et raccourcis clavier)
+
+    private func handle(_ command: CreationCommand) {
+        // Sans livre ouvert, seule la création d'un livre a un sens
+        guard command == .book || booksController.currentBook != nil else { return }
+        // Une seule feuille à la fois
+        let isPresenting = showTransactionForm || showAccountForm || showCategoryForm || showPayeeForm
+            || showBudgetForm || showBookForm || showFilterForm || showBookSelector
+        guard !isPresenting else { return }
+
+        switch command {
+        case .transaction: showTransactionForm = true
+        case .account: showAccountForm = true
+        case .category: showCategoryForm = true
+        case .payee: showPayeeForm = true
+        case .budget: showBudgetForm = true
+        case .book: showBookForm = true
+        }
+    }
+
+    private func creationButton(_ command: CreationCommand) -> some View {
+        Button(command.title) {
+            handle(command)
+        }
+        .keyboardShortcut(command.key, modifiers: command.modifiers)
+    }
+
     // MARK: - Toolbar
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
@@ -268,57 +299,23 @@ struct MainView: View {
                     .help("Filtrer les transactions")
                 }
 
-                // Menu dropdown pour créer différents éléments
+                // Menu « + » : un clic crée une transaction, un clic long ouvre le menu.
+                // Les raccourcis sont affichés par macOS à droite de chaque entrée.
                 Menu {
-                    Button {
-                        showTransactionForm = true
-                    } label: {
-                        Label("Nouvelle transaction", systemImage: "plus.circle")
-                    }
-                    
+                    creationButton(.transaction)
                     Divider()
-                    
-                    Button {
-                        showAccountForm = true
-                    } label: {
-                        Label("Nouveau compte", systemImage: "creditcard")
-                    }
-                    
-                    Button {
-                        showCategoryForm = true
-                    } label: {
-                        Label("Nouvelle catégorie", systemImage: "folder")
-                    }
-                    
-                    Button {
-                        showPayeeForm = true
-                    } label: {
-                        Label("Nouveau bénéficiaire", systemImage: "person.crop.circle")
-                    }
-
-                    Button {
-                        showBudgetForm = true
-                    } label: {
-                        Label("Nouveau budget", systemImage: "chart.pie")
-                    }
-
+                    creationButton(.account)
+                    creationButton(.category)
+                    creationButton(.payee)
+                    creationButton(.budget)
                     Divider()
-
-                    Button {
-                        showBookForm = true
-                    } label: {
-                        Label("Nouveau livre", systemImage: "book.closed")
-                    }
+                    creationButton(.book)
                 } label: {
-                    Image(systemName: "plus")
+                    Label("Ajouter", systemImage: "plus")
                 } primaryAction: {
-                    // Action par défaut quand on clique directement (sans ouvrir le menu)
-                    showTransactionForm = true
+                    handle(.transaction)
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help("Créer un nouvel élément (⌘N pour transaction)")
-                .keyboardShortcut("n", modifiers: .command)
+                .help("Nouvelle transaction (⌘N). Maintenez le clic pour créer un autre élément.")
             }
         }
     }
