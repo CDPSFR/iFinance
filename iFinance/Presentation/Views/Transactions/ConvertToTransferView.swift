@@ -19,26 +19,10 @@ struct ConvertToTransferView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Convertir en transfert")
-                        .font(.headline)
-                    Text("La dépense sera transformée en transfert entre comptes")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-                Button { isPresented = false } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                        .font(.title3)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding()
-
-            Divider()
+            SheetHeader(
+                title: "Convertir en transfert",
+                subtitle: "La dépense sera transformée en transfert entre comptes"
+            )
 
             VStack(spacing: 20) {
                 // Résumé de la transaction
@@ -129,28 +113,26 @@ struct ConvertToTransferView: View {
                 .background(Color.orange.opacity(0.08))
                 .cornerRadius(8)
             }
-            .padding()
+            .padding(.horizontal, 20)
+            .padding(.top, 4)
 
             Spacer()
 
-            Divider()
-
-            // Footer
-            HStack {
+            SheetFooter {
                 Button("Annuler") { isPresented = false }
-                    .buttonStyle(.bordered)
-                Spacer()
+                    .keyboardShortcut(.cancelAction)
+
                 Button("Convertir") {
                     if let destID = destinationAccountID {
                         onConfirm(destID)
                         isPresented = false
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
                 .disabled(destinationAccountID == nil)
             }
-            .padding()
         }
         .frame(width: 420, height: 480)
+        .sheetBackground()
     }
 }

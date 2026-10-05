@@ -25,6 +25,8 @@ struct ProjectFormView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            SheetHeader(title: projectToEdit == nil ? "Nouveau projet" : "Modifier le projet")
+
             Form {
                 Section {
                     TextField("Nom", text: $name, prompt: Text("Voyage en Australie"))
@@ -83,10 +85,7 @@ struct ProjectFormView: View {
             }
             .formStyle(.grouped)
 
-            Divider()
-
-            HStack {
-                Spacer()
+            SheetFooter {
                 Button("Annuler") {
                     isPresented = false
                 }
@@ -98,10 +97,9 @@ struct ProjectFormView: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(trimmedName.isEmpty)
             }
-            .padding(12)
         }
-        .frame(width: 460, height: 520)
-        .navigationTitle(projectToEdit == nil ? "Nouveau projet" : "Modifier le projet")
+        .frame(width: 520, height: 520)
+        .sheetBackground()
         .onAppear(perform: load)
     }
 

@@ -29,19 +29,8 @@ struct ContributionFormView: View {
     }
 
     var body: some View {
-        VStack(spacing: 20) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Nouvel apport")
-                        .font(.title)
-                        .fontWeight(.bold)
-                    Text(account.name)
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-            }
-
-            Divider()
+        VStack(spacing: 0) {
+            SheetHeader(title: "Nouvel apport", subtitle: account.name)
 
             Form {
                 Section {
@@ -99,18 +88,16 @@ struct ContributionFormView: View {
             }
             .formStyle(.grouped)
 
-            HStack {
+            SheetFooter {
                 Button("Annuler") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Spacer()
                 Button("Enregistrer") { save() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(parsedAmount == nil || isSaving)
                     .keyboardShortcut(.defaultAction)
+                    .disabled(parsedAmount == nil || isSaving)
             }
         }
-        .padding()
-        .frame(width: 500, height: 600)
+        .frame(width: 520, height: 600)
+        .sheetBackground()
         .onAppear {
             if sourceAccountID == nil {
                 sourceAccountID = sourceAccounts.first { $0.type.group == .liquidity }?.id

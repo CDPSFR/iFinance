@@ -19,6 +19,7 @@ struct MainView: View {
     @State private var showCategoryForm = false // NOUVEAU
     @State private var showPayeeForm = false // NOUVEAU
     @State private var showBudgetForm = false
+    @State private var showProjectForm = false
     @State private var showFilterForm = false
     @State private var showBookSelector = false
     @State private var showBookForm = false
@@ -94,6 +95,9 @@ struct MainView: View {
         }
         .sheet(isPresented: $showBudgetForm) {
             BudgetFormView(isPresented: $showBudgetForm)
+        }
+        .sheet(isPresented: $showProjectForm) {
+            ProjectFormView(isPresented: $showProjectForm)
         }
         .sheet(isPresented: $showFilterForm) {
             TransactionFiltersView(filters: $transactionsController.filters, isPresented: $showFilterForm)
@@ -303,7 +307,7 @@ struct MainView: View {
         guard command == .book || booksController.currentBook != nil else { return }
         // Une seule feuille à la fois
         let isPresenting = showTransactionForm || showAccountForm || showCategoryForm || showPayeeForm
-            || showBudgetForm || showBookForm || showFilterForm || showBookSelector
+            || showBudgetForm || showProjectForm || showBookForm || showFilterForm || showBookSelector
         guard !isPresenting else { return }
 
         switch command {
@@ -312,6 +316,7 @@ struct MainView: View {
         case .category: showCategoryForm = true
         case .payee: showPayeeForm = true
         case .budget: showBudgetForm = true
+        case .project: showProjectForm = true
         case .book: showBookForm = true
         }
     }
@@ -351,6 +356,7 @@ struct MainView: View {
                     creationButton(.category)
                     creationButton(.payee)
                     creationButton(.budget)
+                    creationButton(.project)
                     Divider()
                     creationButton(.book)
                 } label: {

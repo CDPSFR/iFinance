@@ -32,37 +32,8 @@ struct TransactionFiltersView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("Filtres")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                
-                Spacer()
-                
-                if tempFilters.isActive {
-                    Button {
-                        resetFilters()
-                    } label: {
-                        Text("Tout effacer")
-                            .foregroundColor(.red)
-                    }
-                    .buttonStyle(.plain)
-                }
-                
-                Button {
-                    isPresented = false
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding()
-            
-            Divider()
-            
+            SheetHeader(title: "Filtres")
+
             // Contenu
             ScrollView {
                 VStack(spacing: 20) {
@@ -182,34 +153,31 @@ struct TransactionFiltersView: View {
                         }
                     }
                 }
-                .padding()
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
             }
-            
-            Divider()
-            
-            // Footer avec boutons
-            HStack(spacing: 12) {
+
+            // Pied : « Tout effacer » à gauche tant qu'un filtre est actif
+            SheetFooter {
+                if tempFilters.isActive {
+                    Button("Tout effacer") {
+                        resetFilters()
+                    }
+                }
+            } actions: {
                 Button("Annuler") {
                     isPresented = false
                 }
                 .keyboardShortcut(.cancelAction)
-                
-                Spacer()
-                
-                Button("Fermer") {
-                    isPresented = false
-                }
-                .buttonStyle(.bordered)
-                
+
                 Button("Appliquer") {
                     applyFilters()
                 }
-                .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
             }
-            .padding()
         }
         .frame(width: 450, height: 600)
+        .sheetBackground()
     }
     
     @ViewBuilder

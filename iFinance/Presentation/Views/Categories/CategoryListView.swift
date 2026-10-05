@@ -22,6 +22,7 @@ struct CategoryListView: View {
     @EnvironmentObject var bookController: BooksController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var transactionsController: TransactionsController
+    @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var appSettings: AppSettings
 
     /// Navigation vers les transactions de la catégorie
@@ -48,6 +49,9 @@ struct CategoryListView: View {
     @State private var parentForNewCategory: UUID?
     @State private var categoryToDelete: Category?
     @State private var showDeleteConfirmation = false
+    /// Catégories d'une suppression multiple (clic droit sur plusieurs lignes sélectionnées)
+    @State private var categoriesToDelete: [Category] = []
+    @State private var showBulkDeleteConfirmation = false
     @State private var searchQuery = ""
     @State private var selection: Set<UUID> = []
     @State private var expanded: Set<UUID> = []
@@ -127,6 +131,18 @@ struct CategoryListView: View {
             } else {
                 Text("Cette action est irréversible.")
             }
+        }
+        .alert(
+            "Supprimer \(categoriesToDelete.count) catégories ?",
+            isPresented: $showBulkDeleteConfirmation
+        ) {
+            Button("Annuler", role: .cancel) { }
+            Button("Supprimer", role: .destructive) {
+                let categories = categoriesToDelete
+                Task { await deleteCategories(categories) }
+            }
+        } message: {
+            Text(bulkDeleteMessage)
         }
         .task {
             if let bookID = bookController.currentBook?.id {
@@ -237,6 +253,14 @@ struct CategoryListView: View {
                 } label: {
                     Label("Supprimer", systemImage: "trash")
                 }
+            } else if items.count > 1 {
+                // Sélection multiple (⌘-clic ou ⇧-clic) : suppression groupée
+                Button(role: .destructive) {
+                    categoriesToDelete = items.compactMap { categoriesController.getCategory(id: $0) }
+                    showBulkDeleteConfirmation = !categoriesToDelete.isEmpty
+                } label: {
+                    Label("Supprimer \(items.count) catégories…", systemImage: "trash")
+                }
             }
         } primaryAction: { items in
             // Double-clic : transactions de la catégorie
@@ -270,6 +294,41 @@ struct CategoryListView: View {
     }
 
     // MARK: - Inspecteur
+
+    /// Message de confirmation : sous-catégories entraînées et transactions qui perdent leur catégorie
+    private var bulkDeleteMessage: String {
+        let selectedIDs = Set(categoriesToDelete.map { $0.id })
+        // Sous-catégories non sélectionnées mais supprimées avec leur catégorie parente
+        let extraChildren = categoriesToDelete
+            .flatMap { categoriesController.getSubcategories(for: $0.id) }
+            .filter { !selectedIDs.contains($0.id) }
+        let allIDs = selectedIDs.union(extraChildren.map { $0.id })
+        let transactionCount = transactionsController.allTransactions
+            .filter { $0.categoryID.map { allIDs.contains($0) } ?? false }
+            .count
+
+        var parts: [String] = []
+        if !extraChildren.isEmpty {
+            parts.append("\(extraChildren.count) sous-catégorie\(extraChildren.count > 1 ? "s" : "") non sélectionnée\(extraChildren.count > 1 ? "s" : "") sera\(extraChildren.count > 1 ? "ont" : "") aussi supprimée\(extraChildren.count > 1 ? "s" : "").")
+        }
+        if transactionCount > 0 {
+            parts.append("\(transactionCount) transaction\(transactionCount > 1 ? "s" : "") ne sera\(transactionCount > 1 ? "ont" : "") plus classée\(transactionCount > 1 ? "s" : "").")
+        }
+        parts.append("Cette action est irréversible.")
+        return parts.joined(separator: " ")
+    }
+
+    /// Supprime les sous-catégories d'abord, puis les catégories principales
+    private func deleteCategories(_ categories: [Category]) async {
+        let ordered = categories.sorted { !$0.isRoot && $1.isRoot }
+        for category in ordered {
+            await categoriesController.deleteCategory(id: category.id)
+            selection.remove(category.id)
+        }
+        categoriesToDelete = []
+        // Les transactions concernées doivent refléter la perte de leur catégorie
+        await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
+    }
 
     private func selectedRow(in roots: [CategoryTableRow]) -> CategoryTableRow? {
         guard selection.count == 1, let id = selection.first else { return nil }

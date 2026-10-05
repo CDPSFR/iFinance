@@ -48,18 +48,10 @@ struct BookFormView: View {
     var body: some View {
         VStack(spacing: 0) {
             // En-tête de feuille
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Nouveau livre de comptes")
-                    .font(.headline)
-
-                Text("Un livre regroupe ses propres comptes, catégories, budgets et bénéficiaires.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
+            SheetHeader(
+                title: "Nouveau livre de comptes",
+                subtitle: "Un livre regroupe ses propres comptes, catégories, budgets et bénéficiaires."
+            )
 
             Form {
                 Section {
@@ -113,12 +105,8 @@ struct BookFormView: View {
             }
             .formStyle(.grouped)
 
-            Divider()
-
             // Boutons : action par défaut à droite
-            HStack(spacing: 8) {
-                Spacer()
-
+            SheetFooter {
                 Button("Annuler") {
                     isPresented = false
                 }
@@ -127,14 +115,12 @@ struct BookFormView: View {
                 Button("Créer") {
                     createBook()
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
                 .keyboardShortcut(.defaultAction)
+                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
         }
         .frame(width: 520, height: 440)
+        .sheetBackground()
     }
 
     private func createBook() {

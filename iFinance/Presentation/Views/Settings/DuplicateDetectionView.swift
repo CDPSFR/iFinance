@@ -37,28 +37,10 @@ struct DuplicateDetectionView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Doublons détectés")
-                        .font(.headline)
-                    if !isDone {
-                        Text("Cochez les transactions à conserver, les autres seront supprimées")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                Spacer()
-                Button { isPresented = false } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                        .font(.title3)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding()
-
-            Divider()
+            SheetHeader(
+                title: "Doublons détectés",
+                subtitle: isDone ? nil : "Cochez les transactions à conserver, les autres seront supprimées"
+            )
 
             if isDone {
                 doneView
@@ -73,8 +55,34 @@ struct DuplicateDetectionView: View {
             } else {
                 duplicateList
             }
+
+            // Pied commun : les boutons dépendent de l'état (aucun pendant la suppression)
+            if !isDeleting || isDone {
+                SheetFooter {
+                    if !isDone, !duplicateGroups.isEmpty, !toDelete.isEmpty {
+                        Text("\(toDelete.count) transaction(s) à supprimer")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                } actions: {
+                    if isDone || duplicateGroups.isEmpty {
+                        Button("Fermer") { isPresented = false }
+                            .keyboardShortcut(.defaultAction)
+                    } else {
+                        Button("Annuler") { isPresented = false }
+                            .keyboardShortcut(.cancelAction)
+
+                        Button("Supprimer les doublons") {
+                            Task { await performDeletion() }
+                        }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(toDelete.isEmpty)
+                    }
+                }
+            }
         }
         .frame(width: 680, height: 560)
+        .sheetBackground()
         .onAppear { preselectDuplicates() }
     }
 
@@ -96,8 +104,8 @@ struct DuplicateDetectionView: View {
                     .font(.subheadline)
                     .foregroundStyle(Color.accentColor)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 8)
 
             Divider()
 
@@ -107,27 +115,9 @@ struct DuplicateDetectionView: View {
                         duplicateGroupView(group)
                     }
                 }
-                .padding()
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
             }
-
-            Divider()
-
-            HStack {
-                Button("Annuler") { isPresented = false }
-                    .buttonStyle(.bordered)
-                Spacer()
-                if !toDelete.isEmpty {
-                    Text("\(toDelete.count) transaction(s) à supprimer")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                Button("Supprimer les doublons") {
-                    Task { await performDeletion() }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(toDelete.isEmpty)
-            }
-            .padding()
         }
     }
 
@@ -247,12 +237,6 @@ struct DuplicateDetectionView: View {
                 .font(.title2)
                 .fontWeight(.semibold)
             Spacer()
-            HStack {
-                Spacer()
-                Button("Fermer") { isPresented = false }
-                    .buttonStyle(.borderedProminent)
-            }
-            .padding()
         }
         .frame(maxWidth: .infinity)
     }

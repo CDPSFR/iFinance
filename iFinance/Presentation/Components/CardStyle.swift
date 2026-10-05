@@ -36,3 +36,16 @@ extension View {
         )
     }
 }
+
+// MARK: - Feuilles (fenêtres de création, de modification et d'outils)
+
+extension View {
+    /// Fond commun à toutes les feuilles : un seul aplat, celui de la fenêtre.
+    /// Le fond propre des formulaires groupés est masqué pour qu'en-tête, formulaire
+    /// et pied de feuille partagent la même teinte.
+    func sheetBackground() -> some View {
+        self
+            .scrollContentBackground(.hidden)
+            .background(Color(nsColor: .windowBackgroundColor))
+    }
+}

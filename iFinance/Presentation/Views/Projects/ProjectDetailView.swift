@@ -379,6 +379,8 @@ struct ProjectTransactionPicker: View {
         let candidates = self.candidates
 
         VStack(spacing: 0) {
+            SheetHeader(title: "Ajouter des transactions", subtitle: "Projet « \(project.name) »")
+
             HStack(spacing: 12) {
                 TextField("Rechercher un bénéficiaire, une catégorie ou une note", text: $searchText)
                     .textFieldStyle(.roundedBorder)
@@ -388,7 +390,8 @@ struct ProjectTransactionPicker: View {
                         .toggleStyle(.checkbox)
                 }
             }
-            .padding(12)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
 
             Divider()
 
@@ -421,15 +424,13 @@ struct ProjectTransactionPicker: View {
                 .width(110)
             }
 
-            Divider()
-
-            HStack {
+            SheetFooter {
                 Text(candidates.count >= Self.rowLimit
                      ? "Les \(Self.rowLimit) transactions les plus récentes sans projet. Affinez avec la recherche."
                      : "\(candidates.count) transaction\(candidates.count > 1 ? "s" : "") sans projet")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Spacer()
+            } actions: {
                 Button("Annuler") {
                     isPresented = false
                 }
@@ -441,9 +442,9 @@ struct ProjectTransactionPicker: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(selection.isEmpty)
             }
-            .padding(12)
         }
         .frame(width: 760, height: 520)
+        .sheetBackground()
     }
 
     /// Transactions sans projet, hors transferts, les plus récentes d'abord

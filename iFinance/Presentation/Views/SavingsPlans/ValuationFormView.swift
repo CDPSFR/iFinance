@@ -21,19 +21,11 @@ struct ValuationFormView: View {
     }
 
     var body: some View {
-        VStack(spacing: 20) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(snapshotToEdit == nil ? "Mettre à jour la valeur" : "Modifier la valeur")
-                        .font(.title)
-                        .fontWeight(.bold)
-                    Text(account.name)
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-            }
-
-            Divider()
+        VStack(spacing: 0) {
+            SheetHeader(
+                title: snapshotToEdit == nil ? "Mettre à jour la valeur" : "Modifier la valeur",
+                subtitle: account.name
+            )
 
             Form {
                 Section {
@@ -70,18 +62,16 @@ struct ValuationFormView: View {
             }
             .formStyle(.grouped)
 
-            HStack {
+            SheetFooter {
                 Button("Annuler") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Spacer()
                 Button("Enregistrer") { save() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled((Decimal(userInput: value) ?? -1) < 0)
                     .keyboardShortcut(.defaultAction)
+                    .disabled((Decimal(userInput: value) ?? -1) < 0)
             }
         }
-        .padding()
-        .frame(width: 480, height: 480)
+        .frame(width: 520, height: 480)
+        .sheetBackground()
     }
 
     private var investedAtDate: Decimal {

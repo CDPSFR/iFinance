@@ -25,20 +25,7 @@ struct QIFImportView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Importer un fichier QIF")
-                    .font(.headline)
-                Spacer()
-                Button { isPresented = false } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                        .font(.title3)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding()
-
-            Divider()
+            SheetHeader(title: "Importer un fichier QIF")
 
             switch step {
             case .pickFile:  pickFileView
@@ -46,8 +33,42 @@ struct QIFImportView: View {
             case .importing: importingView
             case .done:      doneView
             }
+
+            // Pied commun : les boutons dépendent de l'étape (aucun pendant l'import)
+            if step != .importing {
+                SheetFooter {
+                    if step == .preview {
+                        Button("Retour") {
+                            step = .pickFile
+                            parsedTransactions = []
+                            selected = []
+                        }
+
+                        Text("\(selected.count) transaction(s) à importer")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                } actions: {
+                    if step == .done {
+                        Button("Fermer") { isPresented = false }
+                            .keyboardShortcut(.defaultAction)
+                    } else {
+                        Button("Annuler") { isPresented = false }
+                            .keyboardShortcut(.cancelAction)
+
+                        if step == .preview {
+                            Button("Importer") {
+                                Task { await doImport() }
+                            }
+                            .keyboardShortcut(.defaultAction)
+                            .disabled(selected.isEmpty)
+                        }
+                    }
+                }
+            }
         }
         .frame(width: 620, height: 560)
+        .sheetBackground()
     }
 
     // MARK: - Step 1: Pick file & account
@@ -96,15 +117,9 @@ struct QIFImportView: View {
             }
 
             Spacer()
-
-            HStack {
-                Button("Annuler") { isPresented = false }
-                    .buttonStyle(.bordered)
-                Spacer()
-            }
-            .padding()
         }
-        .padding()
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 20)
     }
 
     // MARK: - Step 2: Preview
@@ -126,8 +141,8 @@ struct QIFImportView: View {
                 .font(.subheadline)
                 .foregroundColor(.blue)
             }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 8)
 
             Divider()
 
@@ -170,30 +185,6 @@ struct QIFImportView: View {
                 }
             }
             .listStyle(.plain)
-
-            Divider()
-
-            HStack {
-                Button("Retour") {
-                    step = .pickFile
-                    parsedTransactions = []
-                    selected = []
-                }
-                .buttonStyle(.bordered)
-
-                Spacer()
-
-                Text("\(selected.count) transaction(s) à importer")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                Button("Importer") {
-                    Task { await doImport() }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(selected.isEmpty)
-            }
-            .padding()
         }
     }
 
@@ -258,19 +249,10 @@ struct QIFImportView: View {
                             .cornerRadius(8)
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, 20)
                 }
                 .padding(.bottom, 16)
             }
-
-            Divider()
-
-            HStack {
-                Spacer()
-                Button("Fermer") { isPresented = false }
-                    .buttonStyle(.borderedProminent)
-            }
-            .padding()
         }
     }
 

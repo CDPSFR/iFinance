@@ -388,17 +388,20 @@ struct BudgetsView: View {
     @ViewBuilder
     private var emptyStateView: some View {
         if searchText.isEmpty {
-            ContentUnavailableView {
-                Label("Aucun budget", systemImage: "chart.pie")
-            } description: {
-                Text("Créez des budgets pour suivre vos dépenses par catégorie.")
-            } actions: {
-                Button("Créer un budget") {
-                    showForm = true
-                }
+            TopEmptyState(
+                systemImage: "chart.pie",
+                title: "Aucun budget",
+                message: "Créez des budgets pour suivre vos dépenses par catégorie.",
+                actionTitle: "Créer un budget"
+            ) {
+                showForm = true
             }
         } else {
-            ContentUnavailableView.search(text: searchText)
+            TopEmptyState(
+                systemImage: "magnifyingglass",
+                title: "Aucun résultat",
+                message: "Aucun budget ne correspond à « \(searchText) »."
+            )
         }
     }
 }

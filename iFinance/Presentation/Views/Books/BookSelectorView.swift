@@ -9,27 +9,9 @@ struct BookSelectorView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("Mes Livres")
-                    .font(.title)
-                    .fontWeight(.bold)
-                
-                Spacer()
-                
-                Button {
-                    isPresented = false
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding()
-            
-            Divider()
-            
+            // En-tête de feuille
+            SheetHeader(title: "Mes livres")
+
             // Toggle Archivés
             Toggle("Afficher les livres archivés", isOn: $showArchived)
                 .padding()
@@ -77,8 +59,17 @@ struct BookSelectorView: View {
                 }
             }
             .listStyle(.inset)
+
+            // Pied de feuille : simple fermeture
+            SheetFooter {
+                Button("Fermer") {
+                    isPresented = false
+                }
+                .keyboardShortcut(.cancelAction)
+            }
         }
         .frame(width: 600, height: 500)
+        .sheetBackground()
         .alert("Supprimer le livre ?", isPresented: $showDeleteConfirmation, presenting: bookToDelete) { book in
             Button("Annuler", role: .cancel) { }
             Button("Supprimer", role: .destructive) {

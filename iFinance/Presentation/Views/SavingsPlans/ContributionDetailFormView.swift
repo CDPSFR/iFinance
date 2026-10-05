@@ -21,19 +21,11 @@ struct ContributionDetailFormView: View {
     }
 
     var body: some View {
-        VStack(spacing: 20) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Apport du \(flow.date.formatted(date: .abbreviated, time: .omitted))")
-                        .font(.title)
-                        .fontWeight(.bold)
-                    Text(flow.amount, format: .currency(code: account.currency))
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-            }
-
-            Divider()
+        VStack(spacing: 0) {
+            SheetHeader(
+                title: "Apport du \(flow.date.formatted(date: .abbreviated, time: .omitted))",
+                subtitle: flow.amount.formatted(.currency(code: account.currency))
+            )
 
             Form {
                 Section {
@@ -54,10 +46,9 @@ struct ContributionDetailFormView: View {
             }
             .formStyle(.grouped)
 
-            HStack {
+            SheetFooter {
                 Button("Annuler") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Spacer()
                 Button("Enregistrer") {
                     guard let transactionID = flow.transactionID else { return }
                     Task {
@@ -72,12 +63,11 @@ struct ContributionDetailFormView: View {
                         dismiss()
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(flow.transactionID == nil)
                 .keyboardShortcut(.defaultAction)
+                .disabled(flow.transactionID == nil)
             }
         }
-        .padding()
-        .frame(width: 460, height: 400)
+        .frame(width: 520, height: 400)
+        .sheetBackground()
     }
 }

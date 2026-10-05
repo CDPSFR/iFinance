@@ -21,15 +21,8 @@ struct InvestmentPositionFormView: View {
     }
 
     var body: some View {
-        VStack(spacing: 20) {
-            HStack {
-                Text(positionToEdit == nil ? "Nouvelle position" : "Modifier la position")
-                    .font(.title)
-                    .fontWeight(.bold)
-                Spacer()
-            }
-
-            Divider()
+        VStack(spacing: 0) {
+            SheetHeader(title: positionToEdit == nil ? "Nouvelle position" : "Modifier la position")
 
             Form {
                 Section {
@@ -50,18 +43,16 @@ struct InvestmentPositionFormView: View {
             }
             .formStyle(.grouped)
 
-            HStack {
+            SheetFooter {
                 Button("Annuler") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button(positionToEdit == nil ? "Créer" : "Modifier") { save() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!isValid || isSaving)
+                Button(positionToEdit == nil ? "Créer" : "Enregistrer") { save() }
                     .keyboardShortcut(.defaultAction)
+                    .disabled(!isValid || isSaving)
             }
         }
-        .padding()
-        .frame(width: 460, height: 340)
+        .frame(width: 520, height: 340)
+        .sheetBackground()
     }
 
     private var isValid: Bool {

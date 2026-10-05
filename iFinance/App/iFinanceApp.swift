@@ -43,6 +43,7 @@ struct iFinanceApp: App {
                 creationButton(.category)
                 creationButton(.payee)
                 creationButton(.budget)
+                creationButton(.project)
                 Divider()
                 creationButton(.book)
             }
@@ -77,7 +78,7 @@ struct iFinanceApp: App {
 
 /// Commandes de création du menu Fichier, relayées à la fenêtre principale par notification
 enum CreationCommand: String, CaseIterable, Identifiable {
-    case transaction, account, category, payee, budget, book
+    case transaction, account, category, payee, budget, project, book
 
     static let notification = Notification.Name("iFinance.creationCommand")
 
@@ -90,6 +91,7 @@ enum CreationCommand: String, CaseIterable, Identifiable {
         case .category: return "Nouvelle catégorie"
         case .payee: return "Nouveau bénéficiaire"
         case .budget: return "Nouveau budget"
+        case .project: return "Nouveau projet"
         case .book: return "Nouveau livre"
         }
     }
@@ -99,6 +101,7 @@ enum CreationCommand: String, CaseIterable, Identifiable {
         case .transaction, .account, .book: return "n"
         case .category: return "c"
         case .payee, .budget: return "b"
+        case .project: return "p"
         }
     }
 
@@ -107,6 +110,7 @@ enum CreationCommand: String, CaseIterable, Identifiable {
         case .transaction: return .command
         case .account, .category, .payee: return [.command, .shift]
         case .budget, .book: return [.command, .option]
+        case .project: return [.command, .shift]
         }
     }
 }

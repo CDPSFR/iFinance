@@ -30,26 +30,10 @@ struct BulkCategorizeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Catégoriser")
-                        .font(.headline)
-                    Text("\(transactionIDs.count) transaction(s) sélectionnée(s)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-                Button { isPresented = false } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                        .font(.title3)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding()
-
-            Divider()
+            SheetHeader(
+                title: "Catégoriser",
+                subtitle: "\(transactionIDs.count) transaction(s) sélectionnée(s)"
+            )
 
             // Search
             HStack {
@@ -66,8 +50,8 @@ struct BulkCategorizeView: View {
             .padding(8)
             .background(Color(NSColor.controlBackgroundColor))
             .cornerRadius(8)
-            .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
 
             Divider()
 
@@ -105,15 +89,8 @@ struct BulkCategorizeView: View {
             }
             .listStyle(.inset)
 
-            Divider()
-
-            // Footer
-            HStack {
-                Button("Annuler") { isPresented = false }
-                    .buttonStyle(.bordered)
-
-                Spacer()
-
+            // Pied : rappel de la catégorie choisie à gauche
+            SheetFooter {
                 if let id = selectedCategoryID,
                    let category = categoriesController.getCategory(id: id) {
                     HStack(spacing: 6) {
@@ -124,17 +101,20 @@ struct BulkCategorizeView: View {
                             .foregroundColor(.secondary)
                     }
                 }
+            } actions: {
+                Button("Annuler") { isPresented = false }
+                    .keyboardShortcut(.cancelAction)
 
                 Button("Appliquer") {
                     onApply(selectedCategoryID)
                     isPresented = false
                 }
-                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
                 .disabled(selectedCategoryID == nil && !canApplyNone)
             }
-            .padding()
         }
         .frame(width: 480, height: 520)
+        .sheetBackground()
     }
 
     // Allow applying "no category" only when explicitly selecting the nil row

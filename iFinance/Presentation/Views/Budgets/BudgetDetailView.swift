@@ -627,20 +627,7 @@ struct BudgetDetailView: View {
 
     private var adjustSheet: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Ajuster le budget")
-                    .font(.headline)
-                Spacer()
-                Button { showAdjustSheet = false } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                        .font(.title3)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding()
-
-            Divider()
+            SheetHeader(title: "Ajuster le budget", subtitle: budget.name)
 
             Form {
                 Section("Nouveau montant") {
@@ -657,12 +644,9 @@ struct BudgetDetailView: View {
             }
             .formStyle(.grouped)
 
-            Divider()
-
-            HStack {
+            SheetFooter {
                 Button("Annuler") { showAdjustSheet = false }
-                    .buttonStyle(.bordered)
-                Spacer()
+                    .keyboardShortcut(.cancelAction)
                 Button("Enregistrer") {
                     let dec = Decimal(string: adjustAmount.replacingOccurrences(of: ",", with: ".")) ?? 0
                     Task {
@@ -676,12 +660,12 @@ struct BudgetDetailView: View {
                         showAdjustSheet = false
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
                 .disabled(adjustAmount.isEmpty)
             }
-            .padding()
         }
-        .frame(width: 400, height: 320)
+        .frame(width: 520, height: 320)
+        .sheetBackground()
     }
 
     private func loadVersions() async {

@@ -53,15 +53,8 @@ struct InvestmentOperationFormView: View {
     }
 
     var body: some View {
-        VStack(spacing: 20) {
-            HStack {
-                Text(operationToEdit == nil ? "Nouvelle opération" : "Modifier l'opération")
-                    .font(.title)
-                    .fontWeight(.bold)
-                Spacer()
-            }
-
-            Divider()
+        VStack(spacing: 0) {
+            SheetHeader(title: operationToEdit == nil ? "Nouvelle opération" : "Modifier l'opération")
 
             Form {
                 Section {
@@ -114,18 +107,16 @@ struct InvestmentOperationFormView: View {
             }
             .formStyle(.grouped)
 
-            HStack {
+            SheetFooter {
                 Button("Annuler") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button(operationToEdit == nil ? "Enregistrer" : "Modifier") { save() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(draft == nil || isSaving)
+                Button("Enregistrer") { save() }
                     .keyboardShortcut(.defaultAction)
+                    .disabled(draft == nil || isSaving)
             }
         }
-        .padding()
         .frame(width: 520, height: 680)
+        .sheetBackground()
         .onChange(of: type) { _, newType in
             // Une opération sur quantité exige une position
             if newType.affectsQuantity && positionChoice == .none {

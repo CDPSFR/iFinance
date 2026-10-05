@@ -20,29 +20,71 @@ struct BudgetFormView: View {
 
     private var isEditing: Bool { budgetToEdit != nil }
 
+    private var currencySymbol: String {
+        let code = booksController.currentBook?.currency ?? "EUR"
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = code
+        return formatter.currencySymbol ?? code
+    }
+
+    /// Montant en grand, centré, avec la devise : même présentation que dans la fenêtre de transaction
+    private var amountField: some View {
+        VStack(spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                TextField("Montant", text: $amount, prompt: Text("0,00"))
+                    .labelsHidden()
+                    .textFieldStyle(.plain)
+                    .multilineTextAlignment(.center)
+                    .font(.system(size: 34, weight: .semibold))
+                    .monospacedDigit()
+                    .frame(width: 210)
+
+                Text(currencySymbol)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text("Montant du budget · \(period.displayName.lowercased())")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 2)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            // Title bar
-            HStack {
-                Text(isEditing ? "Modifier le budget" : "Nouveau budget")
-                    .font(.headline)
-                Spacer()
-                Button { isPresented = false } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                        .font(.title3)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding()
+            // En-tête de feuille
+            SheetHeader(
+                title: isEditing ? "Modifier le budget" : "Nouveau budget",
+                subtitle: budgetToEdit?.name
+            )
 
-            Divider()
+            amountField
+                .padding(.horizontal, 20)
+                .padding(.bottom, 4)
 
             Form {
                 // Name
                 Section("Informations") {
-                    TextField("Nom du budget", text: $name)
-                    TextField("Note (optionnel)", text: $note)
+                    // Champs visibles, sur la même colonne de 260 points que les autres feuilles
+                    LabeledContent("Nom du budget") {
+                        TextField("Nom du budget", text: $name, prompt: Text("Alimentation"))
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                            .multilineTextAlignment(.leading)
+                            .frame(width: 260)
+                    }
+
+                    LabeledContent("Note (optionnel)") {
+                        TextField("Note", text: $note, prompt: Text("Facultatif"), axis: .vertical)
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(2...4)
+                            .frame(width: 260)
+                    }
                 }
 
                 // Period & Amount
@@ -51,14 +93,6 @@ struct BudgetFormView: View {
                         ForEach(BudgetPeriod.allCases, id: \.self) { p in
                             Text(p.displayName).tag(p)
                         }
-                    }
-
-                    HStack {
-                        Text("Montant")
-                        Spacer()
-                        TextField("0,00", text: $amount)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 100)
                     }
 
                     DatePicker(
@@ -85,22 +119,19 @@ struct BudgetFormView: View {
             }
             .formStyle(.grouped)
 
-            Divider()
-
             // Actions
-            HStack {
+            SheetFooter {
                 Button("Annuler") { isPresented = false }
-                    .buttonStyle(.bordered)
-                Spacer()
+                    .keyboardShortcut(.cancelAction)
                 Button(isEditing ? "Enregistrer" : "Créer") {
                     save()
                 }
-                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
                 .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || amount.isEmpty)
             }
-            .padding()
         }
-        .frame(width: 500, height: 620)
+        .frame(width: 520, height: 620)
+        .sheetBackground()
         .onAppear { populateIfEditing() }
     }
 

@@ -15,19 +15,8 @@ struct PositionPriceFormView: View {
     }
 
     var body: some View {
-        VStack(spacing: 20) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Cours")
-                        .font(.title)
-                        .fontWeight(.bold)
-                    Text("\(position.name) · \(position.symbol)")
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-            }
-
-            Divider()
+        VStack(spacing: 0) {
+            SheetHeader(title: "Cours", subtitle: "\(position.name) · \(position.symbol)")
 
             Form {
                 HStack {
@@ -49,10 +38,9 @@ struct PositionPriceFormView: View {
             }
             .formStyle(.grouped)
 
-            HStack {
+            SheetFooter {
                 Button("Annuler") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Spacer()
                 Button("Enregistrer") {
                     guard let parsed = Decimal(userInput: price) else { return }
                     Task {
@@ -60,12 +48,11 @@ struct PositionPriceFormView: View {
                         dismiss()
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled((Decimal(userInput: price) ?? -1) < 0)
                 .keyboardShortcut(.defaultAction)
+                .disabled((Decimal(userInput: price) ?? -1) < 0)
             }
         }
-        .padding()
-        .frame(width: 420, height: 320)
+        .frame(width: 520, height: 320)
+        .sheetBackground()
     }
 }

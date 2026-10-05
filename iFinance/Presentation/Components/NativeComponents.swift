@@ -85,6 +85,38 @@ struct InspectorContainer<Content: View>: View {
             }
             .padding(16)
         }
+        // Tous les boutons de l'inspecteur s'étirent : seul sur sa ligne, un bouton prend
+        // toute la largeur ; à deux dans un HStack, chacun en prend la moitié.
+        .buttonStyle(InspectorButtonStyle())
+    }
+}
+
+/// Bouton d'inspecteur : largeur maximale, aspect d'un bouton bordé standard.
+/// Les boutons qui déclarent leur propre style (.borderless, .plain) ne sont pas concernés.
+struct InspectorButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        InspectorButtonBody(configuration: configuration)
+    }
+
+    private struct InspectorButtonBody: View {
+        let configuration: ButtonStyle.Configuration
+        @Environment(\.isEnabled) private var isEnabled
+
+        var body: some View {
+            configuration.label
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .foregroundStyle(configuration.role == .destructive ? Color.red : Color.primary)
+                .frame(maxWidth: .infinity)
+                .frame(height: 24)
+                .padding(.horizontal, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.primary.opacity(configuration.isPressed ? 0.16 : 0.08))
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .opacity(isEnabled ? 1 : 0.4)
+        }
     }
 }
 
@@ -197,5 +229,96 @@ struct SidePanelLayout<Main: View, Panel: View>: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: isPresented)
+    }
+}
+
+// MARK: - Feuilles : en-tête et pied communs
+
+/// En-tête de feuille : titre, sous-titre facultatif. Pas de croix de fermeture :
+/// la feuille se ferme par « Annuler » (touche Échap).
+struct SheetHeader: View {
+    let title: String
+    var subtitle: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.headline)
+            if let subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 12)
+    }
+}
+
+/// Pied de feuille : filet, actions secondaires à gauche, « Annuler » et action principale à droite
+struct SheetFooter<Leading: View, Actions: View>: View {
+    @ViewBuilder var leading: Leading
+    @ViewBuilder var actions: Actions
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Divider()
+            HStack(spacing: 8) {
+                leading
+                Spacer()
+                actions
+            }
+            .padding(12)
+        }
+    }
+}
+
+extension SheetFooter where Leading == EmptyView {
+    init(@ViewBuilder actions: () -> Actions) {
+        self.leading = EmptyView()
+        self.actions = actions()
+    }
+}
+
+// MARK: - État vide en haut de page
+
+/// Message d'état vide posé en haut de la page (icône, titre, phrase, action facultative).
+/// Construit avec des vues simples et un Spacer : contrairement à ContentUnavailableView
+/// contraint par fixedSize, il ne peut pas étirer la fenêtre.
+struct TopEmptyState: View {
+    let systemImage: String
+    let title: String
+    let message: String
+    var actionTitle: String? = nil
+    var action: (() -> Void)? = nil
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 40))
+                    .foregroundStyle(.secondary)
+
+                Text(title)
+                    .font(.title2.weight(.semibold))
+
+                Text(message)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+
+                if let actionTitle, let action {
+                    Button(actionTitle, action: action)
+                        .padding(.top, 6)
+                }
+            }
+            .padding(.top, 48)
+            .padding(.horizontal, 20)
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

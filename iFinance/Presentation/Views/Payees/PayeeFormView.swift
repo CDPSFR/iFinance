@@ -27,40 +27,29 @@ struct PayeeFormView: View {
     }
     
     var body: some View {
-        VStack(spacing: 20) {
-            // Header
-            HStack {
-                Text(payeeToEdit == nil ? "Nouveau Bénéficiaire" : "Modifier le Bénéficiaire")
-                    .font(.title)
-                    .fontWeight(.bold)
-                
-                Spacer()
-                
-                Button {
-                    isPresented = false
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-            
-            Divider()
-            
+        VStack(spacing: 0) {
+            // En-tête de feuille
+            SheetHeader(
+                title: payeeToEdit == nil ? "Nouveau bénéficiaire" : "Modifier le bénéficiaire",
+                subtitle: payeeToEdit?.name
+            )
+
             // Formulaire
             Form {
                 Section {
                     TextField("Nom du bénéficiaire", text: $name)
                         .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.leading)
                 }
                 
                 Section("Localisation") {
                     TextField("Ville (optionnel)", text: $city)
                         .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.leading)
                     
                     TextField("Code postal (optionnel)", text: $postalCode)
                         .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.leading)
                 }
                 
                 Section("Catégorie par défaut") {
@@ -85,32 +74,28 @@ struct PayeeFormView: View {
                 Section("Notes") {
                     TextField("Notes (optionnel)", text: $notes, axis: .vertical)
                         .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.leading)
                         .lineLimit(3...6)
                 }
             }
             .formStyle(.grouped)
-            
-            Spacer()
-            
+
             // Boutons
-            HStack {
+            SheetFooter {
                 Button("Annuler") {
                     isPresented = false
                 }
                 .keyboardShortcut(.cancelAction)
-                
-                Spacer()
-                
-                Button(payeeToEdit == nil ? "Créer" : "Modifier") {
+
+                Button(payeeToEdit == nil ? "Créer" : "Enregistrer") {
                     savePayee()
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
                 .keyboardShortcut(.defaultAction)
+                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
             }
         }
-        .padding()
-        .frame(width: 500, height: 550)
+        .frame(width: 520, height: 550)
+        .sheetBackground()
     }
     
     private func savePayee() {

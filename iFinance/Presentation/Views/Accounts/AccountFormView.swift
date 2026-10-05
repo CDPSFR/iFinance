@@ -43,20 +43,12 @@ struct AccountFormView: View {
     var body: some View {
         VStack(spacing: 0) {
             // En-tête de feuille
-            VStack(alignment: .leading, spacing: 2) {
-                Text(accountToEdit == nil ? "Nouveau compte" : "Modifier le compte")
-                    .font(.headline)
-
-                if let book = bookController.currentBook {
-                    Text("Ajouté au livre « \(book.name) ». Le solde est tenu à la main ou par import de fichier.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+            SheetHeader(
+                title: accountToEdit == nil ? "Nouveau compte" : "Modifier le compte",
+                subtitle: bookController.currentBook.map { book in
+                    "Ajouté au livre « \(book.name) ». Le solde est tenu à la main ou par import de fichier."
                 }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
+            )
 
             // Formulaire groupé : étiquettes à gauche, contrôles à droite
             Form {
@@ -110,12 +102,8 @@ struct AccountFormView: View {
             }
             .formStyle(.grouped)
 
-            Divider()
-
             // Boutons : action par défaut à droite
-            HStack(spacing: 8) {
-                Spacer()
-
+            SheetFooter {
                 Button("Annuler") {
                     isPresented = false
                 }
@@ -124,14 +112,12 @@ struct AccountFormView: View {
                 Button(accountToEdit == nil ? "Créer" : "Enregistrer") {
                     saveAccount()
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
                 .keyboardShortcut(.defaultAction)
+                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
         }
         .frame(width: 520, height: 700)
+        .sheetBackground()
     }
 
     /// Options affichées à l'endroit (« inclure », « afficher ») mais stockées à l'envers

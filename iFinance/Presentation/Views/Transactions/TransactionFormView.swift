@@ -1,14 +1,19 @@
 import SwiftUI
 
+/// Création ou modification d'une transaction.
+/// Tous les contrôles partagent une colonne de 260 points, alignée à droite ; les lignes
+/// Bénéficiaire, Catégorie et Projet ont un bouton « + » pour créer l'élément à la volée.
 struct TransactionFormView: View {
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var payeesController: PayeesController
+    @EnvironmentObject var projectsController: ProjectsController
+    @EnvironmentObject var booksController: BooksController
     @Binding var isPresented: Bool
-    
+
     var transactionToEdit: Transaction?
-    
+
     @State private var date: Date
     @State private var amount: String
     @State private var selectedType: TransactionType
@@ -17,26 +22,37 @@ struct TransactionFormView: View {
     @State private var selectedToAccount: UUID?
     @State private var selectedPayee: UUID?
     @State private var selectedCategory: UUID?
+    @State private var selectedProject: UUID?
+    @State private var isReconciled: Bool
     @State private var isCreating = false
-    
-    // Pour la création rapide de payee
-    @State private var showQuickPayeeCreate = false
-    @State private var quickPayeeName = ""
-    
+    @State private var createAnother = false
+    /// Vrai quand la catégorie vient d'être proposée d'après le bénéficiaire
+    @State private var categoryWasSuggested = false
+    @State private var showDeleteConfirmation = false
+
+    // Création à la volée : on retient les identifiants existants pour repérer le nouvel élément
+    @State private var showPayeeForm = false
+    @State private var showCategoryForm = false
+    @State private var showProjectForm = false
+    @State private var knownIDs: Set<UUID> = []
+
+    private static let controlWidth: CGFloat = 260
+
     init(isPresented: Binding<Bool>, transactionToEdit: Transaction? = nil) {
         self._isPresented = isPresented
         self.transactionToEdit = transactionToEdit
-        
-        // Initialisation des valeurs
+
         if let transaction = transactionToEdit {
             _date = State(initialValue: transaction.date)
-            _amount = State(initialValue: "\(abs(transaction.amount))")
+            _amount = State(initialValue: "\(abs(transaction.amount))".replacingOccurrences(of: ".", with: ","))
             _selectedType = State(initialValue: transaction.type)
             _memo = State(initialValue: transaction.memo ?? "")
             _selectedAccount = State(initialValue: transaction.accountID)
             _selectedToAccount = State(initialValue: transaction.toAccountID)
             _selectedPayee = State(initialValue: transaction.payeeID)
             _selectedCategory = State(initialValue: transaction.categoryID)
+            _selectedProject = State(initialValue: transaction.projectID)
+            _isReconciled = State(initialValue: transaction.isReconciled)
         } else {
             _date = State(initialValue: Date())
             _amount = State(initialValue: "")
@@ -46,228 +62,272 @@ struct TransactionFormView: View {
             _selectedToAccount = State(initialValue: nil)
             _selectedPayee = State(initialValue: nil)
             _selectedCategory = State(initialValue: nil)
+            _selectedProject = State(initialValue: nil)
+            _isReconciled = State(initialValue: false)
         }
     }
-    
+
+    private var isEditing: Bool { transactionToEdit != nil }
+    private var isTransfer: Bool { selectedType == .transfer }
+
     var body: some View {
-        VStack(spacing: 20) {
-            // Header
-            HStack {
-                Text(transactionToEdit == nil ? "Nouvelle transaction" : "Modifier la transaction")
-                    .font(.title)
-                    .fontWeight(.bold)
-
-                Spacer()
-
-                Button {
-                    isPresented = false
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isEditing ? "Modifier la transaction" : "Nouvelle transaction")
+                        .font(.headline)
+                    Text("Livre « \(booksController.currentBook?.name ?? "") »")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
+
+                FillSegmentedPicker(
+                    options: TransactionType.allCases.map { ($0, $0.displayName) },
+                    selection: $selectedType
+                )
+                .frame(maxWidth: .infinity)
+                // Le type d'un transfert existant ne se change pas (deux transactions liées)
+                .disabled(isEditing && transactionToEdit?.type == .transfer)
+                .onChange(of: selectedType) { _, newValue in
+                    typeChanged(to: newValue)
+                }
+
+                amountField
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
 
-            Divider()
-
-            // Formulaire
             Form {
-                // Type, date, montant, comptes
                 Section {
-                    FillSegmentedPicker(
-                        options: TransactionType.allCases.map { ($0, $0.displayName) },
-                        selection: $selectedType
-                    )
-                    .frame(maxWidth: .infinity)
-                    .onChange(of: selectedType) { oldValue, newValue in
-                        // Réinitialiser certains champs selon le type
-                        if newValue != .transfer {
-                            selectedToAccount = nil
-                        }
-
-                        // Pour debit/credit, réinitialiser la catégorie si elle ne correspond pas au type
-                        if newValue != .transfer {
-                            if let catID = selectedCategory,
-                               let category = categoriesController.getCategory(id: catID) {
-                                let shouldBeIncome = newValue == .credit
-                                if category.isIncome != shouldBeIncome {
-                                    selectedCategory = nil
-                                }
-                            }
-                        }
-                    }
-
-                    formRow("Date") {
+                    LabeledContent("Date") {
                         DatePicker("Date", selection: $date, displayedComponents: [.date])
                             .labelsHidden()
-                        Spacer()
+                            .frame(width: Self.controlWidth, alignment: .leading)
                     }
 
-                    formRow("Montant") {
-                        TextField("Montant", text: $amount, prompt: Text("0,00"))
-                            .labelsHidden()
-                            .textFieldStyle(.roundedBorder)
-                            .multilineTextAlignment(.trailing)
-                    }
+                    accountPicker(
+                        isTransfer ? "Depuis le compte" : "Compte",
+                        selection: $selectedAccount,
+                        accounts: accountsController.activeAccounts
+                    )
 
-                    if selectedType == .transfer {
-                        accountPicker("Compte source", selection: $selectedAccount, accounts: accountsController.activeAccounts)
-
+                    if isTransfer {
                         accountPicker(
-                            "Compte destination",
+                            "Vers le compte",
                             selection: $selectedToAccount,
                             accounts: accountsController.activeAccounts.filter { $0.id != selectedAccount }
                         )
-                    } else {
-                        accountPicker("Compte", selection: $selectedAccount, accounts: accountsController.activeAccounts)
                     }
                 }
 
-                // Bénéficiaire (sauf pour transferts)
-                if selectedType != .transfer {
-                    Section("Bénéficiaire") {
-                        HStack {
-                            FillPopUpPicker(items: payeeItems, selection: $selectedPayee)
-                                .frame(maxWidth: .infinity)
-                            .onChange(of: selectedPayee) { oldValue, newValue in
-                                // Auto-suggérer la catégorie si le payee en a une par défaut
-                                if let payeeID = newValue,
-                                   let defaultCat = payeesController.getDefaultCategory(for: payeeID) {
-                                    selectedCategory = defaultCat
-                                }
-                            }
-
-                            // Bouton création rapide
-                            Button {
-                                showQuickPayeeCreate.toggle()
-                            } label: {
-                                Image(systemName: "plus.circle.fill")
-                                    .foregroundColor(.blue)
-                            }
-                            .buttonStyle(.plain)
-                            .help("Créer un nouveau bénéficiaire rapidement")
-                        }
-
-                        // Création rapide de payee
-                        if showQuickPayeeCreate {
-                            HStack {
-                                TextField("Nom du bénéficiaire", text: $quickPayeeName)
-                                    .textFieldStyle(.roundedBorder)
-
-                                Button("Créer") {
-                                    createQuickPayee()
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(quickPayeeName.trimmingCharacters(in: .whitespaces).isEmpty)
-
-                                Button("Annuler") {
-                                    showQuickPayeeCreate = false
-                                    quickPayeeName = ""
-                                }
-                                .buttonStyle(.bordered)
+                Section {
+                    if !isTransfer {
+                        LabeledContent("Bénéficiaire") {
+                            control(addHelp: "Nouveau bénéficiaire") {
+                                FillPopUpPicker(items: payeeItems, selection: $selectedPayee)
+                            } add: {
+                                knownIDs = Set(payeesController.payees.map { $0.id })
+                                showPayeeForm = true
                             }
                         }
+                        .onChange(of: selectedPayee) { _, newValue in
+                            // Proposer la catégorie par défaut du bénéficiaire
+                            if let payeeID = newValue,
+                               let defaultCategory = payeesController.getDefaultCategory(for: payeeID) {
+                                selectedCategory = defaultCategory
+                                categoryWasSuggested = true
+                            }
+                        }
+                    }
 
-                        // Info si payee sélectionné
-                        if let payeeID = selectedPayee,
-                           let payee = payeesController.getPayee(id: payeeID),
-                           payee.locationDisplay != nil || payee.defaultCategoryID != nil {
-                            HStack(alignment: .top) {
-                                Image(systemName: "info.circle")
-                                    .foregroundColor(.blue)
-                                    .font(.caption)
+                    LabeledContent {
+                        control(addHelp: "Nouvelle catégorie") {
+                            FillPopUpPicker(items: categoryItems, selection: $selectedCategory)
+                        } add: {
+                            knownIDs = Set(categoriesController.categories.map { $0.id })
+                            showCategoryForm = true
+                        }
+                    } label: {
+                        Text("Catégorie")
+                        if categoryWasSuggested, selectedCategory != nil {
+                            Text("Proposée d'après le bénéficiaire")
+                        }
+                    }
 
-                                VStack(alignment: .leading, spacing: 2) {
-                                    if let location = payee.locationDisplay {
-                                        Text(location)
-                                    }
-
-                                    if let catID = payee.defaultCategoryID,
-                                       categoriesController.getCategory(id: catID) != nil {
-                                        Text("Catégorie par défaut : \(categoriesController.getCategoryPath(for: catID))")
-                                    }
-                                }
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-
-                                Spacer()
+                    if !isTransfer {
+                        LabeledContent("Projet") {
+                            control(addHelp: "Nouveau projet") {
+                                FillPopUpPicker(items: projectItems, selection: $selectedProject)
+                            } add: {
+                                knownIDs = Set(projectsController.projects.map { $0.id })
+                                showProjectForm = true
                             }
                         }
                     }
                 }
 
-                // Catégorie (y compris pour transferts)
-                Section("Catégorie") {
-                    let filteredCategories: [Category] = selectedType == .transfer
-                        ? categoriesController.rootCategories
-                        : categoriesController.rootCategories.filter {
-                            $0.isIncome == (selectedType == .credit)
-                        }
-
-                    FillPopUpPicker(items: categoryItems(filteredCategories), selection: $selectedCategory)
-                        .frame(maxWidth: .infinity)
-
-                    // Aperçu catégorie sélectionnée
-                    if let catID = selectedCategory,
-                       let category = categoriesController.getCategory(id: catID) {
-                        HStack {
-                            if let iconName = category.icon {
-                                Image(systemName: iconName)
-                                    .foregroundColor(Color(hex: category.displayColor))
-                            }
-                            Text(categoriesController.getCategoryPath(for: catID))
-                                .font(.subheadline)
-                            Spacer()
-                        }
+                Section {
+                    LabeledContent("Note") {
+                        TextField("Note", text: $memo, prompt: Text("Facultatif"), axis: .vertical)
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(2...4)
+                            .frame(width: Self.controlWidth)
                     }
-                }
 
-                // Mémo
-                Section("Mémo") {
-                    TextField("Mémo", text: $memo, prompt: Text("Ajouter une note (optionnel)"), axis: .vertical)
-                        .lineLimit(3...6)
-                        .labelsHidden()
+                    if !isTransfer {
+                        Toggle("Rapprochée avec le relevé", isOn: $isReconciled)
+                    }
                 }
             }
             .formStyle(.grouped)
 
-            // Boutons
-            HStack {
+            Divider()
+
+            HStack(spacing: 8) {
+                if isEditing {
+                    Button("Supprimer…", role: .destructive) { showDeleteConfirmation = true }
+                } else {
+                    Toggle("Créer une autre ensuite", isOn: $createAnother)
+                        .toggleStyle(.checkbox)
+                }
+
+                Spacer()
+
                 Button("Annuler") {
                     isPresented = false
                 }
                 .keyboardShortcut(.cancelAction)
 
-                Spacer()
-
-                Button(transactionToEdit == nil ? "Créer" : "Modifier") {
+                Button(isEditing ? "Enregistrer" : "Créer") {
                     saveTransaction()
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(!isFormValid || isCreating)
                 .keyboardShortcut(.defaultAction)
+                .disabled(!isFormValid || isCreating)
             }
+            .padding(12)
         }
-        .padding()
-        .frame(width: 560, height: 800)
+        .frame(width: 520, height: 640)
+        .sheetBackground()
         .onChange(of: selectedAccount) { _, newValue in
             // Source et destination d'un transfert doivent différer
             if selectedToAccount == newValue {
                 selectedToAccount = nil
             }
         }
-        .onAppear {
-            // Mode création uniquement : sélectionner le compte par défaut
-            guard transactionToEdit == nil, selectedAccount == nil else { return }
-            if let filteredAccountID = transactionsController.filters.accountID {
-                selectedAccount = filteredAccountID
-            } else if let defaultAccount = accountsController.selectedAccount?.id {
-                selectedAccount = defaultAccount
-            } else if let firstAccount = accountsController.activeAccounts.first?.id {
-                selectedAccount = firstAccount
+        .onChange(of: selectedCategory) { oldValue, newValue in
+            // Un choix manuel efface la mention « proposée »
+            if oldValue != nil, newValue != oldValue, selectedPayee.flatMap({ payeesController.getDefaultCategory(for: $0) }) != newValue {
+                categoryWasSuggested = false
             }
         }
+        .onAppear(perform: selectDefaultAccount)
+        .sheet(isPresented: $showPayeeForm, onDismiss: {
+            if let created = payeesController.payees.first(where: { !knownIDs.contains($0.id) }) {
+                selectedPayee = created.id
+            }
+        }) {
+            PayeeFormView(isPresented: $showPayeeForm)
+        }
+        .sheet(isPresented: $showCategoryForm, onDismiss: {
+            if let created = categoriesController.categories.first(where: { !knownIDs.contains($0.id) }) {
+                selectedCategory = created.id
+                categoryWasSuggested = false
+            }
+        }) {
+            CategoryFormView(isPresented: $showCategoryForm, initialIsIncome: selectedType == .credit)
+        }
+        .sheet(isPresented: $showProjectForm, onDismiss: {
+            if let created = projectsController.projects.first(where: { !knownIDs.contains($0.id) }) {
+                selectedProject = created.id
+            }
+        }) {
+            ProjectFormView(isPresented: $showProjectForm)
+        }
+        .alert("Supprimer la transaction ?", isPresented: $showDeleteConfirmation) {
+            Button("Annuler", role: .cancel) { }
+            Button("Supprimer", role: .destructive) {
+                guard let id = transactionToEdit?.id else { return }
+                Task {
+                    await transactionsController.deleteTransaction(id: id)
+                    await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
+                    isPresented = false
+                }
+            }
+        } message: {
+            Text(transactionToEdit?.type == .transfer
+                 ? "Les deux côtés du transfert seront supprimés. Cette action est irréversible."
+                 : "Cette action est irréversible.")
+        }
+    }
+
+    // MARK: - Montant
+
+    private var currencySymbol: String {
+        let code = selectedAccount.flatMap { accountsController.getAccount(id: $0)?.currency }
+            ?? booksController.currentBook?.currency ?? "EUR"
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = code
+        return formatter.currencySymbol ?? code
+    }
+
+    /// Montant en grand, centré, avec le signe du type et la devise
+    private var amountField: some View {
+        let color: Color = selectedType == .credit ? .green : .primary
+        let sign = selectedType == .credit ? "+" : (isTransfer ? "" : "−")
+
+        return HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(sign)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(color)
+
+            TextField("Montant", text: $amount, prompt: Text("0,00"))
+                .labelsHidden()
+                .textFieldStyle(.plain)
+                .multilineTextAlignment(.center)
+                .font(.system(size: 34, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(color)
+                .frame(width: 210)
+                // Le montant d'un transfert existant ne se modifie pas ici
+                .disabled(isEditing && transactionToEdit?.type == .transfer)
+
+            Text(currencySymbol)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 2)
+    }
+
+    // MARK: - Lignes du formulaire
+
+    /// Contrôle et son bouton « + », ensemble dans la colonne de 260 points
+    private func control<Content: View>(
+        addHelp: String,
+        @ViewBuilder content: () -> Content,
+        add: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 6) {
+            content()
+                .frame(maxWidth: .infinity)
+
+            Button(action: add) {
+                Image(systemName: "plus")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 22, height: 22)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(Color.primary.opacity(0.06))
+                    )
+            }
+            .buttonStyle(.plain)
+            .help(addHelp)
+            .accessibilityLabel(addHelp)
+        }
+        .frame(width: Self.controlWidth)
     }
 
     /// Sélecteur de compte : propose « Sélectionner… » tant qu'aucun compte valide n'est choisi
@@ -276,9 +336,11 @@ struct TransactionFormView: View {
         let items = (needsPlaceholder ? [FillPopUpItem<UUID>(id: nil, title: "Sélectionner…")] : [])
             + accounts.map { FillPopUpItem(id: $0.id, title: $0.name, systemImage: $0.type.icon) }
 
-        return formRow(title) {
+        return LabeledContent(title) {
             FillPopUpPicker(items: items, selection: selection)
-                .frame(maxWidth: .infinity)
+                .frame(width: Self.controlWidth)
+                // Les comptes d'un transfert existant ne se modifient pas ici
+                .disabled(isEditing && transactionToEdit?.type == .transfer)
         }
     }
 
@@ -289,8 +351,12 @@ struct TransactionFormView: View {
             }
     }
 
-    /// Catégories racines suivies de leurs sous-catégories, indentées
-    private func categoryItems(_ roots: [Category]) -> [FillPopUpItem<UUID>] {
+    /// Catégories du sens de la transaction (toutes pour un transfert), sous-catégories indentées
+    private var categoryItems: [FillPopUpItem<UUID>] {
+        let roots = isTransfer
+            ? categoriesController.rootCategories
+            : categoriesController.rootCategories.filter { $0.isIncome == (selectedType == .credit) }
+
         var items = [FillPopUpItem<UUID>(id: nil, title: "Aucune")]
         for category in roots {
             items.append(FillPopUpItem(id: category.id, title: category.name, systemImage: category.icon ?? "folder"))
@@ -301,107 +367,122 @@ struct TransactionFormView: View {
         return items
     }
 
-    /// Ligne de formulaire : libellé en colonne fixe, contrôle sur toute la largeur restante
-    private func formRow<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack {
-            Text(title)
-                .frame(width: 140, alignment: .leading)
-            content()
+    private var projectItems: [FillPopUpItem<UUID>] {
+        [FillPopUpItem<UUID>(id: nil, title: "Aucun")]
+            + projectsController.selectableProjects(including: selectedProject).map {
+                FillPopUpItem(id: $0.id, title: $0.name, systemImage: "folder")
+            }
+    }
+
+    // MARK: - Logique
+
+    private func typeChanged(to newValue: TransactionType) {
+        if newValue != .transfer {
+            selectedToAccount = nil
+            // La catégorie doit correspondre au sens (dépense ou revenu)
+            if let categoryID = selectedCategory,
+               let category = categoriesController.getCategory(id: categoryID),
+               category.isIncome != (newValue == .credit) {
+                selectedCategory = nil
+                categoryWasSuggested = false
+            }
+        } else {
+            selectedPayee = nil
+            selectedProject = nil
+            categoryWasSuggested = false
         }
     }
 
-    private var isFormValid: Bool {
-        guard !amount.isEmpty,
-              Decimal(string: amount.replacingOccurrences(of: ",", with: ".")) != nil else {
-            return false
+    /// Mode création : compte filtré à l'écran, sinon compte courant, sinon premier compte
+    private func selectDefaultAccount() {
+        guard transactionToEdit == nil, selectedAccount == nil else { return }
+        if let filteredAccountID = transactionsController.filters.accountID {
+            selectedAccount = filteredAccountID
+        } else if let defaultAccount = accountsController.selectedAccount?.id {
+            selectedAccount = defaultAccount
+        } else if let firstAccount = accountsController.activeAccounts.first?.id {
+            selectedAccount = firstAccount
         }
-        
-        if selectedType == .transfer {
+    }
+
+    private var parsedAmount: Decimal? {
+        let cleaned = amount
+            .replacingOccurrences(of: ",", with: ".")
+            .filter { !$0.isWhitespace && $0 != "\u{202F}" && $0 != "\u{00A0}" }
+        return Decimal(string: cleaned)
+    }
+
+    private var isFormValid: Bool {
+        guard let value = parsedAmount, value != 0 else { return false }
+        if isTransfer {
             return selectedAccount != nil && selectedToAccount != nil
         }
-        
         return selectedAccount != nil
     }
-    
-    private func createQuickPayee() {
-        guard !quickPayeeName.trimmingCharacters(in: .whitespaces).isEmpty,
-              let bookID = accountsController.selectedAccount?.bookID else {
-            return
-        }
-        
-        Task {
-            await payeesController.createPayee(
-                bookID: bookID,
-                name: quickPayeeName,
-                defaultCategoryID: selectedCategory
-            )
-            
-            // Sélectionner le nouveau payee
-            if let newPayee = payeesController.payees.first(where: { $0.name == quickPayeeName }) {
-                selectedPayee = newPayee.id
-            }
-            
-            // Réinitialiser
-            showQuickPayeeCreate = false
-            quickPayeeName = ""
-        }
-    }
-    
+
     private func saveTransaction() {
-        guard let amountDecimal = Decimal(string: amount.replacingOccurrences(of: ",", with: ".")),
-              let accountID = selectedAccount else {
-            return
-        }
-        
+        guard let amountDecimal = parsedAmount, let accountID = selectedAccount else { return }
+        let note = memo.trimmingCharacters(in: .whitespacesAndNewlines)
         isCreating = true
-        
+
         Task {
-            if selectedType == .transfer, let toAccountID = selectedToAccount {
-                if let existingTransaction = transactionToEdit {
-                    // Modification d'un transfert existant : mettre à jour la catégorie des deux transactions liées
-                    await transactionsController.updateTransfer(existingTransaction, categoryID: selectedCategory)
+            if isTransfer, let toAccountID = selectedToAccount {
+                if let existing = transactionToEdit {
+                    // Transfert existant : seule la catégorie des deux transactions liées est mise à jour
+                    await transactionsController.updateTransfer(existing, categoryID: selectedCategory)
                 } else {
-                    // Création d'un nouveau transfert
                     await transactionsController.createTransfer(
                         from: accountID,
                         to: toAccountID,
                         amount: amountDecimal,
                         date: date,
-                        memo: memo.isEmpty ? nil : memo,
+                        memo: note.isEmpty ? nil : note,
                         categoryID: selectedCategory
                     )
                 }
-            } else {
-                if let existingTransaction = transactionToEdit {
-                    // Modification d'une transaction non-transfert
-                    var updated = existingTransaction
-                    updated.date = date
-                    updated.amount = abs(amountDecimal)
-                    updated.type = selectedType
-                    updated.memo = memo.isEmpty ? nil : memo
-                    updated.accountID = accountID
-                    updated.payeeID = selectedPayee
-                    updated.categoryID = selectedCategory
-
-                    await transactionsController.updateTransaction(updated)
-                } else {
-                    // Création d'une transaction non-transfert
-                    await transactionsController.createTransaction(
-                        accountID: accountID,
-                        date: date,
-                        amount: abs(amountDecimal),
-                        type: selectedType,
-                        payeeID: selectedPayee,
-                        categoryID: selectedCategory,
-                        memo: memo.isEmpty ? nil : memo
-                    )
+            } else if let existing = transactionToEdit {
+                var updated = existing
+                updated.date = date
+                updated.amount = abs(amountDecimal)
+                updated.type = selectedType
+                updated.memo = note.isEmpty ? nil : note
+                updated.accountID = accountID
+                updated.payeeID = selectedPayee
+                updated.categoryID = selectedCategory
+                updated.projectID = selectedProject
+                updated.isReconciled = isReconciled
+                await transactionsController.updateTransaction(updated)
+            } else if var created = await transactionsController.createTransaction(
+                accountID: accountID,
+                date: date,
+                amount: abs(amountDecimal),
+                type: selectedType,
+                payeeID: selectedPayee,
+                categoryID: selectedCategory,
+                memo: note.isEmpty ? nil : note
+            ) {
+                // Projet et rapprochement ne font pas partie de la création : on complète aussitôt
+                if selectedProject != nil || isReconciled {
+                    created.projectID = selectedProject
+                    created.isReconciled = isReconciled
+                    await transactionsController.updateTransaction(created)
                 }
             }
-            
-            // Recharger les transactions
+
             await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
-            
-            isPresented = false
+            isCreating = false
+
+            if createAnother, !isEditing {
+                // On garde le type, la date, le compte et le projet pour enchaîner les saisies
+                amount = ""
+                memo = ""
+                selectedPayee = nil
+                selectedCategory = nil
+                categoryWasSuggested = false
+                isReconciled = false
+            } else {
+                isPresented = false
+            }
         }
     }
 }
