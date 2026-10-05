@@ -50,6 +50,7 @@ struct BudgetsView: View {
         VStack(spacing: 0) {
             if tableRows.isEmpty {
                 emptyStateView
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 summaryHeader
                 Divider()
@@ -388,20 +389,17 @@ struct BudgetsView: View {
     @ViewBuilder
     private var emptyStateView: some View {
         if searchText.isEmpty {
-            TopEmptyState(
-                systemImage: "chart.pie",
-                title: "Aucun budget",
-                message: "Créez des budgets pour suivre vos dépenses par catégorie.",
-                actionTitle: "Créer un budget"
-            ) {
-                showForm = true
+            ContentUnavailableView {
+                Label("Aucun budget", systemImage: "chart.pie")
+            } description: {
+                Text("Créez des budgets pour suivre vos dépenses par catégorie.")
+            } actions: {
+                Button("Créer un budget") {
+                    showForm = true
+                }
             }
         } else {
-            TopEmptyState(
-                systemImage: "magnifyingglass",
-                title: "Aucun résultat",
-                message: "Aucun budget ne correspond à « \(searchText) »."
-            )
+            ContentUnavailableView.search(text: searchText)
         }
     }
 }

@@ -21,7 +21,6 @@ struct MainView: View {
     @State private var showBudgetForm = false
     @State private var showProjectForm = false
     @State private var showFilterForm = false
-    @State private var showBookSelector = false
     @State private var showBookForm = false
     @State private var selectedTab: SidebarItem = MainView.startTab
     @AppStorage(SettingsKeys.showClosedAccountsInSidebar) private var showClosedAccounts = true
@@ -74,9 +73,6 @@ struct MainView: View {
         }
         .frame(minWidth: 800, minHeight: 600)
         .toolbar { toolbarContent }
-        .sheet(isPresented: $showBookSelector) {
-            BookSelectorView(isPresented: $showBookSelector)
-        }
         .sheet(isPresented: $showBookForm) {
             BookFormView(isPresented: $showBookForm)
         }
@@ -131,7 +127,6 @@ struct MainView: View {
         VStack(spacing: 0) {
             // Sélecteur de livre, en tête de barre latérale
             BookSelectorButton(
-                showBookSelector: $showBookSelector,
                 showBookForm: $showBookForm
             )
             .padding(.horizontal, 10)
@@ -278,6 +273,9 @@ struct MainView: View {
                     }
                 }
             }
+            // La page occupe toute la zone : sans cela, une page au contenu réduit (état vide)
+            // est centrée avec son filet, qui se retrouve au milieu de l'écran
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             // Filet sous la barre d'outils, sur toutes les pages : sépare l'en-tête du contenu
             .safeAreaInset(edge: .top, spacing: 0) {
                 Divider()
@@ -307,7 +305,7 @@ struct MainView: View {
         guard command == .book || booksController.currentBook != nil else { return }
         // Une seule feuille à la fois
         let isPresenting = showTransactionForm || showAccountForm || showCategoryForm || showPayeeForm
-            || showBudgetForm || showProjectForm || showBookForm || showFilterForm || showBookSelector
+            || showBudgetForm || showProjectForm || showBookForm || showFilterForm
         guard !isPresenting else { return }
 
         switch command {
@@ -331,10 +329,13 @@ struct MainView: View {
     // MARK: - Toolbar
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        
-        ToolbarItem(placement: .automatic) {
-            HStack {
-                if shouldShowFilters {
+        // Le bouton des filtres forme son propre groupe, détaché des autres boutons
+        // de la barre d'outils par un espace de part et d'autre.
+        if shouldShowFilters {
+            if #available(macOS 26.0, *) {
+                ToolbarSpacer(.fixed)
+            }
+            ToolbarItem(placement: .automatic) {
                     Button {
                         showFilterForm = true
                     } label: {
@@ -345,8 +346,13 @@ struct MainView: View {
                     .keyboardShortcut("f", modifiers: .command)
                     .foregroundStyle(transactionsController.filters.isActive ? Color.accentColor : Color.primary)
                     .help("Filtrer les transactions")
-                }
+            }
+            if #available(macOS 26.0, *) {
+                ToolbarSpacer(.fixed)
+            }
+        }
 
+        ToolbarItem(placement: .automatic) {
                 // Menu « + » : un clic crée une transaction, un clic long ouvre le menu.
                 // Les raccourcis sont affichés par macOS à droite de chaque entrée.
                 Menu {
@@ -365,7 +371,6 @@ struct MainView: View {
                     handle(.transaction)
                 }
                 .help("Nouvelle transaction (⌘N). Maintenez le clic pour créer un autre élément.")
-            }
         }
     }
 

@@ -269,5 +269,7 @@ struct CashFlowChartView: View {
             systemImage: "chart.bar",
             description: Text("Aucune transaction ne correspond à la période et aux comptes choisis.")
         )
+        // Occupe toute la zone du rapport pour s'y centrer
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

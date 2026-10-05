@@ -18,6 +18,20 @@ class AccountsController: ObservableObject {
         self.repository = repository
     }
     
+    // MARK: - Comptes des autres livres
+
+    /// Nombre de comptes actifs par livre, pour le sélecteur de livre.
+    /// Ne modifie pas les comptes chargés pour le livre courant.
+    func activeAccountCounts(for bookIDs: [UUID]) async -> [UUID: Int] {
+        var counts: [UUID: Int] = [:]
+        for bookID in bookIDs {
+            if let accounts = try? await repository.fetchActive(for: bookID) {
+                counts[bookID] = accounts.count
+            }
+        }
+        return counts
+    }
+
     // MARK: - Load Accounts
     
     func loadAccounts(for bookID: UUID) async {

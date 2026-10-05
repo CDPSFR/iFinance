@@ -52,14 +52,14 @@ struct ProjectsView: View {
 
         VStack(spacing: 0) {
             if projectsController.projects.isEmpty {
-                TopEmptyState(
-                    systemImage: "folder",
-                    title: "Aucun projet",
-                    message: "Un projet regroupe des transactions autour d'un même thème : un voyage, un achat, des travaux.",
-                    actionTitle: "Nouveau projet"
-                ) {
-                    showForm = true
+                ContentUnavailableView {
+                    Label("Aucun projet", systemImage: "folder")
+                } description: {
+                    Text("Un projet regroupe des transactions autour d'un même thème : un voyage, un achat, des travaux.")
+                } actions: {
+                    Button("Nouveau projet") { showForm = true }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 summaryHeader
                 Divider()

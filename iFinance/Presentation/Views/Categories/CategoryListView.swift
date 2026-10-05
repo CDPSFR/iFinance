@@ -61,19 +61,23 @@ struct CategoryListView: View {
         let roots = rootRows
 
         VStack(spacing: 0) {
-            // L'inspecteur se loge sous l'en-tête de la page
-            SidePanelLayout(isPresented: $showInspector) {
-                if categoriesController.isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if roots.isEmpty {
-                    emptyCategoriesView
-                } else {
-                    categoryTable(roots)
-                    TableStatusBar(items: statusItems(roots))
+            if !categoriesController.isLoading && roots.isEmpty {
+                // Liste vide : pas de panneau latéral, le message occupe toute la page et s'y centre
+                emptyCategoriesView
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                // L'inspecteur se loge sous l'en-tête de la page
+                SidePanelLayout(isPresented: $showInspector) {
+                    if categoriesController.isLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        categoryTable(roots)
+                        TableStatusBar(items: statusItems(roots))
+                    }
+                } panel: {
+                    inspectorContent(roots)
                 }
-            } panel: {
-                inspectorContent(roots)
             }
         }
         .searchable(text: $searchQuery, prompt: "Rechercher une catégorie")

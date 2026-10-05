@@ -285,6 +285,8 @@ struct ReportEmptyState: View {
             systemImage: systemImage,
             description: Text(message)
         )
+        // Occupe toute la zone du rapport pour s'y centrer
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

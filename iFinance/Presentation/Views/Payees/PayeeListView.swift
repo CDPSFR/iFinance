@@ -25,6 +25,7 @@ struct PayeeListView: View {
     @EnvironmentObject var payeesController: PayeesController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var transactionsController: TransactionsController
+    @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var appSettings: AppSettings
 
     /// Navigation vers les transactions du bénéficiaire
@@ -34,6 +35,9 @@ struct PayeeListView: View {
     @State private var payeeToEdit: Payee?
     @State private var payeeToDelete: Payee?
     @State private var showDeleteConfirmation = false
+    /// Bénéficiaires d'une suppression multiple (clic droit sur plusieurs lignes sélectionnées)
+    @State private var payeesToDelete: [Payee] = []
+    @State private var showBulkDeleteConfirmation = false
     @State private var searchQuery = ""
     @State private var selection: Set<Payee.ID> = []
     @State private var sortOrder = [KeyPathComparator(\PayeeTableRow.name, comparator: .localizedStandard)]
@@ -41,19 +45,23 @@ struct PayeeListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // L'inspecteur se loge sous l'en-tête de la page
-            SidePanelLayout(isPresented: $showInspector) {
-                if payeesController.isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if tableRows.isEmpty {
-                    emptyPayeesView
-                } else {
-                    payeeTable
-                    TableStatusBar(items: statusItems)
+            if !payeesController.isLoading && tableRows.isEmpty {
+                // Liste vide : pas de panneau latéral, le message occupe toute la page et s'y centre
+                emptyPayeesView
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                // L'inspecteur se loge sous l'en-tête de la page
+                SidePanelLayout(isPresented: $showInspector) {
+                    if payeesController.isLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        payeeTable
+                        TableStatusBar(items: statusItems)
+                    }
+                } panel: {
+                    inspectorContent
                 }
-            } panel: {
-                inspectorContent
             }
         }
         .searchable(text: $searchQuery, prompt: "Rechercher un bénéficiaire")
@@ -89,6 +97,18 @@ struct PayeeListView: View {
             }
         } message: { payee in
             Text("Êtes-vous sûr de vouloir supprimer \"\(payee.name)\" ? Les transactions associées ne seront pas supprimées mais n'auront plus de bénéficiaire.")
+        }
+        .alert(
+            "Supprimer \(payeesToDelete.count) bénéficiaires ?",
+            isPresented: $showBulkDeleteConfirmation
+        ) {
+            Button("Annuler", role: .cancel) { }
+            Button("Supprimer", role: .destructive) {
+                let payees = payeesToDelete
+                Task { await deletePayees(payees) }
+            }
+        } message: {
+            Text(bulkDeleteMessage)
         }
         .task {
             if let bookID = bookController.currentBook?.id {
@@ -183,6 +203,14 @@ struct PayeeListView: View {
                 } label: {
                     Label("Supprimer", systemImage: "trash")
                 }
+            } else if items.count > 1 {
+                // Sélection multiple (⌘-clic ou ⇧-clic) : suppression groupée
+                Button(role: .destructive) {
+                    payeesToDelete = items.compactMap { payeesController.getPayee(id: $0) }
+                    showBulkDeleteConfirmation = !payeesToDelete.isEmpty
+                } label: {
+                    Label("Supprimer \(items.count) bénéficiaires…", systemImage: "trash")
+                }
             }
         } primaryAction: { items in
             // Double-clic : transactions du bénéficiaire
@@ -190,6 +218,30 @@ struct PayeeListView: View {
                 showTransactions(for: payee)
             }
         }
+    }
+
+    // MARK: - Suppression groupée
+
+    /// Message de confirmation : nombre de transactions qui perdront leur bénéficiaire
+    private var bulkDeleteMessage: String {
+        let ids = Set(payeesToDelete.map { $0.id })
+        let count = transactionsController.allTransactions
+            .filter { $0.payeeID.map { ids.contains($0) } ?? false }
+            .count
+        let transactions = count == 0
+            ? "Aucune transaction ne leur est associée."
+            : "\(count) transaction\(count > 1 ? "s" : "") ne sera\(count > 1 ? "ont" : "") pas supprimée\(count > 1 ? "s" : ""), mais n'aura\(count > 1 ? "ont" : "") plus de bénéficiaire."
+        return "\(transactions) Cette action est irréversible."
+    }
+
+    private func deletePayees(_ payees: [Payee]) async {
+        for payee in payees {
+            await payeesController.deletePayee(id: payee.id)
+            selection.remove(payee.id)
+        }
+        payeesToDelete = []
+        // Les transactions concernées doivent refléter la perte de leur bénéficiaire
+        await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
     }
 
     // MARK: - Inspecteur

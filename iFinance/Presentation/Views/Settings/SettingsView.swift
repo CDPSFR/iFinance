@@ -11,6 +11,13 @@ enum SettingsKeys {
     static let showSidebarBalances = "showSidebarBalances"
     static let showClosedAccountsInSidebar = "showClosedAccountsInSidebar"
     static let hideAmountsAtLaunch = "hideAmountsAtLaunch"
+    /// Onglet affiché dans la fenêtre des réglages (mémorisé, et modifiable depuis la fenêtre principale)
+    static let selectedSettingsTab = "selectedSettingsTab"
+}
+
+/// Onglets de la fenêtre des réglages
+enum SettingsTab: String {
+    case general, books, accounts, data, backups, privacy
 }
 
 struct SettingsView: View {
@@ -24,25 +31,33 @@ struct SettingsView: View {
         case budget(Budget)
     }
 
+    @AppStorage(SettingsKeys.selectedSettingsTab) private var selectedTab = SettingsTab.general.rawValue
+
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             GeneralSettingsTab()
                 .tabItem { Label("Général", systemImage: "gearshape") }
+                .tag(SettingsTab.general.rawValue)
 
             BooksSettingsTab()
                 .tabItem { Label("Livres", systemImage: "book.closed") }
+                .tag(SettingsTab.books.rawValue)
 
             AccountsSettingsTab()
                 .tabItem { Label("Comptes", systemImage: "creditcard") }
+                .tag(SettingsTab.accounts.rawValue)
 
             DataSettingsTab()
                 .tabItem { Label("Données", systemImage: "cylinder.split.1x2") }
+                .tag(SettingsTab.data.rawValue)
 
             BackupSettingsTab()
                 .tabItem { Label("Sauvegardes", systemImage: "clock.arrow.circlepath") }
+                .tag(SettingsTab.backups.rawValue)
 
             PrivacySettingsTab()
                 .tabItem { Label("Confidentialité", systemImage: "lock") }
+                .tag(SettingsTab.privacy.rawValue)
         }
         .frame(width: 720, height: 560)
     }
