@@ -22,6 +22,8 @@ struct QIFImportView: View {
     @State private var selected: Set<Int> = []
     @State private var dateAnalysis: QIFDateAnalysis? = nil
     @State private var dateOrder: QIFDateOrder = .dayMonth
+    @State private var progressText = "Import en cours…"
+    @State private var importError: String? = nil
 
     private var currency: String { booksController.currentBook?.currency ?? "EUR" }
 
@@ -72,6 +74,14 @@ struct QIFImportView: View {
         }
         .frame(width: 620, height: 560)
         .sheetBackground()
+        .alert("Import impossible", isPresented: Binding(
+            get: { importError != nil },
+            set: { if !$0 { importError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(importError ?? "")
+        }
     }
 
     // MARK: - Step 1: Pick file & account
@@ -256,7 +266,7 @@ struct QIFImportView: View {
     private var importingView: some View {
         VStack(spacing: 20) {
             Spacer()
-            ProgressView("Import en cours…")
+            ProgressView(progressText)
             Spacer()
         }
     }
@@ -355,69 +365,73 @@ struct QIFImportView: View {
         guard let accountID = selectedAccountID,
               let bookID = booksController.currentBook?.id else { return }
         step = .importing
+        progressText = "Préparation…"
+        await Task.yield()
 
-        // Make sure payees are loaded
         await payeesController.loadPayees(for: bookID)
 
         // Jamais de date de substitution : une ligne sans date lisible n'est pas importée
         let toImport = selected.sorted().map { parsedTransactions[$0] }.filter { $0.date != nil }
-        var count = 0
-        var newPayeeNames: [String] = []
 
+        // Bénéficiaires : recherche par nom (sans tenir compte de la casse) en accès direct,
+        // puis création de tous les nouveaux en une seule écriture
+        func key(_ name: String) -> String { name.folding(options: .caseInsensitive, locale: .current) }
+        var payeesByKey: [String: Payee] = [:]
+        for payee in payeesController.payees where payeesByKey[key(payee.name)] == nil {
+            payeesByKey[key(payee.name)] = payee
+        }
+        var newNames: [String] = []
+        var seen = Set<String>()
         for tx in toImport {
-            guard let date = tx.date else { continue }
-
-            // Resolve or create payee
-            let payee = await resolvePayee(name: tx.payee, bookID: bookID, newPayeeNames: &newPayeeNames)
-
-            let amount = tx.amount ?? 0
-            let type: TransactionType = amount >= 0 ? .credit : .debit
-
-            await transactionsController.createTransaction(
-                accountID: accountID,
-                date: date,
-                amount: abs(amount),
-                type: type,
-                payeeID: payee?.id,
-                categoryID: payee?.defaultCategoryID,
-                memo: [tx.memo, tx.category]
-                    .compactMap { $0 }
-                    .joined(separator: " – ")
-                    .nilIfEmpty
-            )
-            count += 1
+            guard let name = tx.payee?.trimmingCharacters(in: .whitespaces), !name.isEmpty else { continue }
+            let nameKey = key(name)
+            if payeesByKey[nameKey] == nil, seen.insert(nameKey).inserted {
+                newNames.append(name)
+            }
         }
 
-        await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
-        importedCount = count
-        createdPayees = newPayeeNames
-        step = .done
-    }
+        do {
+            if !newNames.isEmpty {
+                progressText = "Création de \(newNames.count) bénéficiaire(s)…"
+                await Task.yield()
+                for payee in try await payeesController.createPayees(bookID: bookID, names: newNames) {
+                    payeesByKey[key(payee.name)] = payee
+                }
+            }
 
-    /// Returns the existing or newly created `Payee` matching `name`.
-    /// Appends the name to `newPayeeNames` if a new payee was created.
-    private func resolvePayee(name: String?, bookID: UUID, newPayeeNames: inout [String]) async -> Payee? {
-        guard let name = name?.trimmingCharacters(in: .whitespaces), !name.isEmpty else { return nil }
+            progressText = "Écriture de \(toImport.count) transaction(s)…"
+            await Task.yield()
+            let transactions: [Transaction] = toImport.compactMap { tx in
+                guard let date = tx.date else { return nil }
+                let payee = tx.payee
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .flatMap { payeesByKey[key($0)] }
+                let amount = tx.amount ?? 0
+                return Transaction(
+                    date: date,
+                    amount: abs(amount),
+                    accountID: accountID,
+                    payeeID: payee?.id,
+                    categoryID: payee?.defaultCategoryID,
+                    type: amount >= 0 ? .credit : .debit,
+                    memo: [tx.memo, tx.category].compactMap { $0 }.joined(separator: " – ").nilIfEmpty,
+                    status: .cleared
+                )
+            }
+            // Toutes les transactions en une seule écriture : toutes ou aucune
+            try await transactionsController.importTransactions(transactions)
 
-        // Look for existing payee (case-insensitive)
-        if let existing = payeesController.payees.first(where: {
-            $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame
-        }) {
-            return existing
+            progressText = "Mise à jour des comptes…"
+            await Task.yield()
+            await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
+
+            importedCount = transactions.count
+            createdPayees = newNames
+            step = .done
+        } catch {
+            importError = "Aucune transaction n'a été importée. \(newNames.isEmpty ? "" : "Les nouveaux bénéficiaires ont pu être créés. ")(\(error.localizedDescription))"
+            step = .preview
         }
-
-        // Create new payee
-        await payeesController.createPayee(bookID: bookID, name: name)
-
-        // Find the newly created payee
-        if let created = payeesController.payees.first(where: {
-            $0.name.localizedCaseInsensitiveCompare(name) == .orderedSame
-        }) {
-            newPayeeNames.append(created.name)
-            return created
-        }
-
-        return nil
     }
 }
 

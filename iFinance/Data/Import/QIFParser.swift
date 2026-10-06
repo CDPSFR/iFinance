@@ -47,8 +47,8 @@ struct QIFTransaction {
 struct QIFParser {
 
     static func parse(url: URL) throws -> [QIFTransaction] {
-        let content = try String(contentsOf: url, encoding: .utf8)
-        return parseString(content)
+        let data = try Data(contentsOf: url)
+        return parseString(decode(data))
     }
 
     static func parseString(_ content: String) -> [QIFTransaction] {
@@ -99,6 +99,18 @@ struct QIFParser {
 
         // L'ordre jour/mois est déterminé sur l'ensemble du fichier, jamais ligne par ligne
         return applyDateOrder(analyzeDates(transactions).order, to: transactions)
+    }
+
+    // MARK: - Encodage
+
+    /// Les banques françaises exportent souvent en Windows-1252 ou ISO-8859-1 :
+    /// on essaie UTF-8 (avec ou sans BOM), puis Windows-1252, puis ISO-8859-1 (qui accepte tout octet).
+    static func decode(_ data: Data) -> String {
+        let utf8BOM: [UInt8] = [0xEF, 0xBB, 0xBF]
+        let body = data.starts(with: utf8BOM) ? data.dropFirst(3) : data[...]
+        if let text = String(data: Data(body), encoding: .utf8) { return text }
+        if let text = String(data: data, encoding: .windowsCP1252) { return text }
+        return String(data: data, encoding: .isoLatin1) ?? String(decoding: data, as: UTF8.self)
     }
 
     // MARK: - Date parsing

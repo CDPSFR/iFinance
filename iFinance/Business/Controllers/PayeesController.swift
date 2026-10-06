@@ -96,6 +96,16 @@ class PayeesController: ObservableObject {
     
     // MARK: - Delete Payee
     
+    /// Crée plusieurs bénéficiaires en une seule écriture, puis recharge la liste une fois.
+    /// Renvoie les bénéficiaires créés.
+    func createPayees(bookID: UUID, names: [String]) async throws -> [Payee] {
+        let created = names.map { Payee(bookID: bookID, name: $0) }
+        guard !created.isEmpty else { return [] }
+        try await repository.createBatch(created)
+        await loadPayees(for: bookID)
+        return created
+    }
+
     func deletePayee(id: UUID) async {
         do {
             try await repository.delete(id: id)

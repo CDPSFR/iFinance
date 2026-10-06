@@ -103,6 +103,12 @@ class TransactionsController: ObservableObject {
     
     // MARK: - Create Transaction
     
+    /// Import : crée toutes les transactions en une seule écriture (toutes ou aucune).
+    /// Le rechargement de la liste reste à la charge de l'appelant.
+    func importTransactions(_ transactions: [Transaction]) async throws {
+        try await repository.createBatch(transactions)
+    }
+
     @discardableResult
     func createTransaction(
         accountID: UUID,

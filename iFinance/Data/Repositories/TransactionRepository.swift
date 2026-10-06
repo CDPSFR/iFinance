@@ -58,6 +58,19 @@ class TransactionRepository: TransactionRepositoryProtocol {
     // MARK: - Create
     
     func create(_ transaction: Transaction) async throws {
+        try insert(transaction)
+    }
+
+    /// Une seule transaction SQL pour tout le lot (import QIF)
+    func createBatch(_ transactions: [Transaction]) async throws {
+        try db.inTransaction {
+            for transaction in transactions {
+                try insert(transaction)
+            }
+        }
+    }
+
+    private func insert(_ transaction: Transaction) throws {
         let dto = TransactionMapper.toDTO(transaction)
         
         let sql = """

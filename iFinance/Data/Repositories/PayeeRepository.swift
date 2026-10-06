@@ -53,6 +53,19 @@ class PayeeRepository: PayeeRepositoryProtocol {
     // MARK: - Create
     
     func create(_ payee: Payee) async throws {
+        try insert(payee)
+    }
+
+    /// Une seule transaction SQL pour tout le lot (import QIF)
+    func createBatch(_ payees: [Payee]) async throws {
+        try db.inTransaction {
+            for payee in payees {
+                try insert(payee)
+            }
+        }
+    }
+
+    private func insert(_ payee: Payee) throws {
         let dto = PayeeMapper.toDTO(payee)
         
         let sql = """

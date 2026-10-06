@@ -136,6 +136,26 @@ class SQLiteManager {
         return true
     }
     
+    // MARK: - Transaction
+
+    /// Exécute `body` dans une transaction SQL : tout est validé ensemble sur le disque,
+    /// ou rien en cas d'erreur. Beaucoup plus rapide que des écritures validées une à une.
+    func inTransaction<T>(_ body: () throws -> T) throws -> T {
+        guard execute(sql: "BEGIN IMMEDIATE;") else {
+            throw SQLiteError.executeQuery(message: "Impossible d'ouvrir une transaction")
+        }
+        do {
+            let result = try body()
+            guard execute(sql: "COMMIT;") else {
+                throw SQLiteError.executeQuery(message: "Impossible de valider la transaction")
+            }
+            return result
+        } catch {
+            execute(sql: "ROLLBACK;")
+            throw error
+        }
+    }
+
     // MARK: - Query (SELECT)
     
     func query(sql: String, parameters: [Any] = []) throws -> [[String: Any]] {
