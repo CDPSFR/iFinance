@@ -20,6 +20,8 @@ struct QIFImportView: View {
     @State private var errorMessage: String? = nil
     @State private var selectedFileName: String = ""
     @State private var selected: Set<Int> = []
+    @State private var dateAnalysis: QIFDateAnalysis? = nil
+    @State private var dateOrder: QIFDateOrder = .dayMonth
 
     private var currency: String { booksController.currentBook?.currency ?? "EUR" }
 
@@ -42,6 +44,7 @@ struct QIFImportView: View {
                             step = .pickFile
                             parsedTransactions = []
                             selected = []
+                            dateAnalysis = nil
                         }
 
                         Text("\(selected.count) transaction(s) à importer")
@@ -144,6 +147,8 @@ struct QIFImportView: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 8)
 
+            dateFormatBar
+
             Divider()
 
             List {
@@ -156,6 +161,7 @@ struct QIFImportView: View {
                         ))
                         .labelsHidden()
                         .toggleStyle(.checkbox)
+                        .disabled(tx.date == nil)
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(tx.payee ?? tx.memo ?? "Transaction")
@@ -165,6 +171,9 @@ struct QIFImportView: View {
                                     Text(date, format: .dateTime.day().month().year())
                                         .font(.caption).foregroundColor(.secondary)
                                     Text("·").font(.caption).foregroundColor(.secondary)
+                                } else {
+                                    Text("Date illisible : \(tx.rawDate ?? "absente")")
+                                        .font(.caption).foregroundColor(.red)
                                 }
                                 if let cat = tx.category {
                                     Text(cat).font(.caption).foregroundColor(.secondary)
@@ -186,6 +195,60 @@ struct QIFImportView: View {
             }
             .listStyle(.plain)
         }
+    }
+
+    /// Format des dates du fichier : détecté sur l'ensemble des lignes, modifiable
+    private var dateFormatBar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Format des dates")
+                    .font(.subheadline)
+                Spacer()
+                Picker("Format des dates", selection: $dateOrder) {
+                    ForEach(QIFDateOrder.allCases) { order in
+                        Text(order.displayName).tag(order)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+            }
+
+            if let hint = dateFormatHint {
+                Label(hint.text, systemImage: hint.isWarning ? "exclamationmark.triangle.fill" : "checkmark.circle")
+                    .font(.caption)
+                    .foregroundColor(hint.isWarning ? .orange : .secondary)
+            }
+
+            if undatedCount > 0 {
+                Label("\(undatedCount) transaction(s) sans date lisible : elles ne seront pas importées.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundColor(.red)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 8)
+        .onChange(of: dateOrder) { _, order in
+            parsedTransactions = QIFParser.applyDateOrder(order, to: parsedTransactions)
+            selected = selected.filter { parsedTransactions[$0].date != nil }
+        }
+    }
+
+    private var undatedCount: Int {
+        parsedTransactions.filter { $0.date == nil }.count
+    }
+
+    private var dateFormatHint: (text: String, isWarning: Bool)? {
+        guard let analysis = dateAnalysis else { return nil }
+        if analysis.isInconsistent {
+            return ("Le fichier mélange les deux formats (\(analysis.dayFirstCount) ligne(s) JJ/MM, \(analysis.monthFirstCount) ligne(s) MM/JJ). Vérifiez les dates.", true)
+        }
+        if analysis.isAmbiguous {
+            return ("Aucune date ne permet de trancher (jour et mois toujours ≤ 12). Vérifiez l'aperçu.", true)
+        }
+        let count = analysis.order == .dayMonth ? analysis.dayFirstCount : analysis.monthFirstCount
+        return ("Format \(analysis.order.displayName) détecté sur \(count) date(s) sans ambiguïté.", false)
     }
 
     // MARK: - Step 3: Importing
@@ -273,8 +336,12 @@ struct QIFImportView: View {
                     errorMessage = "Aucune transaction trouvée dans ce fichier."
                     return
                 }
+                let analysis = QIFParser.analyzeDates(txs)
+                dateAnalysis = analysis
+                dateOrder = analysis.order
                 parsedTransactions = txs
-                selected = Set(txs.indices)
+                // Les lignes sans date lisible ne sont pas importables
+                selected = Set(txs.indices.filter { txs[$0].date != nil })
                 selectedFileName = url.lastPathComponent
                 errorMessage = nil
                 step = .preview
@@ -292,11 +359,14 @@ struct QIFImportView: View {
         // Make sure payees are loaded
         await payeesController.loadPayees(for: bookID)
 
-        let toImport = selected.sorted().map { parsedTransactions[$0] }
+        // Jamais de date de substitution : une ligne sans date lisible n'est pas importée
+        let toImport = selected.sorted().map { parsedTransactions[$0] }.filter { $0.date != nil }
         var count = 0
         var newPayeeNames: [String] = []
 
         for tx in toImport {
+            guard let date = tx.date else { continue }
+
             // Resolve or create payee
             let payee = await resolvePayee(name: tx.payee, bookID: bookID, newPayeeNames: &newPayeeNames)
 
@@ -305,7 +375,7 @@ struct QIFImportView: View {
 
             await transactionsController.createTransaction(
                 accountID: accountID,
-                date: tx.date ?? Date(),
+                date: date,
                 amount: abs(amount),
                 type: type,
                 payeeID: payee?.id,
