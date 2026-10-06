@@ -298,8 +298,11 @@ struct AnnualBudgetView: View {
 
         for root in sortedRoots {
             let children = categoriesController.getSubcategories(for: root.id)
-            var planned = plannedValues(for: root.id)
-            var actual = actuals[root.id] ?? Self.zeros
+            // Montants affectés directement à la catégorie mère (hors sous-catégories)
+            let ownPlanned = plannedValues(for: root.id)
+            let ownActual = actuals[root.id] ?? Self.zeros
+            var planned = ownPlanned
+            var actual = ownActual
             var childLines: [Line] = []
 
             for child in children {
@@ -316,6 +319,24 @@ struct AnnualBudgetView: View {
                     isEditable: true,
                     planned: childPlanned,
                     actual: childActual
+                ))
+            }
+
+            // Une mère avec sous-catégories peut aussi avoir des transactions ou un prévu à elle :
+            // une ligne « non ventilé » les montre (prévu saisissable, enregistré sur la mère),
+            // pour que les lignes dépliées s'additionnent au total de la mère
+            if !children.isEmpty,
+               ownPlanned.contains(where: { $0 != 0 }) || ownActual.contains(where: { $0 != 0 }) {
+                childLines.append(Line(
+                    id: root.id.uuidString + "-direct",
+                    // Libellé court : la ligne est indentée sous sa catégorie mère
+                    name: "Non ventilé",
+                    kind: kind,
+                    categoryID: root.id,
+                    isChild: true,
+                    isEditable: true,
+                    planned: ownPlanned,
+                    actual: ownActual
                 ))
             }
 
