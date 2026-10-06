@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import Charts
 import Combine
 
@@ -99,6 +100,7 @@ struct CategoryListView: View {
     @EnvironmentObject var bookController: BooksController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var transactionsController: TransactionsController
+    @Environment(\.openWindow) private var openWindow
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var appSettings: AppSettings
 
@@ -327,6 +329,12 @@ struct CategoryListView: View {
                 }
 
                 Button {
+                    openTransactionsWindow(for: category)
+                } label: {
+                    Label("Ouvrir dans une nouvelle fenêtre", systemImage: "macwindow.badge.plus")
+                }
+
+                Button {
                     categoryToEdit = category
                 } label: {
                     Label("Modifier", systemImage: "pencil")
@@ -538,8 +546,14 @@ struct CategoryListView: View {
 
             InspectorSection {
                 Button("Afficher les transactions") {
-                    showTransactions(for: category)
+                    // ⌥-clic : nouvelle fenêtre ; clic simple : filtre la liste principale
+                    if NSEvent.modifierFlags.contains(.option) {
+                        openTransactionsWindow(for: category)
+                    } else {
+                        showTransactions(for: category)
+                    }
                 }
+                .help("⌥-clic pour ouvrir dans une nouvelle fenêtre")
 
                 HStack(spacing: 8) {
                     Button("Modifier…") {
@@ -675,6 +689,14 @@ struct CategoryListView: View {
             items.append("\(total.formatted(.currency(code: currency))) \(label)")
         }
         return items
+    }
+
+    /// Ouvre les transactions dans une fenêtre indépendante (une par catégorie)
+    private func openTransactionsWindow(for category: Category) {
+        openWindow(
+            id: TransactionsWindowScope.windowID,
+            value: TransactionsWindowScope(kind: .category, id: category.id, title: category.name)
+        )
     }
 
     /// Filtre les transactions sur la catégorie puis bascule sur la liste des transactions

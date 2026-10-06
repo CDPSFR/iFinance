@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import Charts
 
 // MARK: - Ligne de tableau
@@ -26,6 +27,7 @@ struct PayeeListView: View {
     @EnvironmentObject var payeesController: PayeesController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var transactionsController: TransactionsController
+    @Environment(\.openWindow) private var openWindow
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var appSettings: AppSettings
 
@@ -191,6 +193,12 @@ struct PayeeListView: View {
                 }
 
                 Button {
+                    openTransactionsWindow(for: payee)
+                } label: {
+                    Label("Ouvrir dans une nouvelle fenêtre", systemImage: "macwindow.badge.plus")
+                }
+
+                Button {
                     payeeToEdit = payee
                 } label: {
                     Label("Modifier", systemImage: "pencil")
@@ -330,8 +338,14 @@ struct PayeeListView: View {
 
             InspectorSection {
                 Button("Afficher les transactions") {
-                    showTransactions(for: payee)
+                    // ⌥-clic : nouvelle fenêtre ; clic simple : filtre la liste principale
+                    if NSEvent.modifierFlags.contains(.option) {
+                        openTransactionsWindow(for: payee)
+                    } else {
+                        showTransactions(for: payee)
+                    }
                 }
+                .help("⌥-clic pour ouvrir dans une nouvelle fenêtre")
 
                 HStack(spacing: 8) {
                     Button("Modifier…") {
@@ -433,6 +447,14 @@ struct PayeeListView: View {
         return zip(monthStarts, totals).map { month, total in
             (month, max(0, NSDecimalNumber(decimal: total * sign).doubleValue))
         }
+    }
+
+    /// Ouvre les transactions dans une fenêtre indépendante (une par bénéficiaire)
+    private func openTransactionsWindow(for payee: Payee) {
+        openWindow(
+            id: TransactionsWindowScope.windowID,
+            value: TransactionsWindowScope(kind: .payee, id: payee.id, title: payee.name)
+        )
     }
 
     /// Filtre les transactions sur le bénéficiaire puis bascule sur la liste des transactions

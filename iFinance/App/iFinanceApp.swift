@@ -49,6 +49,28 @@ struct iFinanceApp: App {
             }
         }
 
+        // Fenêtres de transactions d'un bénéficiaire ou d'une catégorie (« Ouvrir dans une nouvelle fenêtre »)
+        WindowGroup("Transactions", id: TransactionsWindowScope.windowID, for: TransactionsWindowScope.self) { $scope in
+            if let scope {
+                TransactionsWindowView(scope: scope)
+                    .environmentObject(appState)
+                    .environmentObject(appSettings)
+                    .environmentObject(appState.bookController)
+                    .environmentObject(appState.accountsController)
+                    .environmentObject(appState.transactionsController)
+                    .environmentObject(appState.categoriesController)
+                    .environmentObject(appState.payeesController)
+                    .environmentObject(appState.budgetsController)
+                    .environmentObject(appState.annualBudgetController)
+                    .environmentObject(appState.projectsController)
+                    .environmentObject(appState.backupManager)
+                    .environmentObject(appState.investmentsController)
+                    .environmentObject(appState.savingsPlansController)
+                    .frame(minWidth: 700, minHeight: 400)
+            }
+        }
+        .defaultSize(width: 960, height: 620)
+
         // Fenêtre Réglages (⌘,), avec les mêmes contrôleurs que la fenêtre principale
         Settings {
             SettingsView()
