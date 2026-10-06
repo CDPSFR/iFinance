@@ -309,7 +309,7 @@ struct PeriodComparisonChartView: View {
             let inReference = transaction.date >= reference.start && transaction.date < reference.end
             guard inCurrent || inReference else { continue }
 
-            guard let root = rootCategory(of: transaction.categoryID) else { continue }
+            guard let root = categoriesController.topLevelCategory(of: transaction.categoryID) else { continue }
             let key = root.id.uuidString
             names[key] = root.name
 
@@ -322,17 +322,6 @@ struct PeriodComparisonChartView: View {
                 Line(id: key, name: name, current: currentTotals[key] ?? 0, reference: referenceTotals[key] ?? 0)
             }
             .sorted { max($0.current, $0.reference) > max($1.current, $1.reference) }
-    }
-
-    /// Catégorie principale d'une catégorie (elle-même si elle n'a pas de parent)
-    private func rootCategory(of categoryID: UUID?) -> Category? {
-        guard let categoryID, var category = categoriesController.getCategory(id: categoryID) else { return nil }
-        var depth = 0
-        while let parentID = category.parentID, let parent = categoriesController.getCategory(id: parentID), depth < 10 {
-            category = parent
-            depth += 1
-        }
-        return category
     }
 
     // MARK: - Format

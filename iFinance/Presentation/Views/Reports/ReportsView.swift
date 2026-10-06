@@ -13,8 +13,11 @@ struct ReportsView: View {
     
     enum ReportTab: String, CaseIterable {
         case cashFlow = "Revenus et dépenses"
+        case moneyFlow = "Flux de trésorerie"
+        case savingsRate = "Taux d'épargne"
         case comparison = "Comparaison de périodes"
         case categories = "Dépenses par catégorie"
+        case categoryTrends = "Tendances par catégorie"
         case payees = "Dépenses par bénéficiaire"
         case accounts = "Dépenses par compte"
         case incomeCategories = "Revenus par catégorie"
@@ -28,6 +31,9 @@ struct ReportsView: View {
             switch self {
             case .cashFlow: return "chart.bar"
             case .comparison: return "arrow.left.arrow.right"
+            case .moneyFlow: return "arrow.triangle.branch"
+            case .savingsRate: return "percent"
+            case .categoryTrends: return "chart.bar.xaxis"
             case .netWorth: return "building.columns"
             case .categories, .incomeCategories: return "chart.pie"
             case .payees, .incomePayees: return "person.2"
@@ -40,8 +46,8 @@ struct ReportsView: View {
         /// Groupe du rapport dans la liste de gauche
         var group: ReportGroup {
             switch self {
-            case .cashFlow, .comparison: return .overview
-            case .categories, .payees, .accounts, .incomeCategories, .incomePayees, .incomeAccounts: return .breakdown
+            case .cashFlow, .moneyFlow, .savingsRate, .comparison: return .overview
+            case .categories, .categoryTrends, .payees, .accounts, .incomeCategories, .incomePayees, .incomeAccounts: return .breakdown
             case .netWorth, .balance, .monthlyBalance: return .balances
             }
         }
@@ -244,6 +250,12 @@ struct ReportsView: View {
             NetWorthChartView()
         case .comparison:
             PeriodComparisonChartView()
+        case .moneyFlow:
+            MoneyFlowChartView()
+        case .savingsRate:
+            SavingsRateChartView()
+        case .categoryTrends:
+            CategoryTrendsChartView()
         case .monthlyBalance:
             MonthlyBalanceChartView()
         case .categories:

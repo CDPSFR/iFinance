@@ -11,6 +11,8 @@ enum SettingsKeys {
     static let showSidebarBalances = "showSidebarBalances"
     static let showClosedAccountsInSidebar = "showClosedAccountsInSidebar"
     static let hideAmountsAtLaunch = "hideAmountsAtLaunch"
+    /// Objectif de taux d'épargne, en pourcentage des revenus (rapport « Taux d'épargne »)
+    static let savingsRateGoal = "savingsRateGoal"
     /// Onglet affiché dans la fenêtre des réglages (mémorisé, et modifiable depuis la fenêtre principale)
     static let selectedSettingsTab = "selectedSettingsTab"
 }
@@ -72,6 +74,7 @@ struct GeneralSettingsTab: View {
     @AppStorage(SettingsKeys.reportsDefaultPeriod) private var reportsDefaultPeriod = "all"
     @AppStorage(SettingsKeys.showSidebarBalances) private var showSidebarBalances = true
     @AppStorage(SettingsKeys.showClosedAccountsInSidebar) private var showClosedAccounts = true
+    @AppStorage(SettingsKeys.savingsRateGoal) private var savingsRateGoal = 15.0
 
     var body: some View {
         Form {
@@ -108,6 +111,14 @@ struct GeneralSettingsTab: View {
                     Text("Toute la période").tag("all")
                     Text("12 derniers mois").tag("last12")
                 }
+
+                Stepper(value: $savingsRateGoal, in: 0...80, step: 1) {
+                    LabeledContent("Objectif de taux d'épargne") {
+                        Text("\(Int(savingsRateGoal)) % des revenus")
+                            .monospacedDigit()
+                    }
+                }
+                .help("Part des revenus que vous visez de mettre de côté chaque mois ; sert de repère au rapport « Taux d'épargne ».")
             }
 
             Section("Barre latérale") {
