@@ -4,7 +4,11 @@ import Combine
 
 @MainActor
 class TransactionsController: ObservableObject {
-    @Published var allTransactions: [Transaction] = []
+    @Published var allTransactions: [Transaction] = [] {
+        didSet { revision &+= 1 }
+    }
+    /// Incrémenté à chaque changement de allTransactions : clé de cache pour les calculs dérivés
+    private(set) var revision = 0
     @Published var filteredTransactions: [Transaction] = []
     @Published var selectedTransaction: Transaction?
     @Published var filters = TransactionFilters.empty {

@@ -10,10 +10,80 @@ struct CategoryTableRow: Identifiable {
     let isParent: Bool
     let count: Int
     let monthTotal: Decimal
+    /// Total des 12 derniers mois, mois en cours inclus
+    let yearTotal: Decimal
     let monthlyAverage: Decimal
     /// Part du total du mois (0...1)
     let share: Double
     var children: [CategoryTableRow] = []
+}
+
+// MARK: - Activité par catégorie
+
+/// Activité d'une catégorie sur les transactions chargées, dans la famille affichée (montants positifs)
+struct CategoryActivity {
+    var count = 0
+    var month: Decimal = 0                  // Mois en cours
+    var year: Decimal = 0                   // 12 derniers mois, mois en cours inclus
+    var perMonth: [Date: Decimal] = [:]     // Par début de mois, sur 12 mois
+
+    /// Un seul passage sur les transactions. Les 12 débuts de mois sont calculés une fois :
+    /// chaque transaction n'est ensuite que comparée à ces bornes (pas de découpage de date).
+    static func compute(
+        _ transactions: [Transaction],
+        isIncome: Bool,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [UUID: CategoryActivity] {
+        let currentMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
+        // monthStarts[0] = il y a 11 mois … monthStarts[11] = mois en cours
+        let monthStarts = (0..<12).reversed().compactMap { calendar.date(byAdding: .month, value: -$0, to: currentMonth) }
+        guard let yearStart = monthStarts.first else { return [:] }
+        let sign: Decimal = isIncome ? 1 : -1
+        var result: [UUID: CategoryActivity] = [:]
+
+        for transaction in transactions where transaction.status != .skipped {
+            guard let categoryID = transaction.categoryID else { continue }
+            let value = transaction.signedAmount * sign
+            let date = transaction.date
+
+            result[categoryID, default: CategoryActivity()].count += 1
+            guard date >= yearStart else { continue }
+
+            // Dernier début de mois inférieur ou égal à la date
+            var index = monthStarts.count - 1
+            while index > 0 && date < monthStarts[index] { index -= 1 }
+
+            result[categoryID]!.year += value
+            result[categoryID]!.perMonth[monthStarts[index], default: 0] += value
+            if index == monthStarts.count - 1 {
+                result[categoryID]!.month += value
+            }
+        }
+        return result
+    }
+}
+
+/// Mémorise l'activité calculée tant que les transactions, la famille et le mois ne changent pas
+@MainActor
+final class CategoryActivityCache: ObservableObject {
+    private struct Key: Equatable {
+        let revision: Int
+        let isIncome: Bool
+        let monthStart: Date
+    }
+
+    private var key: Key?
+    private var value: [UUID: CategoryActivity] = [:]
+
+    func activity(for controller: TransactionsController, isIncome: Bool, monthStart: Date) -> [UUID: CategoryActivity] {
+        let newKey = Key(revision: controller.revision, isIncome: isIncome, monthStart: monthStart)
+        if newKey != key {
+            value = CategoryActivity.compute(controller.allTransactions, isIncome: isIncome)
+            key = newKey
+        }
+        return value
+    }
 }
 
 // MARK: - Liste des catégories
@@ -56,6 +126,7 @@ struct CategoryListView: View {
     @State private var selection: Set<UUID> = []
     @State private var expanded: Set<UUID> = []
     @AppStorage("showCategoryInspector") private var showInspector = true
+    @StateObject private var activityCache = CategoryActivityCache()
 
     var body: some View {
         let roots = rootRows
@@ -200,6 +271,16 @@ struct CategoryListView: View {
                     .privacyBlur(hidden: appSettings.hideAmounts)
             }
             .width(min: 100, ideal: 120)
+
+            TableColumn("12 derniers mois") { row in
+                Text(row.yearTotal, format: .currency(code: currency))
+                    .monospacedDigit()
+                    .fontWeight(row.isParent ? .semibold : .regular)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .privacyBlur(hidden: appSettings.hideAmounts)
+                    .help("Total du mois en cours et des 11 mois précédents")
+            }
+            .width(min: 110, ideal: 130)
 
             TableColumn("Moyenne mensuelle") { row in
                 Text(row.monthlyAverage, format: .currency(code: currency))
@@ -471,45 +552,14 @@ struct CategoryListView: View {
         bookController.currentBook?.currency ?? "EUR"
     }
 
-    /// Activité d'une catégorie sur les transactions chargées
-    private struct Activity {
-        var count = 0
-        var month: Decimal = 0                  // Mois en cours
-        var year: Decimal = 0                   // 12 derniers mois, mois en cours inclus
-        var perMonth: [Date: Decimal] = [:]     // Par début de mois, sur 12 mois
-    }
-
     private var monthStart: Date {
         let calendar = Calendar.current
         return calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
     }
 
-    /// Montants positifs dans la famille affichée : dépenses pour les dépenses, revenus pour les revenus
-    private func activity() -> [UUID: Activity] {
-        let calendar = Calendar.current
-        let start = monthStart
-        let yearStart = calendar.date(byAdding: .month, value: -11, to: start) ?? start
-        let sign: Decimal = kind == .income ? 1 : -1
-        var result: [UUID: Activity] = [:]
-
-        for transaction in transactionsController.allTransactions where transaction.status != .skipped {
-            guard let categoryID = transaction.categoryID else { continue }
-            var entry = result[categoryID, default: Activity()]
-            let value = transaction.signedAmount * sign
-
-            entry.count += 1
-            if transaction.date >= start {
-                entry.month += value
-            }
-            if transaction.date >= yearStart {
-                entry.year += value
-                let key = calendar.date(from: calendar.dateComponents([.year, .month], from: transaction.date)) ?? start
-                entry.perMonth[key, default: 0] += value
-            }
-            result[categoryID] = entry
-        }
-
-        return result
+    /// Activité des catégories, calculée une fois puis mémorisée (voir CategoryActivityCache)
+    private func activity() -> [UUID: CategoryActivity] {
+        activityCache.activity(for: transactionsController, isIncome: kind == .income, monthStart: monthStart)
     }
 
     private func matchesSearch(_ category: Category) -> Bool {
@@ -526,9 +576,9 @@ struct CategoryListView: View {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
 
         // Total du mois par catégorie racine (elle-même + toutes ses sous-catégories)
-        func groupActivity(_ root: Category) -> Activity {
+        func groupActivity(_ root: Category) -> CategoryActivity {
             let ids = [root.id] + categoriesController.getSubcategories(for: root.id).map { $0.id }
-            var total = Activity()
+            var total = CategoryActivity()
             for id in ids {
                 guard let entry = stats[id] else { continue }
                 total.count += entry.count
@@ -557,13 +607,14 @@ struct CategoryListView: View {
             guard rootMatches || !visible.isEmpty else { continue }
 
             let children = visible.map { subcategory -> CategoryTableRow in
-                let entry = stats[subcategory.id] ?? Activity()
+                let entry = stats[subcategory.id] ?? CategoryActivity()
                 return CategoryTableRow(
                     id: subcategory.id,
                     category: subcategory,
                     isParent: false,
                     count: entry.count,
                     monthTotal: entry.month,
+                    yearTotal: entry.year,
                     monthlyAverage: entry.year / 12,
                     share: share(entry.month)
                 )
@@ -576,6 +627,7 @@ struct CategoryListView: View {
                     isParent: true,
                     count: group.count,
                     monthTotal: group.month,
+                    yearTotal: group.year,
                     monthlyAverage: group.year / 12,
                     share: share(group.month),
                     children: children
