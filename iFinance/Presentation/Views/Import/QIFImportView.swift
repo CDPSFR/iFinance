@@ -7,6 +7,7 @@ struct QIFImportView: View {
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var payeesController: PayeesController
+    @EnvironmentObject var recurringController: RecurringController
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var appSettings: AppSettings
 
@@ -24,6 +25,9 @@ struct QIFImportView: View {
     @State private var dateOrder: QIFDateOrder = .dayMonth
     @State private var progressText = "Import en cours…"
     @State private var importError: String? = nil
+    /// Lignes dont l'utilisateur a retiré le rapprochement avec une récurrence
+    @State private var unlinked: Set<Int> = []
+    @State private var reconciledCount = 0
 
     private var currency: String { booksController.currentBook?.currency ?? "EUR" }
 
@@ -46,6 +50,7 @@ struct QIFImportView: View {
                             step = .pickFile
                             parsedTransactions = []
                             selected = []
+                            unlinked = []
                             dateAnalysis = nil
                         }
 
@@ -138,7 +143,8 @@ struct QIFImportView: View {
     // MARK: - Step 2: Preview
 
     private var previewView: some View {
-        VStack(spacing: 0) {
+        let matches = recurringMatches
+        return VStack(spacing: 0) {
             HStack {
                 Label("\(parsedTransactions.count) transactions trouvées", systemImage: "list.bullet")
                     .font(.subheadline)
@@ -158,6 +164,10 @@ struct QIFImportView: View {
             .padding(.bottom, 8)
 
             dateFormatBar
+
+            if !matches.isEmpty {
+                recurringSummary(matches)
+            }
 
             Divider()
 
@@ -188,6 +198,9 @@ struct QIFImportView: View {
                                 if let cat = tx.category {
                                     Text(cat).font(.caption).foregroundColor(.secondary)
                                 }
+                            }
+                            if let match = matches[i] {
+                                recurringBadge(match, line: i)
                             }
                         }
 
@@ -242,6 +255,8 @@ struct QIFImportView: View {
         .onChange(of: dateOrder) { _, order in
             parsedTransactions = QIFParser.applyDateOrder(order, to: parsedTransactions)
             selected = selected.filter { parsedTransactions[$0].date != nil }
+            unlinked = []
+            deselectAlreadyPosted()
         }
     }
 
@@ -259,6 +274,78 @@ struct QIFImportView: View {
         }
         let count = analysis.order == .dayMonth ? analysis.dayFirstCount : analysis.monthFirstCount
         return ("Format \(analysis.order.displayName) détecté sur \(count) date(s) sans ambiguïté.", false)
+    }
+
+    // MARK: - Récurrences
+
+    /// Rapprochement des lignes avec les récurrences du compte de destination
+    private var recurringMatches: [Int: RecurringImportMatch] {
+        guard let accountID = selectedAccountID else { return [:] }
+        let payeeNames = Dictionary(payeesController.payees.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+        let matcher = RecurringImportMatcher(
+            templates: recurringController.templates,
+            existingTransactions: transactionsController.allTransactions.filter { $0.accountID == accountID },
+            payeeName: { payeeNames[$0] }
+        )
+        let lines = parsedTransactions.map { tx in
+            tx.date.map { RecurringImportMatcher.Line(date: $0, amount: tx.amount ?? 0, payee: tx.payee) }
+        }
+        return matcher.matches(for: lines, accountID: accountID, excluded: unlinked)
+    }
+
+    /// Les lignes déjà saisies par une récurrence ne sont pas importées par défaut
+    private func deselectAlreadyPosted() {
+        for (index, match) in recurringMatches {
+            if case .alreadyPosted = match { selected.remove(index) }
+        }
+    }
+
+    private func recurringName(_ template: RecurringTemplate) -> String {
+        template.payeeID.flatMap { id in payeesController.payees.first { $0.id == id }?.name }
+            ?? template.memo
+            ?? "Récurrence"
+    }
+
+    private func recurringSummary(_ matches: [Int: RecurringImportMatch]) -> some View {
+        let posted = matches.values.filter { if case .alreadyPosted = $0 { return true } else { return false } }.count
+        let reconciled = matches.count - posted
+        var parts: [String] = []
+        if reconciled > 0 { parts.append("\(reconciled) échéance\(reconciled > 1 ? "s" : "") reconnue\(reconciled > 1 ? "s" : "")") }
+        if posted > 0 { parts.append("\(posted) déjà saisie\(posted > 1 ? "s" : "") (décochée\(posted > 1 ? "s" : ""))") }
+        return Label(parts.joined(separator: " · "), systemImage: "arrow.triangle.2.circlepath")
+            .font(.caption)
+            .foregroundColor(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 8)
+            .help("Les lignes reconnues sont rattachées à leur récurrence, qui avance à l'échéance suivante")
+    }
+
+    private func recurringBadge(_ match: RecurringImportMatch, line: Int) -> some View {
+        let name = recurringName(match.template)
+        let text: String
+        let color: Color
+        switch match {
+        case .occurrence(_, let dueDate):
+            text = "\(name) · échéance du \(dueDate.formatted(.dateTime.day().month()))"
+            color = .accentColor
+        case .alreadyPosted:
+            text = "Déjà saisie par la récurrence « \(name) »"
+            color = .orange
+        }
+        return HStack(spacing: 4) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+            Text(text)
+            Button {
+                unlinked.insert(line)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+            }
+            .buttonStyle(.plain)
+            .help("Ne pas rattacher cette ligne à la récurrence")
+        }
+        .font(.caption)
+        .foregroundColor(color)
     }
 
     // MARK: - Step 3: Importing
@@ -286,6 +373,12 @@ struct QIFImportView: View {
                         Text("\(importedCount) transaction(s) importée(s)")
                             .font(.title2)
                             .fontWeight(.semibold)
+
+                        if reconciledCount > 0 {
+                            Label("\(reconciledCount) échéance(s) récurrente(s) rapprochée(s)", systemImage: "arrow.triangle.2.circlepath")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
                     }
                     .padding(.top, 24)
 
@@ -354,6 +447,8 @@ struct QIFImportView: View {
                 selected = Set(txs.indices.filter { txs[$0].date != nil })
                 selectedFileName = url.lastPathComponent
                 errorMessage = nil
+                unlinked = []
+                deselectAlreadyPosted()
                 step = .preview
             } catch {
                 errorMessage = "Erreur de lecture : \(error.localizedDescription)"
@@ -371,7 +466,24 @@ struct QIFImportView: View {
         await payeesController.loadPayees(for: bookID)
 
         // Jamais de date de substitution : une ligne sans date lisible n'est pas importée
-        let toImport = selected.sorted().map { parsedTransactions[$0] }.filter { $0.date != nil }
+        let importedIndices = selected.sorted().filter { parsedTransactions[$0].date != nil }
+        let toImport = importedIndices.map { parsedTransactions[$0] }
+
+        // Échéances réglées par l'import. Une récurrence n'avance que sur des échéances
+        // consécutives importées : après une ligne décochée, les suivantes ne sont pas rattachées.
+        var settled: [Int: RecurringTemplate] = [:]
+        var lastDueDates: [UUID: Date] = [:]
+        let occurrenceMatches = recurringMatches.compactMap { index, match -> (Int, RecurringTemplate, Date)? in
+            if case .occurrence(let template, let dueDate) = match { return (index, template, dueDate) }
+            return nil
+        }
+        for (templateID, group) in Dictionary(grouping: occurrenceMatches, by: { $0.1.id }) {
+            for (index, template, dueDate) in group.sorted(by: { $0.2 < $1.2 }) {
+                guard selected.contains(index) else { break }
+                settled[index] = template
+                lastDueDates[templateID] = dueDate
+            }
+        }
 
         // Bénéficiaires : recherche par nom (sans tenir compte de la casse) en accès direct,
         // puis création de tous les nouveaux en une seule écriture
@@ -382,7 +494,9 @@ struct QIFImportView: View {
         }
         var newNames: [String] = []
         var seen = Set<String>()
-        for tx in toImport {
+        for (index, tx) in zip(importedIndices, toImport) {
+            // Une ligne rattachée prend le bénéficiaire de sa récurrence
+            if settled[index]?.payeeID != nil { continue }
             guard let name = tx.payee?.trimmingCharacters(in: .whitespaces), !name.isEmpty else { continue }
             let nameKey = key(name)
             if payeesByKey[nameKey] == nil, seen.insert(nameKey).inserted {
@@ -401,31 +515,37 @@ struct QIFImportView: View {
 
             progressText = "Écriture de \(toImport.count) transaction(s)…"
             await Task.yield()
-            let transactions: [Transaction] = toImport.compactMap { tx in
+            let transactions: [Transaction] = zip(importedIndices, toImport).compactMap { index, tx in
                 guard let date = tx.date else { return nil }
                 let payee = tx.payee
                     .map { $0.trimmingCharacters(in: .whitespaces) }
                     .flatMap { payeesByKey[key($0)] }
                 let amount = tx.amount ?? 0
+                let template = settled[index]
                 return Transaction(
                     date: date,
                     amount: abs(amount),
                     accountID: accountID,
-                    payeeID: payee?.id,
-                    categoryID: payee?.defaultCategoryID,
+                    payeeID: template?.payeeID ?? payee?.id,
+                    categoryID: template?.categoryID ?? payee?.defaultCategoryID,
                     type: amount >= 0 ? .credit : .debit,
                     memo: [tx.memo, tx.category].compactMap { $0 }.joined(separator: " – ").nilIfEmpty,
+                    recurringTemplateID: template?.id,
                     status: .cleared
                 )
             }
             // Toutes les transactions en une seule écriture : toutes ou aucune
             try await transactionsController.importTransactions(transactions)
 
+            // Les échéances réglées ne sont plus proposées
+            await recurringController.advanceAfterImport(lastDueDates)
+
             progressText = "Mise à jour des comptes…"
             await Task.yield()
             await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
 
             importedCount = transactions.count
+            reconciledCount = settled.count
             createdPayees = newNames
             step = .done
         } catch {

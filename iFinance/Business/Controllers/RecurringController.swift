@@ -221,6 +221,23 @@ class RecurringController: ObservableObject {
         }
     }
 
+    /// Avance les récurrences dont des échéances ont été réglées par un import :
+    /// `lastDueDates` donne, par récurrence, la dernière échéance rapprochée.
+    /// Les transactions importées sont créées par l'appelant.
+    func advanceAfterImport(_ lastDueDates: [UUID: Date]) async {
+        guard !lastDueDates.isEmpty else { return }
+        do {
+            for (templateID, dueDate) in lastDueDates {
+                guard let template = template(id: templateID), dueDate >= template.nextDueDate else { continue }
+                try await repository.update(advanced(template, past: dueDate))
+            }
+        } catch {
+            self.error = error
+            print("❌ Erreur avance récurrences après import: \(error)")
+        }
+        await reload()
+    }
+
     /// Saisit les échéances arrivées à terme des récurrences en saisie automatique.
     /// Les autres restent affichées « en retard » jusqu'à validation ou passage.
     private func postAutomaticOccurrences() async {
