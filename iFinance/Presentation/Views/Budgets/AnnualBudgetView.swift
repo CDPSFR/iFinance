@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 /// Budget annuel : une ligne par catégorie, une colonne par mois, avec le réel et le prévu.
 /// Les montants prévus sont saisis dans la grille (clic sur une case).
@@ -12,17 +13,19 @@ struct AnnualBudgetView: View {
 
     @State private var year = Calendar.current.component(.year, from: Date())
     @State private var expanded: Set<UUID> = []
+    /// Case en cours de saisie (son montant vit dans PlannedAmountEditor, pas ici :
+    /// taper un chiffre ne redessine plus toute la grille)
     @State private var editing: AnnualBudgetKey?
-    @State private var editAmount: Decimal = 0
+    @StateObject private var actualsCache = AnnualActualsCache()
 
     // MARK: - Modèle d'affichage
 
-    enum Kind {
+    enum Kind: Equatable {
         case income, expense, balance
     }
 
     /// Ligne de la grille : douze valeurs prévues et douze valeurs réelles
-    struct Line: Identifiable {
+    struct Line: Identifiable, Equatable {
         let id: String
         let name: String
         let kind: Kind
@@ -42,7 +45,12 @@ struct AnnualBudgetView: View {
     private static let monthMinWidth: CGFloat = 58
 
     var body: some View {
-        let actuals = actualsByCategory
+        let actuals = actualsCache.actuals(
+            transactions: transactionsController,
+            accountIDs: accountsController.cashFlowAccountIDs,
+            categories: categoriesController.categories,
+            year: year
+        )
         let incomeLines = lines(for: categoriesController.incomeCategories, kind: .income, actuals: actuals)
         let expenseLines = lines(for: categoriesController.expenseCategories, kind: .expense, actuals: actuals)
         let summary = summaryLines(income: incomeLines, expense: expenseLines)
@@ -197,9 +205,7 @@ struct AnnualBudgetView: View {
 
     /// Filet vertical entre la colonne Année et janvier
     private var yearSeparator: some View {
-        Rectangle()
-            .fill(Color(nsColor: .separatorColor))
-            .frame(width: 1)
+        AnnualBudgetRow.yearSeparator
     }
 
     private func sectionTitle(_ title: String) -> some View {
@@ -221,159 +227,32 @@ struct AnnualBudgetView: View {
             .padding(.vertical, 8)
     }
 
+    /// Ligne de la grille. Comparable : SwiftUI ne la redessine que si ses données changent.
     private func row(_ line: Line) -> some View {
-        HStack(spacing: 0) {
-            label(line)
-                .frame(width: Self.labelWidth, alignment: .leading)
-                .padding(.leading, 16)
-
-            // Total de l'année : le prévu couvre les douze mois, le réel les mois écoulés
-            cell(
-                actual: sum(line.actual),
-                planned: sum(line.planned),
-                plannedSoFar: elapsedMonths.reduce(Decimal(0)) { $0 + line.planned[$1] },
-                kind: line.kind,
-                isFuture: elapsedMonths.isEmpty,
-                isBold: true
-            )
-            .frame(width: Self.yearWidth)
-            .overlay(alignment: .trailing) { yearSeparator }
-
-            ForEach(0..<12, id: \.self) { index in
-                monthCell(line, index: index)
-                    .frame(maxWidth: .infinity)
-                    .background(index == currentMonthIndex ? Color.primary.opacity(0.04) : Color.clear)
-            }
-        }
-        .padding(.trailing, 12)
-        .privacyBlur(hidden: appSettings.hideAmounts)
-    }
-
-    @ViewBuilder
-    private func label(_ line: Line) -> some View {
-        if line.hasChildren, let id = line.categoryID {
-            Button {
-                if expanded.contains(id) { expanded.remove(id) } else { expanded.insert(id) }
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: expanded.contains(id) ? "chevron.down" : "chevron.right")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 10)
-                    Text(line.name)
-                        .lineLimit(1)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        } else {
-            Text(line.name)
-                .fontWeight(line.isBold ? .semibold : .regular)
-                .lineLimit(1)
-                .padding(.leading, line.isChild ? 30 : 15)
-        }
-    }
-
-    @ViewBuilder
-    private func monthCell(_ line: Line, index: Int) -> some View {
-        let content = cell(
-            actual: line.actual[index],
-            planned: line.planned[index],
-            plannedSoFar: line.planned[index],
-            kind: line.kind,
-            isFuture: !elapsedMonths.contains(index),
-            isBold: line.isBold
+        let context = AnnualBudgetRow.Context(
+            isExpanded: line.categoryID.map { expanded.contains($0) } ?? false,
+            currentMonthIndex: currentMonthIndex,
+            elapsedCount: elapsedMonths.count,
+            currency: currency,
+            year: year,
+            hideAmounts: appSettings.hideAmounts,
+            editingMonth: editing.flatMap { $0.categoryID == line.categoryID ? $0.month : nil }
         )
-
-        if line.isEditable, let categoryID = line.categoryID {
-            let key = AnnualBudgetKey(categoryID: categoryID, month: index + 1)
-            Button {
-                editAmount = line.planned[index]
-                editing = key
-            } label: {
-                content.contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Modifier le montant prévu")
-            .popover(isPresented: Binding(
-                get: { editing == key },
-                set: { if !$0, editing == key { editing = nil } }
-            ), arrowEdge: .bottom) {
-                editor(for: key, name: line.name)
-            }
-        } else {
-            content
-        }
+        return AnnualBudgetRow(
+            line: line,
+            context: context,
+            onToggle: {
+                guard let id = line.categoryID else { return }
+                if expanded.contains(id) { expanded.remove(id) } else { expanded.insert(id) }
+            },
+            onEdit: { editing = $0 },
+            onDismissEditor: { key in if editing == key { editing = nil } },
+            onSave: { key, amount, allMonths in save(key, amount: amount, allMonths: allMonths) }
+        )
+        .equatable()
     }
 
-    /// Case « réel / prévu » avec sa barre de progression
-    private func cell(actual: Decimal, planned: Decimal, plannedSoFar: Decimal, kind: Kind, isFuture: Bool, isBold: Bool) -> some View {
-        let hasPlan = planned != 0
-        let isOnTrack = kind == .expense ? actual <= plannedSoFar : actual >= plannedSoFar
-        let color: Color = isFuture || !hasPlan ? .clear : (isOnTrack ? .green : .red)
-        let ratio: Double = {
-            guard !isFuture, hasPlan else { return 0 }
-            // Dépenses : part du budget consommée. Revenus et solde : barre pleine, colorée selon l'atteinte.
-            guard kind == .expense else { return 1 }
-            let value = NSDecimalNumber(decimal: actual / planned).doubleValue
-            return min(max(value, 0), 1)
-        }()
-
-        return VStack(spacing: 2) {
-            Text(isFuture ? "—" : formatted(actual))
-                .font(.callout)
-                .fontWeight(isBold ? .semibold : .regular)
-                .foregroundStyle(isFuture ? Color.secondary : (hasPlan && !isOnTrack ? Color.red : Color.primary))
-
-            Text(hasPlan ? formatted(planned) : "·")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Capsule()
-                .fill(Color.primary.opacity(0.08))
-                .frame(height: 3)
-                .overlay(alignment: .leading) {
-                    GeometryReader { geometry in
-                        Capsule()
-                            .fill(color)
-                            .frame(width: geometry.size.width * ratio)
-                    }
-                }
-                .padding(.horizontal, 5)
-        }
-        .monospacedDigit()
-        .lineLimit(1)
-        .minimumScaleFactor(0.75)
-        .padding(.vertical, 5)
-    }
-
-    // MARK: - Saisie du prévu
-
-    private func editor(for key: AnnualBudgetKey, name: String) -> some View {
-        let monthName = Calendar.current.standaloneMonthSymbols[key.month - 1]
-
-        return VStack(alignment: .leading, spacing: 10) {
-            Text("\(name) · \(monthName) \(String(year))")
-                .font(.headline)
-
-            TextField("Montant prévu", value: $editAmount, format: .number)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 200)
-                .onSubmit { save(key, allMonths: false) }
-
-            HStack {
-                Button("Tous les mois") { save(key, allMonths: true) }
-                    .help("Appliquer ce montant aux douze mois de l'année")
-                Spacer()
-                Button("OK") { save(key, allMonths: false) }
-                    .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(14)
-    }
-
-    private func save(_ key: AnnualBudgetKey, allMonths: Bool) {
-        let amount = editAmount
+    private func save(_ key: AnnualBudgetKey, amount: Decimal, allMonths: Bool) {
         editing = nil
         Task {
             if allMonths {
@@ -404,34 +283,8 @@ struct AnnualBudgetView: View {
         return Array(0...(currentMonthIndex ?? 11))
     }
 
-    /// Réel de l'année par catégorie et par mois, signé selon le sens de la catégorie
-    /// (dépenses nettes des remboursements, revenus nets). La clé nil regroupe le non catégorisé.
-    private var actualsByCategory: [UUID?: [Decimal]] {
-        let calendar = Calendar.current
-        let accountIDs = accountsController.cashFlowAccountIDs
-        var result: [UUID?: [Decimal]] = [:]
-
-        for transaction in transactionsController.allTransactions {
-            guard transaction.type != .transfer,
-                  transaction.status != .skipped,
-                  accountIDs.contains(transaction.accountID) else { continue }
-
-            let components = calendar.dateComponents([.year, .month], from: transaction.date)
-            guard components.year == year, let month = components.month else { continue }
-
-            let category = transaction.categoryID.flatMap { categoriesController.getCategory(id: $0) }
-            let isIncome = category?.isIncome ?? (transaction.type == .credit)
-            let value = isIncome ? transaction.signedAmount : -transaction.signedAmount
-            // Le non catégorisé est séparé entre revenus et dépenses par deux clés distinctes
-            let key: UUID? = category?.id ?? (isIncome ? Self.uncategorizedIncomeID : nil)
-
-            result[key, default: Self.zeros][month - 1] += value
-        }
-        return result
-    }
-
     /// Identifiant fictif pour regrouper les revenus sans catégorie
-    private static let uncategorizedIncomeID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")
+    static let uncategorizedIncomeID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")
 
     private func plannedValues(for categoryID: UUID) -> [Decimal] {
         (1...12).map { annualBudgetController.amount(for: categoryID, month: $0) }
@@ -530,6 +383,301 @@ struct AnnualBudgetView: View {
 
     /// Montant sans décimales, pour tenir dans les colonnes des mois
     private func formatted(_ amount: Decimal) -> String {
-        amount.formatted(.currency(code: currency).precision(.fractionLength(0)))
+        AnnualBudgetFormat.amount(amount, currency: currency)
+    }
+}
+
+// MARK: - Ligne de la grille
+
+/// Une ligne : libellé, total de l'année et douze mois. Équatable sur ses données seules
+/// (les actions ne comptent pas) : une saisie ne redessine que la ligne concernée.
+struct AnnualBudgetRow: View, Equatable {
+    struct Context: Equatable {
+        var isExpanded: Bool
+        var currentMonthIndex: Int?
+        /// Nombre de mois écoulés ou en cours de l'année affichée (0 à 12)
+        var elapsedCount: Int
+        var currency: String
+        var year: Int
+        var hideAmounts: Bool
+        /// Mois (1 à 12) en cours de saisie sur cette ligne
+        var editingMonth: Int?
+    }
+
+    let line: AnnualBudgetView.Line
+    let context: Context
+    let onToggle: () -> Void
+    let onEdit: (AnnualBudgetKey) -> Void
+    let onDismissEditor: (AnnualBudgetKey) -> Void
+    let onSave: (AnnualBudgetKey, Decimal, Bool) -> Void
+
+    static func == (lhs: AnnualBudgetRow, rhs: AnnualBudgetRow) -> Bool {
+        lhs.line == rhs.line && lhs.context == rhs.context
+    }
+
+    private static let labelWidth: CGFloat = 170
+    private static let yearWidth: CGFloat = 104
+
+    /// Filet vertical entre la colonne Année et janvier
+    static var yearSeparator: some View {
+        Rectangle()
+            .fill(Color(nsColor: .separatorColor))
+            .frame(width: 1)
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            label
+                .frame(width: Self.labelWidth, alignment: .leading)
+                .padding(.leading, 16)
+
+            // Total de l'année : le prévu couvre les douze mois, le réel les mois écoulés
+            AnnualBudgetCell(
+                actual: line.actual.reduce(0, +),
+                planned: line.planned.reduce(0, +),
+                plannedSoFar: line.planned.prefix(context.elapsedCount).reduce(0, +),
+                kind: line.kind,
+                isFuture: context.elapsedCount == 0,
+                isBold: true,
+                currency: context.currency
+            )
+            .frame(width: Self.yearWidth)
+            .overlay(alignment: .trailing) { Self.yearSeparator }
+
+            ForEach(0..<12, id: \.self) { index in
+                monthCell(index)
+                    .frame(maxWidth: .infinity)
+                    .background(index == context.currentMonthIndex ? Color.primary.opacity(0.04) : Color.clear)
+            }
+        }
+        .padding(.trailing, 12)
+        .privacyBlur(hidden: context.hideAmounts)
+    }
+
+    @ViewBuilder
+    private var label: some View {
+        if line.hasChildren {
+            Button(action: onToggle) {
+                HStack(spacing: 5) {
+                    Image(systemName: context.isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 10)
+                    Text(line.name)
+                        .lineLimit(1)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else {
+            Text(line.name)
+                .fontWeight(line.isBold ? .semibold : .regular)
+                .lineLimit(1)
+                .padding(.leading, line.isChild ? 30 : 15)
+        }
+    }
+
+    @ViewBuilder
+    private func monthCell(_ index: Int) -> some View {
+        let content = AnnualBudgetCell(
+            actual: line.actual[index],
+            planned: line.planned[index],
+            plannedSoFar: line.planned[index],
+            kind: line.kind,
+            isFuture: index >= context.elapsedCount,
+            isBold: line.isBold,
+            currency: context.currency
+        )
+
+        if line.isEditable, let categoryID = line.categoryID {
+            let key = AnnualBudgetKey(categoryID: categoryID, month: index + 1)
+            let button = Button {
+                onEdit(key)
+            } label: {
+                content.contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // Un seul popover existe à la fois : celui de la case en cours de saisie
+            if context.editingMonth == index + 1 {
+                button.popover(isPresented: Binding(
+                    get: { true },
+                    set: { if !$0 { onDismissEditor(key) } }
+                ), arrowEdge: .bottom) {
+                    PlannedAmountEditor(
+                        title: "\(line.name) · \(Calendar.current.standaloneMonthSymbols[index]) \(String(context.year))",
+                        initialAmount: line.planned[index]
+                    ) { amount, allMonths in
+                        onSave(key, amount, allMonths)
+                    }
+                }
+            } else {
+                button
+            }
+        } else {
+            content
+        }
+    }
+}
+
+// MARK: - Case « réel / prévu »
+
+struct AnnualBudgetCell: View {
+    let actual: Decimal
+    let planned: Decimal
+    let plannedSoFar: Decimal
+    let kind: AnnualBudgetView.Kind
+    let isFuture: Bool
+    let isBold: Bool
+    let currency: String
+
+    var body: some View {
+        let hasPlan = planned != 0
+        let isOnTrack = kind == .expense ? actual <= plannedSoFar : actual >= plannedSoFar
+        let color: Color = isFuture || !hasPlan ? .clear : (isOnTrack ? .green : .red)
+        let ratio: Double = {
+            guard !isFuture, hasPlan else { return 0 }
+            // Dépenses : part du budget consommée. Revenus et solde : barre pleine, colorée selon l'atteinte.
+            guard kind == .expense else { return 1 }
+            let value = NSDecimalNumber(decimal: actual / planned).doubleValue
+            return min(max(value, 0), 1)
+        }()
+
+        VStack(spacing: 2) {
+            Text(isFuture ? "—" : AnnualBudgetFormat.amount(actual, currency: currency))
+                .font(.callout)
+                .fontWeight(isBold ? .semibold : .regular)
+                .foregroundStyle(isFuture ? Color.secondary : (hasPlan && !isOnTrack ? Color.red : Color.primary))
+
+            Text(hasPlan ? AnnualBudgetFormat.amount(planned, currency: currency) : "·")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            // Barre de progression sans GeometryReader : la barre pleine est réduite à l'échelle
+            Capsule()
+                .fill(Color.primary.opacity(0.08))
+                .frame(height: 3)
+                .overlay {
+                    Capsule()
+                        .fill(color)
+                        .scaleEffect(x: ratio, y: 1, anchor: .leading)
+                }
+                .padding(.horizontal, 5)
+        }
+        .monospacedDigit()
+        .lineLimit(1)
+        .minimumScaleFactor(0.75)
+        .padding(.vertical, 5)
+    }
+}
+
+// MARK: - Saisie du prévu
+
+/// Formulaire du popover : le montant saisi est son propre état, la grille n'est pas
+/// redessinée à chaque frappe.
+struct PlannedAmountEditor: View {
+    let title: String
+    let onSave: (Decimal, Bool) -> Void
+    @State private var amount: Decimal
+
+    init(title: String, initialAmount: Decimal, onSave: @escaping (Decimal, Bool) -> Void) {
+        self.title = title
+        self.onSave = onSave
+        _amount = State(initialValue: initialAmount)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.headline)
+
+            TextField("Montant prévu", value: $amount, format: .number)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 200)
+                .onSubmit { onSave(amount, false) }
+
+            HStack {
+                Button("Tous les mois") { onSave(amount, true) }
+                    .help("Appliquer ce montant aux douze mois de l'année")
+                Spacer()
+                Button("OK") { onSave(amount, false) }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(14)
+    }
+}
+
+// MARK: - Formatage
+
+enum AnnualBudgetFormat {
+    private static var styles: [String: Decimal.FormatStyle.Currency] = [:]
+
+    /// Montant sans décimales, pour tenir dans les colonnes des mois (style mémorisé par devise)
+    static func amount(_ value: Decimal, currency: String) -> String {
+        if let style = styles[currency] { return value.formatted(style) }
+        let style = Decimal.FormatStyle.Currency(code: currency).precision(.fractionLength(0))
+        styles[currency] = style
+        return value.formatted(style)
+    }
+}
+
+// MARK: - Réel par catégorie, mis en cache
+
+/// Réel de l'année par catégorie et par mois, recalculé seulement si les transactions,
+/// les comptes retenus, les catégories ou l'année changent.
+@MainActor
+final class AnnualActualsCache: ObservableObject {
+    private struct Key: Equatable {
+        let revision: Int
+        let accountIDs: Set<UUID>
+        let categories: [Category]
+        let year: Int
+    }
+
+    private var key: Key?
+    private var value: [UUID?: [Decimal]] = [:]
+
+    func actuals(transactions: TransactionsController, accountIDs: Set<UUID>, categories: [Category], year: Int) -> [UUID?: [Decimal]] {
+        let newKey = Key(revision: transactions.revision, accountIDs: accountIDs, categories: categories, year: year)
+        if newKey != key {
+            value = Self.compute(transactions.allTransactions, accountIDs: accountIDs, categories: categories, year: year)
+            key = newKey
+        }
+        return value
+    }
+
+    /// Réel signé selon le sens de la catégorie (dépenses nettes des remboursements, revenus nets).
+    /// La clé nil regroupe les dépenses sans catégorie, uncategorizedIncomeID les revenus sans catégorie.
+    /// Un passage : catégories par dictionnaire, mois par comparaison à des bornes précalculées.
+    static func compute(_ transactions: [Transaction], accountIDs: Set<UUID>, categories: [Category], year: Int,
+                        calendar: Calendar = .current) -> [UUID?: [Decimal]] {
+        let monthStarts = (1...13).compactMap {
+            calendar.date(from: DateComponents(year: $0 == 13 ? year + 1 : year, month: $0 == 13 ? 1 : $0, day: 1))
+        }
+        guard monthStarts.count == 13 else { return [:] }
+        let yearStart = monthStarts[0], yearEnd = monthStarts[12]
+        let categoriesByID = Dictionary(categories.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let zeros = [Decimal](repeating: 0, count: 12)
+        var result: [UUID?: [Decimal]] = [:]
+
+        for transaction in transactions {
+            let date = transaction.date
+            guard date >= yearStart, date < yearEnd,
+                  transaction.type != .transfer,
+                  transaction.status != .skipped,
+                  accountIDs.contains(transaction.accountID) else { continue }
+
+            var month = 11
+            while month > 0 && date < monthStarts[month] { month -= 1 }
+
+            let category = transaction.categoryID.flatMap { categoriesByID[$0] }
+            let isIncome = category?.isIncome ?? (transaction.type == .credit)
+            let amount = isIncome ? transaction.signedAmount : -transaction.signedAmount
+            let key: UUID? = category?.id ?? (isIncome ? AnnualBudgetView.uncategorizedIncomeID : nil)
+
+            result[key, default: zeros][month] += amount
+        }
+        return result
     }
 }
