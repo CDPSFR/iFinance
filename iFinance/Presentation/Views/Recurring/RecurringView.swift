@@ -202,7 +202,7 @@ struct RecurringView: View {
                 .lineLimit(1)
                 .frame(width: 130, alignment: .leading)
 
-            Text(money(template.signedAmount))
+            Text(money(displayedAmount(template)))
                 .monospacedDigit()
                 .foregroundStyle(template.type == .credit ? Color.green : Color.primary)
                 .frame(width: 100, alignment: .trailing)
@@ -289,7 +289,7 @@ struct RecurringView: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 84, alignment: .leading)
 
-            Text(money(template.signedAmount))
+            Text(money(displayedAmount(template)))
                 .monospacedDigit()
                 .foregroundStyle(template.type == .credit ? Color.green : Color.primary)
                 .frame(width: 96, alignment: .trailing)
@@ -323,15 +323,26 @@ struct RecurringView: View {
     // MARK: - Libellés
 
     private func payeeName(_ template: RecurringTemplate) -> String {
-        template.payeeID.flatMap { payeesController.getPayee(id: $0)?.name } ?? template.memo ?? "Sans bénéficiaire"
+        if template.isTransfer {
+            return template.memo ?? "Virement vers \(accountsController.getAccount(id: template.toAccountID ?? UUID())?.name ?? "—")"
+        }
+        return template.payeeID.flatMap { payeesController.getPayee(id: $0)?.name } ?? template.memo ?? "Sans bénéficiaire"
     }
 
     private func categoryName(_ template: RecurringTemplate) -> String {
         template.categoryID.map { categoriesController.getCategoryPath(for: $0) } ?? "—"
     }
 
+    /// Compte de la récurrence ; « Courant → Livret A » pour un virement
     private func accountName(_ template: RecurringTemplate) -> String {
-        accountsController.getAccount(id: template.accountID)?.name ?? "—"
+        let source = accountsController.getAccount(id: template.accountID)?.name ?? "—"
+        guard template.isTransfer else { return source }
+        return "\(source) → \(accountsController.getAccount(id: template.toAccountID ?? UUID())?.name ?? "—")"
+    }
+
+    /// Un virement s'affiche sans signe : il sort d'un compte et entre dans l'autre
+    private func displayedAmount(_ template: RecurringTemplate) -> Decimal {
+        template.isTransfer ? abs(template.amount) : template.signedAmount
     }
 
     private func money(_ amount: Decimal) -> String {

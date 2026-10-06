@@ -186,8 +186,8 @@ struct TransactionFormView: View {
                     }
                 }
 
-                // Répétition : proposée à la création, hors transferts
-                if !isEditing, !isTransfer {
+                // Répétition : proposée à la création, transferts compris
+                if !isEditing {
                     Section {
                         LabeledContent("Répéter") {
                             Picker("Répéter", selection: $repeatFrequency) {
@@ -478,15 +478,38 @@ struct TransactionFormView: View {
                 if let existing = transactionToEdit {
                     // Transfert existant : seule la catégorie des deux transactions liées est mise à jour
                     await transactionsController.updateTransfer(existing, categoryID: selectedCategory)
-                } else {
-                    await transactionsController.createTransfer(
-                        from: accountID,
-                        to: toAccountID,
-                        amount: amountDecimal,
-                        date: date,
+                } else if let (source, destination) = await transactionsController.createTransfer(
+                    from: accountID,
+                    to: toAccountID,
+                    amount: amountDecimal,
+                    date: date,
+                    memo: note.isEmpty ? nil : note,
+                    categoryID: selectedCategory
+                ), let frequency = repeatFrequency, let bookID = booksController.currentBook?.id {
+                    // Virement répété : ce virement est la première échéance, la récurrence part de la suivante
+                    let calendar = Calendar.current
+                    let anchorDay = calendar.component(.day, from: date)
+                    let template = RecurringTemplate(
+                        bookID: bookID,
+                        accountID: accountID,
+                        toAccountID: toAccountID,
+                        categoryID: selectedCategory,
+                        amount: abs(amountDecimal),
+                        type: .transfer,
                         memo: note.isEmpty ? nil : note,
-                        categoryID: selectedCategory
+                        frequency: frequency,
+                        startDate: date,
+                        dayOfMonth: anchorDay,
+                        dayOfWeek: calendar.component(.weekday, from: date),
+                        nextDueDate: frequency.next(after: date, anchorDay: anchorDay),
+                        autoPost: repeatAutoPost,
+                        isVariableAmount: repeatIsVariable
                     )
+                    await recurringController.create(template)
+                    for var leg in [source, destination] {
+                        leg.recurringTemplateID = template.id
+                        await transactionsController.updateTransaction(leg)
+                    }
                 }
             } else if let existing = transactionToEdit {
                 var updated = existing

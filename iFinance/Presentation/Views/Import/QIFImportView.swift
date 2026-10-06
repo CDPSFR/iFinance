@@ -495,8 +495,8 @@ struct QIFImportView: View {
         var newNames: [String] = []
         var seen = Set<String>()
         for (index, tx) in zip(importedIndices, toImport) {
-            // Une ligne rattachée prend le bénéficiaire de sa récurrence
-            if settled[index]?.payeeID != nil { continue }
+            // Une ligne rattachée prend le bénéficiaire de sa récurrence ; un virement n'en a pas
+            if let template = settled[index], template.payeeID != nil || template.isTransfer { continue }
             guard let name = tx.payee?.trimmingCharacters(in: .whitespaces), !name.isEmpty else { continue }
             let nameKey = key(name)
             if payeesByKey[nameKey] == nil, seen.insert(nameKey).inserted {
@@ -515,27 +515,66 @@ struct QIFImportView: View {
 
             progressText = "Écriture de \(toImport.count) transaction(s)…"
             await Task.yield()
-            let transactions: [Transaction] = zip(importedIndices, toImport).compactMap { index, tx in
-                guard let date = tx.date else { return nil }
+            // Virement récurrent : la ligne devient un côté du virement, l'autre côté est créé sur
+            // l'autre compte. Le lien du côté importé est posé après l'écriture (clé étrangère).
+            var transferLinks: [Transaction] = []
+            let transactions: [Transaction] = zip(importedIndices, toImport).flatMap { index, tx -> [Transaction] in
+                guard let date = tx.date else { return [] }
                 let payee = tx.payee
                     .map { $0.trimmingCharacters(in: .whitespaces) }
                     .flatMap { payeesByKey[key($0)] }
                 let amount = tx.amount ?? 0
                 let template = settled[index]
-                return Transaction(
+                let memo = [tx.memo, tx.category].compactMap { $0 }.joined(separator: " – ").nilIfEmpty
+
+                if let template, template.isTransfer,
+                   let otherAccountID = accountID == template.accountID ? template.toAccountID : template.accountID {
+                    var imported = Transaction(
+                        date: date,
+                        amount: amount,
+                        accountID: accountID,
+                        toAccountID: otherAccountID,
+                        categoryID: template.categoryID,
+                        type: .transfer,
+                        memo: template.memo ?? memo,
+                        recurringTemplateID: template.id,
+                        status: .cleared
+                    )
+                    let mirror = Transaction(
+                        date: date,
+                        amount: -amount,
+                        accountID: otherAccountID,
+                        toAccountID: accountID,
+                        linkedTransactionID: imported.id,
+                        categoryID: template.categoryID,
+                        type: .transfer,
+                        memo: template.memo ?? memo,
+                        recurringTemplateID: template.id,
+                        status: .cleared
+                    )
+                    imported.linkedTransactionID = mirror.id
+                    transferLinks.append(imported)
+                    imported.linkedTransactionID = nil
+                    return [imported, mirror]
+                }
+
+                return [Transaction(
                     date: date,
                     amount: abs(amount),
                     accountID: accountID,
                     payeeID: template?.payeeID ?? payee?.id,
                     categoryID: template?.categoryID ?? payee?.defaultCategoryID,
                     type: amount >= 0 ? .credit : .debit,
-                    memo: [tx.memo, tx.category].compactMap { $0 }.joined(separator: " – ").nilIfEmpty,
+                    memo: memo,
                     recurringTemplateID: template?.id,
                     status: .cleared
-                )
+                )]
             }
             // Toutes les transactions en une seule écriture : toutes ou aucune
             try await transactionsController.importTransactions(transactions)
+            for transaction in transferLinks {
+                await transactionsController.updateTransaction(transaction)
+            }
 
             // Les échéances réglées ne sont plus proposées
             await recurringController.advanceAfterImport(lastDueDates)
@@ -544,7 +583,7 @@ struct QIFImportView: View {
             await Task.yield()
             await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
 
-            importedCount = transactions.count
+            importedCount = transactions.count - transferLinks.count
             reconciledCount = settled.count
             createdPayees = newNames
             step = .done

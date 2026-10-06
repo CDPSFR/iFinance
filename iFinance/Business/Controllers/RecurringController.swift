@@ -61,7 +61,7 @@ class RecurringController: ObservableObject {
         var result: [RecurringOccurrence] = []
 
         for template in templates where template.isActive {
-            if let accountID, template.accountID != accountID { continue }
+            if let accountID, !template.involves(accountID) { continue }
 
             var date = template.nextDueDate
             var isNext = true
@@ -109,23 +109,24 @@ class RecurringController: ObservableObject {
         return next.addingTimeInterval(-1)
     }
 
-    /// Somme signée des échéances non traitées d'ici la fin du mois, pour le solde prévu
+    /// Somme signée des échéances non traitées d'ici la fin du mois, pour le solde prévu.
+    /// Un virement compte en sortie sur son compte d'origine, en entrée sur sa destination.
     func pendingAmount(accountID: UUID?, until date: Date = RecurringController.endOfCurrentMonth) -> Decimal {
         occurrences(accountID: accountID, until: date)
-            .reduce(Decimal(0)) { $0 + $1.template.signedAmount }
+            .reduce(Decimal(0)) { $0 + $1.template.signedAmount(for: accountID) }
     }
 
     // MARK: - Budget annuel
 
     /// Montants des récurrences actives, par catégorie et par mois (1 à 12) de l'année donnée,
     /// en suivant leur calendrier depuis leur date de début. Montants positifs ; les récurrences
-    /// sans catégorie sont ignorées. Sert à préremplir le prévu du budget annuel.
+    /// sans catégorie et les virements sont ignorés. Sert à préremplir le prévu du budget annuel.
     func plannedAmounts(year: Int, calendar: Calendar = .current) -> [AnnualBudgetKey: Decimal] {
         guard let yearStart = calendar.date(from: DateComponents(year: year, month: 1, day: 1)),
               let yearEnd = calendar.date(from: DateComponents(year: year + 1, month: 1, day: 1)) else { return [:] }
         var result: [AnnualBudgetKey: Decimal] = [:]
 
-        for template in templates where template.isActive {
+        for template in templates where template.isActive && template.type != .transfer {
             guard let categoryID = template.categoryID else { continue }
             var date = calendar.startOfDay(for: template.startDate)
             var guardCount = 0
@@ -199,7 +200,7 @@ class RecurringController: ObservableObject {
         guard occurrence.isNext, let template = template(id: occurrence.template.id) else { return }
 
         do {
-            try await transactionRepository.create(transaction(for: template, date: date ?? occurrence.date, amount: amount))
+            try await post(template, date: date ?? occurrence.date, amount: amount)
             try await repository.update(advanced(template, past: occurrence.date))
             await reload()
         } catch {
@@ -251,7 +252,7 @@ class RecurringController: ObservableObject {
             while current.isActive, current.nextDueDate < today, guardCount < 120 {
                 if let endDate = current.endDate, current.nextDueDate > endDate { break }
                 do {
-                    try await transactionRepository.create(transaction(for: current, date: current.nextDueDate, amount: nil))
+                    try await post(current, date: current.nextDueDate, amount: nil)
                     current = advanced(current, past: current.nextDueDate)
                     try await repository.update(current)
                     didPost = true
@@ -268,6 +269,27 @@ class RecurringController: ObservableObject {
     }
 
     // MARK: - Outils
+
+    /// Enregistre l'échéance : une transaction, ou les deux transactions liées d'un virement,
+    /// toutes rattachées à la récurrence
+    private func post(_ template: RecurringTemplate, date: Date, amount: Decimal?) async throws {
+        guard template.isTransfer, let toAccountID = template.toAccountID else {
+            try await transactionRepository.create(transaction(for: template, date: date, amount: amount))
+            return
+        }
+        var (source, destination) = try await transactionRepository.createTransfer(
+            from: template.accountID,
+            to: toAccountID,
+            amount: abs(amount ?? template.amount),
+            date: date,
+            memo: template.memo,
+            categoryID: template.categoryID
+        )
+        source.recurringTemplateID = template.id
+        destination.recurringTemplateID = template.id
+        try await transactionRepository.update(source)
+        try await transactionRepository.update(destination)
+    }
 
     private func transaction(for template: RecurringTemplate, date: Date, amount: Decimal?) -> Transaction {
         Transaction(

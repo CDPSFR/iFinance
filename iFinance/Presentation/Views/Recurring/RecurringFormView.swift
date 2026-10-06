@@ -17,6 +17,8 @@ struct RecurringFormView: View {
     @State private var type: TransactionType
     @State private var amount: String
     @State private var accountID: UUID?
+    /// Compte de destination d'un virement
+    @State private var toAccountID: UUID?
     @State private var payeeID: UUID?
     @State private var categoryID: UUID?
     @State private var memo: String
@@ -45,6 +47,7 @@ struct RecurringFormView: View {
             _type = State(initialValue: template.type)
             _amount = State(initialValue: Self.text(template.amount))
             _accountID = State(initialValue: template.accountID)
+            _toAccountID = State(initialValue: template.toAccountID)
             _payeeID = State(initialValue: template.payeeID)
             _categoryID = State(initialValue: template.categoryID)
             _memo = State(initialValue: template.memo ?? "")
@@ -56,10 +59,17 @@ struct RecurringFormView: View {
             _isVariableAmount = State(initialValue: template.isVariableAmount)
         } else {
             let source = prefill
-            let sourceType: TransactionType = source?.type == .credit ? .credit : .debit
-            _type = State(initialValue: sourceType)
+            _type = State(initialValue: source?.type ?? .debit)
             _amount = State(initialValue: source.map { Self.text(abs($0.amount)) } ?? "")
-            _accountID = State(initialValue: source?.accountID)
+            if let source, source.isTransfer {
+                // Depuis l'un ou l'autre côté d'un virement : l'origine est le côté débité
+                let isSourceSide = source.amount < 0
+                _accountID = State(initialValue: isSourceSide ? source.accountID : source.toAccountID)
+                _toAccountID = State(initialValue: isSourceSide ? source.toAccountID : source.accountID)
+            } else {
+                _accountID = State(initialValue: source?.accountID)
+                _toAccountID = State(initialValue: nil)
+            }
             _payeeID = State(initialValue: source?.payeeID)
             _categoryID = State(initialValue: source?.categoryID)
             _memo = State(initialValue: source?.memo ?? "")
@@ -75,6 +85,7 @@ struct RecurringFormView: View {
     }
 
     private var isEditing: Bool { templateToEdit != nil }
+    private var isTransfer: Bool { type == .transfer }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -89,7 +100,8 @@ struct RecurringFormView: View {
 
                 FillSegmentedPicker(
                     options: [(TransactionType.debit, TransactionType.debit.displayName),
-                              (TransactionType.credit, TransactionType.credit.displayName)],
+                              (TransactionType.credit, TransactionType.credit.displayName),
+                              (TransactionType.transfer, TransactionType.transfer.displayName)],
                     selection: $type
                 )
                 .frame(maxWidth: .infinity)
@@ -110,23 +122,37 @@ struct RecurringFormView: View {
                             .frame(width: Self.controlWidth, alignment: .leading)
                     }
 
-                    accountPicker
+                    accountPicker(
+                        isTransfer ? "Depuis le compte" : "Compte",
+                        selection: $accountID,
+                        accounts: accountsController.activeAccounts
+                    )
+
+                    if isTransfer {
+                        accountPicker(
+                            "Vers le compte",
+                            selection: $toAccountID,
+                            accounts: accountsController.activeAccounts.filter { $0.id != accountID }
+                        )
+                    }
                 }
 
                 Section {
-                    LabeledContent("Bénéficiaire") {
-                        control(addHelp: "Nouveau bénéficiaire") {
-                            FillPopUpPicker(items: payeeItems, selection: $payeeID)
-                        } add: {
-                            knownIDs = Set(payeesController.payees.map { $0.id })
-                            showPayeeForm = true
+                    if !isTransfer {
+                        LabeledContent("Bénéficiaire") {
+                            control(addHelp: "Nouveau bénéficiaire") {
+                                FillPopUpPicker(items: payeeItems, selection: $payeeID)
+                            } add: {
+                                knownIDs = Set(payeesController.payees.map { $0.id })
+                                showPayeeForm = true
+                            }
                         }
-                    }
-                    .onChange(of: payeeID) { _, newValue in
-                        // Proposer la catégorie par défaut du bénéficiaire
-                        if let newValue, let suggestion = payeesController.getDefaultCategory(for: newValue) {
-                            categoryID = suggestion
-                            categoryWasSuggested = true
+                        .onChange(of: payeeID) { _, newValue in
+                            // Proposer la catégorie par défaut du bénéficiaire
+                            if let newValue, let suggestion = payeesController.getDefaultCategory(for: newValue) {
+                                categoryID = suggestion
+                                categoryWasSuggested = true
+                            }
                         }
                     }
 
@@ -267,13 +293,20 @@ struct RecurringFormView: View {
     /// Montant en grand, centré, avec le signe du type et la devise (comme une transaction)
     private var amountField: some View {
         let color: Color = type == .credit ? .green : .primary
-        let sign = type == .credit ? "+" : "−"
+        let sign: String
+        switch type {
+        case .credit: sign = "+"
+        case .debit: sign = "−"
+        case .transfer: sign = ""
+        }
 
         return VStack(spacing: 2) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(sign)
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(color)
+                if !sign.isEmpty {
+                    Text(sign)
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(color)
+                }
 
                 TextField("Montant", text: $amount, prompt: Text("0,00"))
                     .labelsHidden()
@@ -328,14 +361,13 @@ struct RecurringFormView: View {
     }
 
     /// Sélecteur de compte : « Sélectionner… » tant qu'aucun compte valide n'est choisi
-    private var accountPicker: some View {
-        let accounts = accountsController.activeAccounts
-        let needsPlaceholder = accountID == nil || !accounts.contains { $0.id == accountID }
+    private func accountPicker(_ title: String, selection: Binding<UUID?>, accounts: [Account]) -> some View {
+        let needsPlaceholder = selection.wrappedValue == nil || !accounts.contains { $0.id == selection.wrappedValue }
         let items = (needsPlaceholder ? [FillPopUpItem<UUID>(id: nil, title: "Sélectionner…")] : [])
             + accounts.map { FillPopUpItem(id: $0.id, title: $0.name, systemImage: $0.type.icon) }
 
-        return LabeledContent("Compte") {
-            FillPopUpPicker(items: items, selection: $accountID)
+        return LabeledContent(title) {
+            FillPopUpPicker(items: items, selection: selection)
                 .frame(width: Self.controlWidth)
         }
     }
@@ -347,9 +379,11 @@ struct RecurringFormView: View {
             }
     }
 
-    /// Catégories du sens de la récurrence, sous-catégories indentées
+    /// Catégories du sens de la récurrence (toutes pour un virement), sous-catégories indentées
     private var categoryItems: [FillPopUpItem<UUID>] {
-        let roots = categoriesController.rootCategories.filter { $0.isIncome == (type == .credit) }
+        let roots = isTransfer
+            ? categoriesController.rootCategories
+            : categoriesController.rootCategories.filter { $0.isIncome == (type == .credit) }
         var items = [FillPopUpItem<UUID>(id: nil, title: "Aucune")]
         for category in roots {
             items.append(FillPopUpItem(id: category.id, title: category.name, systemImage: category.icon ?? "folder"))
@@ -362,9 +396,10 @@ struct RecurringFormView: View {
 
     // MARK: - Logique
 
-    /// La catégorie doit correspondre au sens (dépense ou revenu)
+    /// La catégorie doit correspondre au sens (dépense ou revenu) ; un virement accepte toutes les catégories
     private func typeChanged(to newValue: TransactionType) {
-        if let categoryID,
+        if newValue != .transfer,
+           let categoryID,
            let category = categoriesController.getCategory(id: categoryID),
            category.isIncome != (newValue == .credit) {
             self.categoryID = nil
@@ -375,8 +410,9 @@ struct RecurringFormView: View {
     /// Ce qui se passera à l'échéance
     private var hint: String {
         let day = nextDueDate.formatted(.dateTime.day().month(.wide).year())
+        let what = isTransfer ? "Le virement" : "La transaction"
         return autoPost
-            ? "La transaction sera saisie automatiquement le \(day), puis à chaque échéance."
+            ? "\(what) sera saisi\(isTransfer ? "" : "e") automatiquement le \(day), puis à chaque échéance."
             : "L'échéance du \(day) apparaîtra dans « À venir » jusqu'à ce que vous la validiez ou la passiez."
     }
 
@@ -403,6 +439,7 @@ struct RecurringFormView: View {
 
     private var isFormValid: Bool {
         guard let value = parsedAmount, value != 0 else { return false }
+        if isTransfer, toAccountID == nil || toAccountID == accountID { return false }
         return accountID != nil && booksController.currentBook != nil
     }
 
@@ -420,7 +457,9 @@ struct RecurringFormView: View {
             startDate: nextDueDate
         )
         template.accountID = accountID
-        template.payeeID = payeeID
+        template.toAccountID = isTransfer ? toAccountID : nil
+        // Un virement n'a pas de bénéficiaire, comme une transaction de transfert
+        template.payeeID = isTransfer ? nil : payeeID
         template.categoryID = categoryID
         template.amount = abs(value)
         template.type = type

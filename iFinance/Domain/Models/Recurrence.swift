@@ -82,9 +82,27 @@ extension RecurringTemplate {
         return template
     }
 
-    /// Montant signé : négatif pour une dépense, positif pour un revenu
+    /// Montant signé : négatif pour une dépense, positif pour un revenu.
+    /// Un virement est vu depuis son compte d'origine (négatif).
     var signedAmount: Decimal {
         type == .credit ? abs(amount) : -abs(amount)
+    }
+
+    /// Virement récurrent entre deux comptes
+    var isTransfer: Bool { type == .transfer && toAccountID != nil }
+
+    /// Vrai si la récurrence mouvemente ce compte (origine ou destination d'un virement)
+    func involves(_ accountID: UUID) -> Bool {
+        self.accountID == accountID || (isTransfer && toAccountID == accountID)
+    }
+
+    /// Montant signé vu depuis un compte. `accountID` nil = tous les comptes :
+    /// un virement s'y compense (0).
+    func signedAmount(for accountID: UUID?) -> Decimal {
+        guard isTransfer else { return signedAmount }
+        if accountID == toAccountID { return abs(amount) }
+        if accountID == self.accountID { return -abs(amount) }
+        return 0
     }
 
     /// Équivalent mensuel signé

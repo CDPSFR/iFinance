@@ -56,8 +56,10 @@ struct RecurringValidateView: View {
         VStack(spacing: 0) {
             SheetHeader(
                 title: "Valider l'échéance",
-                subtitle: payeesController.getPayee(id: occurrence.template.payeeID ?? UUID())?.name
-                    ?? occurrence.template.memo
+                subtitle: occurrence.template.isTransfer
+                    ? transferText(occurrence.template)
+                    : payeesController.getPayee(id: occurrence.template.payeeID ?? UUID())?.name
+                        ?? occurrence.template.memo
             )
 
             Form {
@@ -113,6 +115,12 @@ struct RecurringValidateView: View {
             .replacingOccurrences(of: ",", with: ".")
             .filter { !$0.isWhitespace && $0 != "\u{202F}" && $0 != "\u{00A0}" }
         return Decimal(string: cleaned, locale: Locale(identifier: "en_US_POSIX"))
+    }
+
+    private func transferText(_ template: RecurringTemplate) -> String {
+        let source = accountsController.getAccount(id: template.accountID)?.name ?? "—"
+        let destination = accountsController.getAccount(id: template.toAccountID ?? UUID())?.name ?? "—"
+        return "Virement \(source) → \(destination)"
     }
 }
 
@@ -221,7 +229,7 @@ struct UpcomingOccurrencesBand: View {
             Image(systemName: "arrow.triangle.2.circlepath")
                 .font(.caption)
 
-            Text(payeesController.getPayee(id: template.payeeID ?? UUID())?.name ?? template.memo ?? "Sans bénéficiaire")
+            Text(label(template))
                 .lineLimit(1)
 
             if occurrence.isLate {
@@ -238,7 +246,8 @@ struct UpcomingOccurrencesBand: View {
 
             Spacer(minLength: 8)
 
-            Text(money(template.signedAmount))
+            // Sur une page de compte, un virement est une sortie ou une entrée ; sans compte, sans signe
+            Text(money(template.isTransfer && accountID == nil ? abs(template.amount) : template.signedAmount(for: accountID)))
                 .monospacedDigit()
                 .privacyBlur(hidden: appSettings.hideAmounts)
 
@@ -266,6 +275,17 @@ struct UpcomingOccurrencesBand: View {
             await recurringController.validate(occurrence)
             await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
         }
+    }
+
+    /// Bénéficiaire, ou « Virement vers Livret A » / « Virement depuis Courant » selon le compte affiché
+    private func label(_ template: RecurringTemplate) -> String {
+        guard template.isTransfer else {
+            return payeesController.getPayee(id: template.payeeID ?? UUID())?.name ?? template.memo ?? "Sans bénéficiaire"
+        }
+        if let accountID, accountID == template.toAccountID {
+            return "Virement depuis \(accountsController.getAccount(id: template.accountID)?.name ?? "—")"
+        }
+        return "Virement vers \(accountsController.getAccount(id: template.toAccountID ?? UUID())?.name ?? "—")"
     }
 
     private func skip(_ occurrence: RecurringOccurrence) {

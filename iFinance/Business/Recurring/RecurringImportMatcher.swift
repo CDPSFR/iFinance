@@ -16,7 +16,8 @@ enum RecurringImportMatch: Equatable {
 
 /// Rapproche les lignes d'un import des récurrences du compte de destination.
 ///
-/// Une ligne correspond à une échéance si elle est sur le même compte, dans le même sens,
+/// Une ligne correspond à une échéance si elle est sur le même compte, dans le même sens
+/// (un virement récurrent est une sortie sur son compte d'origine, une entrée sur sa destination),
 /// à quelques jours de l'échéance, et du même montant (n'importe quel montant pour une
 /// récurrence à montant variable, à condition que le bénéficiaire corresponde). Entre plusieurs
 /// lignes possibles, celle dont le bénéficiaire correspond l'emporte, puis la plus proche en date.
@@ -41,7 +42,7 @@ struct RecurringImportMatcher {
     func matches(for lines: [Line?], accountID: UUID, excluded: Set<Int> = []) -> [Int: RecurringImportMatch] {
         let candidates = lines.indices.filter { lines[$0] != nil && !excluded.contains($0) }
         guard !candidates.isEmpty else { return [:] }
-        let accountTemplates = templates.filter { $0.isActive && $0.accountID == accountID && $0.toAccountID == nil }
+        let accountTemplates = templates.filter { $0.isActive && $0.involves(accountID) }
         var result: [Int: RecurringImportMatch] = [:]
 
         // 1. Échéances déjà saisies : la ligne du relevé ferait doublon
@@ -50,7 +51,7 @@ struct RecurringImportMatcher {
             let posted = existingTransactions.filter { $0.recurringTemplateID == template.id && $0.accountID == accountID }
             for transaction in posted.sorted(by: { $0.date < $1.date }) {
                 let best = candidates
-                    .filter { result[$0] == nil && matches(lines[$0]!, template: template, near: transaction.date, postedAmount: transaction.amount) }
+                    .filter { result[$0] == nil && matches(lines[$0]!, template: template, accountID: accountID, near: transaction.date, postedAmount: transaction.amount) }
                     .min { rank(lines[$0]!, template, transaction.date) < rank(lines[$1]!, template, transaction.date) }
                 if let best, claimedTransactions.insert(transaction.id).inserted {
                     result[best] = .alreadyPosted(template: template, transactionID: transaction.id)
@@ -68,7 +69,7 @@ struct RecurringImportMatcher {
             while dueDate <= horizon, guardCount < 400 {
                 if let endDate = template.endDate, dueDate > endDate { break }
                 let best = candidates
-                    .filter { result[$0] == nil && matches(lines[$0]!, template: template, near: dueDate, postedAmount: nil) }
+                    .filter { result[$0] == nil && matches(lines[$0]!, template: template, accountID: accountID, near: dueDate, postedAmount: nil) }
                     .min { rank(lines[$0]!, template, dueDate) < rank(lines[$1]!, template, dueDate) }
                 guard let best else { break }
                 result[best] = .occurrence(template: template, dueDate: dueDate)
@@ -82,9 +83,12 @@ struct RecurringImportMatcher {
 
     // MARK: - Critères
 
-    private func matches(_ line: Line, template: RecurringTemplate, near date: Date, postedAmount: Decimal?) -> Bool {
+    private func matches(_ line: Line, template: RecurringTemplate, accountID: UUID, near date: Date, postedAmount: Decimal?) -> Bool {
         let lineType: TransactionType = line.amount >= 0 ? .credit : .debit
-        guard lineType == template.type,
+        let expectedType: TransactionType = template.isTransfer
+            ? (accountID == template.toAccountID ? .credit : .debit)
+            : template.type
+        guard lineType == expectedType,
               distance(line.date, date) <= toleranceDays(template.frequency) else { return false }
 
         if template.isVariableAmount {
