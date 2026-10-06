@@ -72,6 +72,16 @@ extension RecurrenceFrequency {
 // MARK: - Récurrence
 
 extension RecurringTemplate {
+    /// Les échéances sont des dates sans heure : prochaine échéance, début et fin
+    /// sont ramenés au début de leur journée.
+    func normalizedToDays(calendar: Calendar = .current) -> RecurringTemplate {
+        var template = self
+        template.nextDueDate = calendar.startOfDay(for: nextDueDate)
+        template.startDate = calendar.startOfDay(for: startDate)
+        template.endDate = endDate.map { calendar.startOfDay(for: $0) }
+        return template
+    }
+
     /// Montant signé : négatif pour une dépense, positif pour un revenu
     var signedAmount: Decimal {
         type == .credit ? abs(amount) : -abs(amount)

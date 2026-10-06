@@ -53,6 +53,32 @@ class AnnualBudgetController: ObservableObject {
         await write(amount, categoryID: categoryID, months: Array(1...12))
     }
 
+    /// Cases sans montant prévu parmi `amounts`, pour l'année chargée
+    func emptyCells(in amounts: [AnnualBudgetKey: Decimal]) -> [AnnualBudgetKey: Decimal] {
+        amounts.filter { key, value in value > 0 && (planned[key] ?? 0) == 0 }
+    }
+
+    /// Remplit les cases sans montant prévu ; les montants déjà saisis ne sont jamais remplacés.
+    /// Renvoie le nombre de cases remplies.
+    @discardableResult
+    func fillEmptyCells(with amounts: [AnnualBudgetKey: Decimal]) async -> Int {
+        guard let bookID else { return 0 }
+        var filled = 0
+        do {
+            for (key, value) in emptyCells(in: amounts) {
+                try await repository.save(
+                    AnnualBudgetEntry(bookID: bookID, categoryID: key.categoryID, year: year, month: key.month, amount: value)
+                )
+                planned[key] = value
+                filled += 1
+            }
+        } catch {
+            self.error = error
+            print("❌ Erreur préremplissage budget annuel: \(error)")
+        }
+        return filled
+    }
+
     private func write(_ amount: Decimal, categoryID: UUID, months: [Int]) async {
         guard let bookID else { return }
         let value = max(amount, 0)

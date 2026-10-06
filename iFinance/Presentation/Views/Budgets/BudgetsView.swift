@@ -9,9 +9,15 @@ struct BudgetTableRow: Identifiable {
     let periodName: String
     let amount: Decimal
     let spent: Decimal
+    /// Échéances récurrentes attendues d'ici la fin de la période, non validées
+    let committed: Decimal
 
     var remaining: Decimal { amount - spent }
     var isOverBudget: Bool { spent > amount }
+    /// Dépensé + engagé : ce que la période coûtera si les échéances tombent comme prévu
+    var projected: Decimal { spent + committed }
+    /// Pas encore dépassé, mais le sera avec les échéances à venir
+    var willExceed: Bool { !isOverBudget && projected > amount }
 
     var progress: Double {
         guard amount > 0 else { return 0 }
@@ -23,6 +29,7 @@ struct BudgetTableRow: Identifiable {
 
 struct BudgetsView: View {
     @EnvironmentObject var budgetsController: BudgetsController
+    @EnvironmentObject var recurringController: RecurringController
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var booksController: BooksController
@@ -213,6 +220,18 @@ struct BudgetsView: View {
             }
             .width(min: 90, ideal: 110)
 
+            TableColumn("À venir", value: \.committed) { row in
+                Text(row.committed == 0 ? "—" : "+" + row.committed.formatted(.currency(code: currency)))
+                    .monospacedDigit()
+                    .foregroundStyle(row.willExceed ? Color.orange : Color.secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .privacyBlur(hidden: appSettings.hideAmounts)
+                    .help(row.willExceed
+                          ? "Les échéances récurrentes à venir feront dépasser ce budget"
+                          : "Échéances récurrentes attendues d'ici la fin de la période, non validées")
+            }
+            .width(min: 80, ideal: 100)
+
             TableColumn("Reste", value: \.remaining) { row in
                 amountText(row.remaining, color: row.isOverBudget ? .red : .primary)
             }
@@ -280,6 +299,8 @@ struct BudgetsView: View {
     private func inspectorDetail(_ budget: Budget) -> some View {
         let amount = budget.currentVersion?.amount ?? 0
         let spent = budgetsController.spent(for: budget, transactions: transactionsController.allTransactions)
+        let committed = committed(for: budget)
+        let projected = spent + committed
         let remaining = amount - spent
         let isOver = spent > amount
         let window = budget.period.currentWindow(anchor: budget.anchorDate)
@@ -305,6 +326,19 @@ struct BudgetsView: View {
                 InspectorRow("Au", value: lastDay.formatted(date: .abbreviated, time: .omitted))
                 InspectorRow("Budgété", value: money(amount))
                 InspectorRow("Dépensé", value: money(spent))
+                if committed > 0 {
+                    InspectorRow("À venir", value: "+" + money(committed))
+                    InspectorRow("Projeté", value: money(projected))
+                }
+            }
+
+            if committed > 0, projected > amount, spent <= amount {
+                InspectorSection {
+                    Label("Les échéances récurrentes à venir feront dépasser ce budget de \(money(projected - amount)).",
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
 
             InspectorSection(title: "Catégories") {
@@ -361,10 +395,17 @@ struct BudgetsView: View {
                 name: budget.name,
                 periodName: budget.period.displayName,
                 amount: budget.currentVersion?.amount ?? 0,
-                spent: budgetsController.spent(for: budget, transactions: transactionsController.allTransactions)
+                spent: budgetsController.spent(for: budget, transactions: transactionsController.allTransactions),
+                committed: committed(for: budget)
             )
         }
         return rows.sorted(using: sortOrder)
+    }
+
+    /// Échéances récurrentes en attente sur la période en cours du budget
+    private func committed(for budget: Budget) -> Decimal {
+        let window = budget.period.currentWindow(anchor: budget.anchorDate)
+        return budgetsController.committed(for: budget, occurrences: recurringController.occurrences(until: window.end))
     }
 
     private var statusItems: [String] {
@@ -374,6 +415,10 @@ struct BudgetsView: View {
         var items = ["\(count) budget\(count > 1 ? "s" : "")"]
         if over > 0 {
             items.append("\(over) dépassé\(over > 1 ? "s" : "")")
+        }
+        let atRisk = rows.filter { $0.willExceed }.count
+        if atRisk > 0 {
+            items.append("\(atRisk) dépasser\(atRisk > 1 ? "ont" : "a") avec les échéances à venir")
         }
         return items
     }

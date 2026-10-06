@@ -34,7 +34,8 @@ class RecurringController: ObservableObject {
     private func reload() async {
         guard let bookID = currentBookID else { return }
         do {
-            templates = try await repository.fetchAll(for: bookID)
+            // Échéances à la journée, même pour des récurrences enregistrées avec une heure
+            templates = try await repository.fetchAll(for: bookID).map { $0.normalizedToDays() }
         } catch {
             self.error = error
             print("❌ Erreur chargement récurrences: \(error)")
@@ -114,11 +115,38 @@ class RecurringController: ObservableObject {
             .reduce(Decimal(0)) { $0 + $1.template.signedAmount }
     }
 
+    // MARK: - Budget annuel
+
+    /// Montants des récurrences actives, par catégorie et par mois (1 à 12) de l'année donnée,
+    /// en suivant leur calendrier depuis leur date de début. Montants positifs ; les récurrences
+    /// sans catégorie sont ignorées. Sert à préremplir le prévu du budget annuel.
+    func plannedAmounts(year: Int, calendar: Calendar = .current) -> [AnnualBudgetKey: Decimal] {
+        guard let yearStart = calendar.date(from: DateComponents(year: year, month: 1, day: 1)),
+              let yearEnd = calendar.date(from: DateComponents(year: year + 1, month: 1, day: 1)) else { return [:] }
+        var result: [AnnualBudgetKey: Decimal] = [:]
+
+        for template in templates where template.isActive {
+            guard let categoryID = template.categoryID else { continue }
+            var date = calendar.startOfDay(for: template.startDate)
+            var guardCount = 0
+            while date < yearEnd, guardCount < 1000 {
+                if let endDate = template.endDate, date > endDate { break }
+                if date >= yearStart {
+                    let month = calendar.component(.month, from: date)
+                    result[AnnualBudgetKey(categoryID: categoryID, month: month), default: 0] += abs(template.amount)
+                }
+                date = template.nextDate(after: date)
+                guardCount += 1
+            }
+        }
+        return result
+    }
+
     // MARK: - CRUD
 
     func create(_ template: RecurringTemplate) async {
         do {
-            try await repository.create(template)
+            try await repository.create(template.normalizedToDays())
             await reload()
         } catch {
             self.error = error
@@ -128,7 +156,7 @@ class RecurringController: ObservableObject {
 
     func update(_ template: RecurringTemplate) async {
         do {
-            try await repository.update(template)
+            try await repository.update(template.normalizedToDays())
             await reload()
         } catch {
             self.error = error
@@ -241,7 +269,7 @@ class RecurringController: ObservableObject {
     /// Récurrence avancée à l'échéance suivant `date` ; désactivée si sa date de fin est dépassée
     private func advanced(_ template: RecurringTemplate, past date: Date) -> RecurringTemplate {
         var updated = template
-        updated.nextDueDate = template.nextDate(after: date)
+        updated.nextDueDate = Calendar.current.startOfDay(for: template.nextDate(after: date))
         if let endDate = template.endDate, updated.nextDueDate > endDate {
             updated.isActive = false
         }

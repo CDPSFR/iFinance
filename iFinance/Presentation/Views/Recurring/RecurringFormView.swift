@@ -2,12 +2,14 @@ import SwiftUI
 
 /// Création ou modification d'une récurrence.
 /// `prefill` préremplit le formulaire depuis une transaction (« Rendre récurrente… »).
+/// Même présentation que TransactionFormView : type, montant en grand, colonne de 260 points.
 struct RecurringFormView: View {
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var payeesController: PayeesController
     @EnvironmentObject var recurringController: RecurringController
+    @EnvironmentObject var transactionsController: TransactionsController
     @Binding var isPresented: Bool
 
     var templateToEdit: RecurringTemplate?
@@ -25,6 +27,13 @@ struct RecurringFormView: View {
     @State private var autoPost: Bool
     @State private var isVariableAmount: Bool
     @State private var showDeleteConfirmation = false
+    /// Vrai quand la catégorie vient d'être proposée d'après le bénéficiaire
+    @State private var categoryWasSuggested = false
+
+    // Création à la volée : on retient les identifiants existants pour repérer le nouvel élément
+    @State private var showPayeeForm = false
+    @State private var showCategoryForm = false
+    @State private var knownIDs: Set<UUID> = []
 
     private static let controlWidth: CGFloat = 260
 
@@ -56,7 +65,7 @@ struct RecurringFormView: View {
             _memo = State(initialValue: source?.memo ?? "")
             _frequency = State(initialValue: .monthly)
             // Depuis une transaction : la prochaine échéance est un mois après celle-ci
-            let first = source.map { RecurrenceFrequency.monthly.next(after: $0.date) } ?? Date()
+            let first = Calendar.current.startOfDay(for: source.map { RecurrenceFrequency.monthly.next(after: $0.date) } ?? Date())
             _nextDueDate = State(initialValue: first)
             _hasEndDate = State(initialValue: false)
             _endDate = State(initialValue: Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date())
@@ -69,95 +78,91 @@ struct RecurringFormView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SheetHeader(
-                title: isEditing ? "Modifier la récurrence" : "Nouvelle récurrence",
-                subtitle: "Chaque échéance devient une transaction une fois validée."
-            )
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isEditing ? "Modifier la récurrence" : "Nouvelle récurrence")
+                        .font(.headline)
+                    Text("Livre « \(booksController.currentBook?.name ?? "") » · chaque échéance devient une transaction une fois validée")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                FillSegmentedPicker(
+                    options: [(TransactionType.debit, TransactionType.debit.displayName),
+                              (TransactionType.credit, TransactionType.credit.displayName)],
+                    selection: $type
+                )
+                .frame(maxWidth: .infinity)
+                .onChange(of: type) { _, newValue in
+                    typeChanged(to: newValue)
+                }
+
+                amountField
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
 
             Form {
                 Section {
-                    Picker("Type", selection: $type) {
-                        Text("Dépense").tag(TransactionType.debit)
-                        Text("Revenu").tag(TransactionType.credit)
-                    }
-                    .pickerStyle(.segmented)
-
-                    LabeledContent(isVariableAmount ? "Montant estimé" : "Montant") {
-                        TextField("Montant", text: $amount, prompt: Text("0,00"))
+                    LabeledContent("Prochaine échéance") {
+                        DatePicker("Prochaine échéance", selection: $nextDueDate, displayedComponents: [.date])
                             .labelsHidden()
-                            .textFieldStyle(.roundedBorder)
-                            .multilineTextAlignment(.leading)
-                            .frame(width: Self.controlWidth)
+                            .frame(width: Self.controlWidth, alignment: .leading)
                     }
 
-                    Toggle("Montant variable", isOn: $isVariableAmount)
+                    accountPicker
                 }
 
                 Section {
-                    LabeledContent("Compte") {
-                        Picker("Compte", selection: $accountID) {
-                            Text("Choisir…").tag(UUID?.none)
-                            ForEach(accountsController.activeAccounts) { account in
-                                Text(account.name).tag(Optional(account.id))
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: Self.controlWidth)
-                    }
-
                     LabeledContent("Bénéficiaire") {
-                        Picker("Bénéficiaire", selection: $payeeID) {
-                            Text("Aucun").tag(UUID?.none)
-                            ForEach(payeesController.payees.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }) { payee in
-                                Text(payee.name).tag(Optional(payee.id))
-                            }
+                        control(addHelp: "Nouveau bénéficiaire") {
+                            FillPopUpPicker(items: payeeItems, selection: $payeeID)
+                        } add: {
+                            knownIDs = Set(payeesController.payees.map { $0.id })
+                            showPayeeForm = true
                         }
-                        .labelsHidden()
-                        .frame(width: Self.controlWidth)
                     }
                     .onChange(of: payeeID) { _, newValue in
                         // Proposer la catégorie par défaut du bénéficiaire
-                        if categoryID == nil, let newValue,
-                           let suggestion = payeesController.getDefaultCategory(for: newValue) {
+                        if let newValue, let suggestion = payeesController.getDefaultCategory(for: newValue) {
                             categoryID = suggestion
+                            categoryWasSuggested = true
                         }
                     }
 
-                    LabeledContent("Catégorie") {
-                        Picker("Catégorie", selection: $categoryID) {
-                            Text("Aucune").tag(UUID?.none)
-                            ForEach(categoryChoices, id: \.id) { choice in
-                                Text(choice.path).tag(Optional(choice.id))
-                            }
+                    LabeledContent {
+                        control(addHelp: "Nouvelle catégorie") {
+                            FillPopUpPicker(items: categoryItems, selection: $categoryID)
+                        } add: {
+                            knownIDs = Set(categoriesController.categories.map { $0.id })
+                            showCategoryForm = true
                         }
-                        .labelsHidden()
-                        .frame(width: Self.controlWidth)
+                    } label: {
+                        Text("Catégorie")
+                        if categoryWasSuggested, categoryID != nil {
+                            Text("Proposée d'après le bénéficiaire")
+                        }
                     }
+                }
 
+                Section {
                     LabeledContent("Note") {
-                        TextField("Note", text: $memo, prompt: Text("Facultatif"))
+                        TextField("Note", text: $memo, prompt: Text("Facultatif"), axis: .vertical)
                             .labelsHidden()
                             .textFieldStyle(.roundedBorder)
                             .multilineTextAlignment(.leading)
+                            .lineLimit(2...4)
                             .frame(width: Self.controlWidth)
                     }
                 }
 
                 Section {
                     LabeledContent("Répéter") {
-                        Picker("Répéter", selection: $frequency) {
-                            ForEach(frequencyChoices, id: \.self) { choice in
-                                Text(choice.displayName).tag(choice)
-                            }
-                        }
-                        .labelsHidden()
+                        FillPopUpPicker(
+                            items: frequencyChoices.map { FillPopUpItem<RecurrenceFrequency>(id: $0, title: $0.displayName) },
+                            selection: Binding(get: { frequency }, set: { if let value = $0 { frequency = value } })
+                        )
                         .frame(width: Self.controlWidth)
-                    }
-
-                    LabeledContent("Prochaine échéance") {
-                        DatePicker("Prochaine échéance", selection: $nextDueDate, displayedComponents: [.date])
-                            .labelsHidden()
-                            .frame(width: Self.controlWidth, alignment: .leading)
                     }
 
                     Toggle("Date de fin", isOn: $hasEndDate)
@@ -175,10 +180,10 @@ struct RecurringFormView: View {
                         Text("Saisir seule").tag(true)
                     }
                     .pickerStyle(.segmented)
+
+                    Toggle("Montant variable", isOn: $isVariableAmount)
                 } footer: {
-                    Text(autoPost
-                         ? "La transaction est créée automatiquement le jour de l'échéance."
-                         : "L'échéance apparaît dans « À venir » et reste affichée jusqu'à ce que vous la validiez ou la passiez.")
+                    Text(hint)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -186,11 +191,15 @@ struct RecurringFormView: View {
             }
             .formStyle(.grouped)
 
-            SheetFooter {
+            Divider()
+
+            HStack(spacing: 8) {
                 if isEditing {
                     Button("Supprimer…", role: .destructive) { showDeleteConfirmation = true }
                 }
-            } actions: {
+
+                Spacer()
+
                 Button("Annuler") { isPresented = false }
                     .keyboardShortcut(.cancelAction)
 
@@ -198,13 +207,37 @@ struct RecurringFormView: View {
                     .keyboardShortcut(.defaultAction)
                     .disabled(!isFormValid)
             }
+            .padding(12)
         }
         .frame(width: 520, height: 640)
         .sheetBackground()
         .onAppear {
             if accountID == nil {
-                accountID = accountsController.selectedAccount?.id ?? accountsController.activeAccounts.first?.id
+                accountID = transactionsController.filters.accountID
+                    ?? accountsController.selectedAccount?.id
+                    ?? accountsController.activeAccounts.first?.id
             }
+        }
+        .onChange(of: categoryID) { oldValue, newValue in
+            // Un choix manuel efface la mention « proposée »
+            if oldValue != nil, newValue != oldValue, payeeID.flatMap({ payeesController.getDefaultCategory(for: $0) }) != newValue {
+                categoryWasSuggested = false
+            }
+        }
+        .sheet(isPresented: $showPayeeForm, onDismiss: {
+            if let created = payeesController.payees.first(where: { !knownIDs.contains($0.id) }) {
+                payeeID = created.id
+            }
+        }) {
+            PayeeFormView(isPresented: $showPayeeForm)
+        }
+        .sheet(isPresented: $showCategoryForm, onDismiss: {
+            if let created = categoriesController.categories.first(where: { !knownIDs.contains($0.id) }) {
+                categoryID = created.id
+                categoryWasSuggested = false
+            }
+        }) {
+            CategoryFormView(isPresented: $showCategoryForm, initialIsIncome: type == .credit)
         }
         .alert("Supprimer la récurrence ?", isPresented: $showDeleteConfirmation) {
             Button("Annuler", role: .cancel) { }
@@ -220,21 +253,139 @@ struct RecurringFormView: View {
         }
     }
 
+    // MARK: - Montant
+
+    private var currencySymbol: String {
+        let code = accountID.flatMap { accountsController.getAccount(id: $0)?.currency }
+            ?? booksController.currentBook?.currency ?? "EUR"
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = code
+        return formatter.currencySymbol ?? code
+    }
+
+    /// Montant en grand, centré, avec le signe du type et la devise (comme une transaction)
+    private var amountField: some View {
+        let color: Color = type == .credit ? .green : .primary
+        let sign = type == .credit ? "+" : "−"
+
+        return VStack(spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(sign)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(color)
+
+                TextField("Montant", text: $amount, prompt: Text("0,00"))
+                    .labelsHidden()
+                    .textFieldStyle(.plain)
+                    .multilineTextAlignment(.center)
+                    .font(.system(size: 34, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(color)
+                    .frame(width: 210)
+
+                Text(currencySymbol)
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            if isVariableAmount {
+                Text("Montant estimé : le montant réel est demandé à chaque validation")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 2)
+    }
+
+    // MARK: - Lignes du formulaire
+
+    /// Contrôle et son bouton « + », ensemble dans la colonne de 260 points
+    private func control<Content: View>(
+        addHelp: String,
+        @ViewBuilder content: () -> Content,
+        add: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 6) {
+            content()
+                .frame(maxWidth: .infinity)
+
+            Button(action: add) {
+                Image(systemName: "plus")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 22, height: 22)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(Color.primary.opacity(0.06))
+                    )
+            }
+            .buttonStyle(.plain)
+            .help(addHelp)
+            .accessibilityLabel(addHelp)
+        }
+        .frame(width: Self.controlWidth)
+    }
+
+    /// Sélecteur de compte : « Sélectionner… » tant qu'aucun compte valide n'est choisi
+    private var accountPicker: some View {
+        let accounts = accountsController.activeAccounts
+        let needsPlaceholder = accountID == nil || !accounts.contains { $0.id == accountID }
+        let items = (needsPlaceholder ? [FillPopUpItem<UUID>(id: nil, title: "Sélectionner…")] : [])
+            + accounts.map { FillPopUpItem(id: $0.id, title: $0.name, systemImage: $0.type.icon) }
+
+        return LabeledContent("Compte") {
+            FillPopUpPicker(items: items, selection: $accountID)
+                .frame(width: Self.controlWidth)
+        }
+    }
+
+    private var payeeItems: [FillPopUpItem<UUID>] {
+        [FillPopUpItem(id: nil, title: "Aucun")]
+            + payeesController.payees.map { payee in
+                FillPopUpItem(id: payee.id, title: payee.locationDisplay.map { "\(payee.name) (\($0))" } ?? payee.name)
+            }
+    }
+
+    /// Catégories du sens de la récurrence, sous-catégories indentées
+    private var categoryItems: [FillPopUpItem<UUID>] {
+        let roots = categoriesController.rootCategories.filter { $0.isIncome == (type == .credit) }
+        var items = [FillPopUpItem<UUID>(id: nil, title: "Aucune")]
+        for category in roots {
+            items.append(FillPopUpItem(id: category.id, title: category.name, systemImage: category.icon ?? "folder"))
+            for sub in categoriesController.getSubcategories(for: category.id) {
+                items.append(FillPopUpItem(id: sub.id, title: sub.name, systemImage: sub.icon ?? "folder", indentationLevel: 1))
+            }
+        }
+        return items
+    }
+
+    // MARK: - Logique
+
+    /// La catégorie doit correspondre au sens (dépense ou revenu)
+    private func typeChanged(to newValue: TransactionType) {
+        if let categoryID,
+           let category = categoriesController.getCategory(id: categoryID),
+           category.isIncome != (newValue == .credit) {
+            self.categoryID = nil
+            categoryWasSuggested = false
+        }
+    }
+
+    /// Ce qui se passera à l'échéance
+    private var hint: String {
+        let day = nextDueDate.formatted(.dateTime.day().month(.wide).year())
+        return autoPost
+            ? "La transaction sera saisie automatiquement le \(day), puis à chaque échéance."
+            : "L'échéance du \(day) apparaîtra dans « À venir » jusqu'à ce que vous la validiez ou la passiez."
+    }
+
     // MARK: - Choix
 
     private var frequencyChoices: [RecurrenceFrequency] {
         var choices = RecurrenceFrequency.offered
         if !choices.contains(frequency) { choices.insert(frequency, at: 0) }
         return choices
-    }
-
-    private var categoryChoices: [(id: UUID, path: String)] {
-        let pool = type == .credit ? categoriesController.incomeCategories : categoriesController.expenseCategories
-        var ids = pool.map { $0.id }
-        if let categoryID, !ids.contains(categoryID) { ids.append(categoryID) }
-        return ids
-            .map { (id: $0, path: categoriesController.getCategoryPath(for: $0)) }
-            .sorted { $0.path.localizedCaseInsensitiveCompare($1.path) == .orderedAscending }
     }
 
     // MARK: - Enregistrement

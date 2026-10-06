@@ -9,6 +9,7 @@ struct AnnualBudgetView: View {
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var transactionsController: TransactionsController
+    @EnvironmentObject var recurringController: RecurringController
     @EnvironmentObject var appSettings: AppSettings
 
     @State private var year = Calendar.current.component(.year, from: Date())
@@ -17,6 +18,8 @@ struct AnnualBudgetView: View {
     /// taper un chiffre ne redessine plus toute la grille)
     @State private var editing: AnnualBudgetKey?
     @StateObject private var actualsCache = AnnualActualsCache()
+    /// Préremplissage proposé : cases vides à remplir depuis les récurrences
+    @State private var prefill: [AnnualBudgetKey: Decimal]?
 
     // MARK: - Modèle d'affichage
 
@@ -88,6 +91,23 @@ struct AnnualBudgetView: View {
         .navigationTitle("Budget annuel")
         .navigationSubtitle(String(year))
         .toolbar {
+            // Le préremplissage forme son propre groupe, détaché de la navigation par année
+            // et des autres boutons de la barre d'outils par un espace de part et d'autre.
+            if #available(macOS 26.0, *) {
+                ToolbarSpacer(.fixed)
+            }
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    prefill = annualBudgetController.emptyCells(in: recurringController.plannedAmounts(year: year))
+                } label: {
+                    Label("Préremplir depuis les récurrences", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .help("Remplir les cases vides du prévu avec les transactions récurrentes de l'année")
+            }
+            if #available(macOS 26.0, *) {
+                ToolbarSpacer(.fixed)
+            }
+
             ToolbarItemGroup(placement: .automatic) {
                 Button {
                     year -= 1
@@ -112,11 +132,40 @@ struct AnnualBudgetView: View {
                 .help("Année suivante")
             }
         }
+        .alert(
+            prefillTitle,
+            isPresented: Binding(get: { prefill != nil }, set: { if !$0 { prefill = nil } })
+        ) {
+            if let cells = prefill, !cells.isEmpty {
+                Button("Annuler", role: .cancel) { }
+                Button("Préremplir") {
+                    Task { await annualBudgetController.fillEmptyCells(with: cells) }
+                }
+            } else {
+                Button("OK", role: .cancel) { }
+            }
+        } message: {
+            Text(prefillMessage)
+        }
         .task(id: loadKey) {
             if let bookID = booksController.currentBook?.id {
                 await annualBudgetController.load(bookID: bookID, year: year)
             }
         }
+    }
+
+    private var prefillTitle: String {
+        guard let cells = prefill, !cells.isEmpty else { return "Rien à préremplir" }
+        return "Préremplir \(cells.count) case\(cells.count > 1 ? "s" : "") ?"
+    }
+
+    private var prefillMessage: String {
+        guard let cells = prefill, !cells.isEmpty else {
+            return "Aucune case vide ne correspond à une transaction récurrente avec catégorie en \(String(year))."
+        }
+        let categories = Set(cells.keys.map { $0.categoryID }).count
+        let total = cells.values.reduce(Decimal(0), +)
+        return "\(categories) catégorie\(categories > 1 ? "s" : ""), \(AnnualBudgetFormat.amount(total, currency: currency)) au total sur \(String(year)). Les montants déjà saisis ne sont pas modifiés."
     }
 
     private var loadKey: String {

@@ -118,6 +118,27 @@ class BudgetsController: ObservableObject {
     // MARK: - Progress
 
     /// Amount spent in the current period for the given budget, from the transaction list.
+    /// Dépenses récurrentes attendues sur la période en cours et pas encore validées.
+    /// Mêmes règles que `spent` (catégories, comptes hors budget, période), appliquées aux échéances.
+    /// Elles ne comptent pas dans le dépensé : c'est une projection.
+    func committed(for budget: Budget, occurrences: [RecurringOccurrence]) -> Decimal {
+        guard budget.currentVersion != nil else { return 0 }
+        let window = budget.period.currentWindow(anchor: budget.anchorDate)
+        let categorySet = Set(budget.categoryIDs)
+        let excludedAccounts = excludedAccountIDs()
+
+        return occurrences
+            .filter { occurrence in
+                let template = occurrence.template
+                return template.type == .debit
+                    && !excludedAccounts.contains(template.accountID)
+                    && occurrence.date >= window.start
+                    && occurrence.date < window.end
+                    && template.categoryID.map { categorySet.contains($0) } ?? false
+            }
+            .reduce(Decimal(0)) { $0 + abs($1.template.amount) }
+    }
+
     func spent(for budget: Budget, transactions: [Transaction]) -> Decimal {
         guard let version = budget.currentVersion else { return 0 }
         let window = budget.period.currentWindow(anchor: budget.anchorDate)
