@@ -23,6 +23,12 @@ struct CategoryFormView: View {
     @State private var isCreating = false
     @State private var iconSearch = ""
     @State private var showDeleteConfirmation = false
+    /// Vrai dès que l'utilisateur choisit lui-même une couleur ou une icône :
+    /// le choix de la catégorie parente ne les remplace plus
+    @State private var appearanceCustomized = false
+
+    private static let defaultIcon = "folder.fill"
+    private static let defaultColor = "#2196F3"
 
     private static let controlWidth: CGFloat = 260
 
@@ -140,6 +146,9 @@ struct CategoryFormView: View {
                     LabeledContent("Catégorie parente") {
                         FillPopUpPicker(items: parentItems, selection: $selectedParent)
                             .frame(width: Self.controlWidth)
+                            .onChange(of: selectedParent) { _, parentID in
+                                applyParentAppearance(parentID)
+                            }
                     }
                 }
 
@@ -149,6 +158,7 @@ struct CategoryFormView: View {
                             ForEach(availableColors, id: \.self) { color in
                                 Button {
                                     selectedColor = color
+                                    appearanceCustomized = true
                                 } label: {
                                     Circle()
                                         .fill(Color(hex: color))
@@ -180,6 +190,7 @@ struct CategoryFormView: View {
                                     ForEach(filteredIcons, id: \.self) { icon in
                                         Button {
                                             selectedIcon = icon
+                                            appearanceCustomized = true
                                         } label: {
                                             Image(systemName: icon)
                                                 .font(.system(size: 13))
@@ -322,9 +333,23 @@ struct CategoryFormView: View {
             name = ""
             description = ""
             selectedParent = parentCategory?.id
-            selectedIcon = "folder.fill"
-            selectedColor = parentCategory?.displayColor ?? "#2196F3"
+            selectedIcon = parentCategory?.displayIcon ?? Self.defaultIcon
+            selectedColor = parentCategory?.displayColor ?? Self.defaultColor
             isIncome = parentCategory?.isIncome ?? initialIsIncome ?? false
+            appearanceCustomized = false
+        }
+    }
+
+    /// À la création, une sous-catégorie reprend par défaut la couleur et l'icône de sa catégorie mère,
+    /// tant que l'utilisateur n'a pas choisi les siennes. Sans parent, on revient aux valeurs par défaut.
+    private func applyParentAppearance(_ parentID: UUID?) {
+        guard categoryToEdit == nil, !appearanceCustomized else { return }
+        if let parent = parentID.flatMap({ categoriesController.getCategory(id: $0) }) {
+            selectedIcon = parent.displayIcon
+            selectedColor = parent.displayColor
+        } else {
+            selectedIcon = Self.defaultIcon
+            selectedColor = Self.defaultColor
         }
     }
     
