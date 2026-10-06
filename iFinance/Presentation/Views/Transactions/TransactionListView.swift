@@ -9,6 +9,7 @@ struct TransactionListView: View {
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var payeesController: PayeesController
     @EnvironmentObject var projectsController: ProjectsController
+    @EnvironmentObject var recurringController: RecurringController
     @EnvironmentObject var appSettings: AppSettings
     
     @State private var showTransactionForm = false
@@ -20,6 +21,7 @@ struct TransactionListView: View {
     @State private var showBulkDeleteConfirmation = false
     @State private var showBulkCategorize = false
     @State private var transactionToConvert: Transaction?
+    @State private var transactionToRepeat: Transaction?
     @AppStorage("showTransactionInspector") private var showInspector = true
     @State private var sortOrder = [KeyPathComparator(\TransactionRow.date, order: .reverse)]
     
@@ -135,6 +137,12 @@ struct TransactionListView: View {
                 Divider()
             }
             
+            // Échéances à venir des récurrences (du compte affiché, ou de tous les comptes)
+            UpcomingOccurrencesBand(
+                accountID: transactionsController.filters.accountID,
+                currentBalance: upcomingBandBalance
+            )
+
             // L'inspecteur se loge sous l'en-tête de la page
             SidePanelLayout(isPresented: $showInspector) {
                 // Table des transactions
@@ -236,6 +244,15 @@ struct TransactionListView: View {
                 }
             )
         }
+        .sheet(item: $transactionToRepeat) { transaction in
+            RecurringFormView(
+                isPresented: Binding(
+                    get: { transactionToRepeat != nil },
+                    set: { if !$0 { transactionToRepeat = nil } }
+                ),
+                prefill: transaction
+            )
+        }
         .sheet(isPresented: $showBulkCategorize) {
             BulkCategorizeView(
                 transactionIDs: selectedTransactions,
@@ -256,6 +273,17 @@ struct TransactionListView: View {
         }
     }
     
+    /// Solde de trésorerie du compte affiché, base du « solde prévu » du bandeau À venir
+    private var upcomingBandBalance: Decimal? {
+        guard let accountID = transactionsController.filters.accountID,
+              let account = accountsController.getAccount(id: accountID) else { return nil }
+        return AccountValuation(
+            transactionsController: transactionsController,
+            investmentsController: investmentsController,
+            savingsPlansController: savingsPlansController
+        ).cash(of: account)
+    }
+
     // MARK: - Transaction Table
     
     private var transactionTable: some View {
@@ -270,7 +298,15 @@ struct TransactionListView: View {
             // Colonne Bénéficiaire
             TableColumn("Bénéficiaire", value: \.payeeNameForSort) { row in
                 if let payeeName = row.payeeName {
-                    Text(payeeName)
+                    HStack(spacing: 5) {
+                        if row.isRecurring {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.caption)
+                                .foregroundStyle(Color.accentColor)
+                                .help("Issue d'une récurrence")
+                        }
+                        Text(payeeName)
+                    }
                 } else {
                     Text("—")
                         .foregroundStyle(.secondary)
@@ -340,6 +376,14 @@ struct TransactionListView: View {
                         transactionToConvert = transaction
                     } label: {
                         Label("Convertir en transfert", systemImage: "arrow.left.arrow.right")
+                    }
+                }
+
+                if transaction.type != .transfer, transaction.recurringTemplateID == nil {
+                    Button {
+                        transactionToRepeat = transaction
+                    } label: {
+                        Label("Rendre récurrente…", systemImage: "arrow.triangle.2.circlepath")
                     }
                 }
 
@@ -554,7 +598,8 @@ struct TransactionListView: View {
                 categoryColor: category.map { Color(hex: $0.displayColor) },
                 amount: transaction.signedAmount,
                 balance: newBalance,
-                currency: account?.currency ?? "EUR"
+                currency: account?.currency ?? "EUR",
+                isRecurring: transaction.recurringTemplateID != nil
             )
             
             rows.append(row)

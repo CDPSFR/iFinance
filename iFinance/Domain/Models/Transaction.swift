@@ -51,6 +51,13 @@ struct RecurringTemplate: Identifiable, Codable, Equatable, Hashable {
     
     var isActive: Bool = true
     var createdAt: Date = Date()
+
+    /// Prochaine échéance non traitée (ni validée, ni passée)
+    var nextDueDate: Date = Date()
+    /// true = saisie automatique à l'échéance ; false = à valider à la main
+    var autoPost: Bool = false
+    /// true = le montant sert d'estimation, le montant réel est demandé à la validation
+    var isVariableAmount: Bool = false
 }
 
 enum RecurrenceFrequency: String, Codable {

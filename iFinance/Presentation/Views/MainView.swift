@@ -3,6 +3,7 @@ import SwiftUI
 struct MainView: View {
 
     // MARK: - Environment
+    @EnvironmentObject var recurringController: RecurringController
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var transactionsController: TransactionsController
@@ -45,6 +46,7 @@ struct MainView: View {
         case payees
         case budgets
         case projects
+        case recurring
         case reports
         case settings
 
@@ -58,6 +60,7 @@ struct MainView: View {
             case .payees: return "payees"
             case .budgets: return "budgets"
             case .projects: return "projects"
+            case .recurring: return "recurring"
             case .reports: return "reports"
             case .settings: return "settings"
             }
@@ -111,6 +114,8 @@ struct MainView: View {
                 await accountsController.loadAccounts(for: bookID)
                 await categoriesController.loadCategories(for: bookID)
                 await payeesController.loadPayees(for: bookID)
+                // Avant les transactions : les échéances en saisie automatique y sont créées
+                await recurringController.load(for: bookID)
                 await transactionsController.loadAllTransactions(
                     for: accountsController.activeAccounts
                 )
@@ -194,6 +199,12 @@ struct MainView: View {
                         Label("Projets", systemImage: "folder")
                     }
 
+                    NavigationLink(value: SidebarItem.recurring) {
+                        Label("Récurrent", systemImage: "arrow.triangle.2.circlepath")
+                            // Échéances arrivées à terme, à valider ou à passer
+                            .badge(recurringController.dueCount)
+                    }
+
                     NavigationLink(value: SidebarItem.reports) {
                         Label("Rapports", systemImage: "chart.bar")
                     }
@@ -258,6 +269,8 @@ struct MainView: View {
                                 }
                             }
                     }
+                case .recurring:
+                    RecurringView()
                 case .reports:
                     ReportsView()
                 case .settings:
@@ -386,6 +399,7 @@ struct MainView: View {
         case .payees: return "Bénéficiaires"
         case .budgets: return "Budgets"
         case .projects: return "Projets"
+        case .recurring: return "Récurrent"
         case .reports: return "Rapports"
         case .settings: return "Paramètres"
         }

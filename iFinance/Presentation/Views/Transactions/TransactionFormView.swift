@@ -10,6 +10,7 @@ struct TransactionFormView: View {
     @EnvironmentObject var payeesController: PayeesController
     @EnvironmentObject var projectsController: ProjectsController
     @EnvironmentObject var booksController: BooksController
+    @EnvironmentObject var recurringController: RecurringController
     @Binding var isPresented: Bool
 
     var transactionToEdit: Transaction?
@@ -26,6 +27,10 @@ struct TransactionFormView: View {
     @State private var isReconciled: Bool
     @State private var isCreating = false
     @State private var createAnother = false
+    /// Répétition (création seulement) : nil = jamais
+    @State private var repeatFrequency: RecurrenceFrequency?
+    @State private var repeatAutoPost = false
+    @State private var repeatIsVariable = false
     /// Vrai quand la catégorie vient d'être proposée d'après le bénéficiaire
     @State private var categoryWasSuggested = false
     @State private var showDeleteConfirmation = false
@@ -178,6 +183,39 @@ struct TransactionFormView: View {
 
                     if !isTransfer {
                         Toggle("Rapprochée avec le relevé", isOn: $isReconciled)
+                    }
+                }
+
+                // Répétition : proposée à la création, hors transferts
+                if !isEditing, !isTransfer {
+                    Section {
+                        LabeledContent("Répéter") {
+                            Picker("Répéter", selection: $repeatFrequency) {
+                                Text("Jamais").tag(RecurrenceFrequency?.none)
+                                ForEach(RecurrenceFrequency.offered, id: \.self) { frequency in
+                                    Text(frequency.displayName).tag(Optional(frequency))
+                                }
+                            }
+                            .labelsHidden()
+                            .frame(width: Self.controlWidth)
+                        }
+
+                        if repeatFrequency != nil {
+                            Picker("À l'échéance", selection: $repeatAutoPost) {
+                                Text("Me demander").tag(false)
+                                Text("Saisir seule").tag(true)
+                            }
+                            .pickerStyle(.segmented)
+
+                            Toggle("Montant variable", isOn: $repeatIsVariable)
+                        }
+                    } footer: {
+                        if let repeatHint {
+                            Text(repeatHint)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
                 }
             }
@@ -405,6 +443,16 @@ struct TransactionFormView: View {
         }
     }
 
+    /// Ce qui se passera à la prochaine échéance, quand une répétition est choisie
+    private var repeatHint: String? {
+        guard let frequency = repeatFrequency else { return nil }
+        let next = frequency.next(after: date, anchorDay: Calendar.current.component(.day, from: date))
+        let day = next.formatted(.dateTime.day().month(.wide).year())
+        return repeatAutoPost
+            ? "Cette transaction est enregistrée maintenant. La suivante sera saisie automatiquement le \(day)."
+            : "Cette transaction est enregistrée maintenant. La suivante apparaîtra dans « À venir » le \(day), pour validation."
+    }
+
     private var parsedAmount: Decimal? {
         let cleaned = amount
             .replacingOccurrences(of: ",", with: ".")
@@ -461,10 +509,36 @@ struct TransactionFormView: View {
                 categoryID: selectedCategory,
                 memo: note.isEmpty ? nil : note
             ) {
-                // Projet et rapprochement ne font pas partie de la création : on complète aussitôt
-                if selectedProject != nil || isReconciled {
+                // Répétition : cette transaction est la première échéance, la récurrence part de la suivante
+                var recurringID: UUID?
+                if let frequency = repeatFrequency, let bookID = booksController.currentBook?.id {
+                    let calendar = Calendar.current
+                    let anchorDay = calendar.component(.day, from: date)
+                    let template = RecurringTemplate(
+                        bookID: bookID,
+                        accountID: accountID,
+                        payeeID: selectedPayee,
+                        categoryID: selectedCategory,
+                        amount: abs(amountDecimal),
+                        type: selectedType,
+                        memo: note.isEmpty ? nil : note,
+                        frequency: frequency,
+                        startDate: date,
+                        dayOfMonth: anchorDay,
+                        dayOfWeek: calendar.component(.weekday, from: date),
+                        nextDueDate: frequency.next(after: date, anchorDay: anchorDay),
+                        autoPost: repeatAutoPost,
+                        isVariableAmount: repeatIsVariable
+                    )
+                    await recurringController.create(template)
+                    recurringID = template.id
+                }
+
+                // Projet, rapprochement et récurrence ne font pas partie de la création : on complète aussitôt
+                if selectedProject != nil || isReconciled || recurringID != nil {
                     created.projectID = selectedProject
                     created.isReconciled = isReconciled
+                    created.recurringTemplateID = recurringID
                     await transactionsController.updateTransaction(created)
                 }
             }
@@ -480,6 +554,7 @@ struct TransactionFormView: View {
                 selectedCategory = nil
                 categoryWasSuggested = false
                 isReconciled = false
+                repeatFrequency = nil
             } else {
                 isPresented = false
             }

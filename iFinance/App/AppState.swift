@@ -17,6 +17,7 @@ class AppState: ObservableObject {
     let budgetRepository: BudgetRepository
     let annualBudgetRepository: AnnualBudgetRepository
     let projectRepository: ProjectRepository
+    let recurringTemplateRepository: RecurringTemplateRepository
     let investmentPositionRepository: InvestmentPositionRepository
     let investmentTransactionRepository: InvestmentTransactionRepository
     let savingsPlanRepository: SavingsPlanRepository
@@ -30,6 +31,7 @@ class AppState: ObservableObject {
     let budgetsController: BudgetsController
     let annualBudgetController: AnnualBudgetController
     let projectsController: ProjectsController
+    let recurringController: RecurringController
 
     // Sauvegardes de la base
     let backupManager: BackupManager
@@ -60,6 +62,7 @@ class AppState: ObservableObject {
         self.budgetRepository = BudgetRepository(db: db)
         self.annualBudgetRepository = AnnualBudgetRepository(db: db)
         self.projectRepository = ProjectRepository(db: db)
+        self.recurringTemplateRepository = RecurringTemplateRepository(db: db)
         self.investmentPositionRepository = InvestmentPositionRepository(db: db)
         self.investmentTransactionRepository = InvestmentTransactionRepository(db: db)
         self.savingsPlanRepository = SavingsPlanRepository(db: db)
@@ -73,6 +76,10 @@ class AppState: ObservableObject {
         self.budgetsController = BudgetsController(repository: budgetRepository)
         self.annualBudgetController = AnnualBudgetController(repository: annualBudgetRepository)
         self.projectsController = ProjectsController(repository: projectRepository)
+        self.recurringController = RecurringController(
+            repository: recurringTemplateRepository,
+            transactionRepository: transactionRepository
+        )
         self.backupManager = BackupManager(db: db)
         self.investmentsController = InvestmentsController(
             positionRepository: investmentPositionRepository,

@@ -30,7 +30,11 @@ struct DatabaseSchema {
         // Books
         "ALTER TABLE books ADD COLUMN color TEXT;",
         // Transactions
-        "ALTER TABLE transactions ADD COLUMN project_id TEXT;"
+        "ALTER TABLE transactions ADD COLUMN project_id TEXT;",
+        // Recurring templates
+        "ALTER TABLE recurring_templates ADD COLUMN next_due_date TEXT;",
+        "ALTER TABLE recurring_templates ADD COLUMN auto_post INTEGER NOT NULL DEFAULT 0;",
+        "ALTER TABLE recurring_templates ADD COLUMN is_variable INTEGER NOT NULL DEFAULT 0;"
     ]
 
     static let createIndexStatements: [String] = [
