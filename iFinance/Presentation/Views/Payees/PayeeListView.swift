@@ -41,6 +41,9 @@ struct PayeeListView: View {
     /// Bénéficiaires d'une suppression multiple (clic droit sur plusieurs lignes sélectionnées)
     @State private var payeesToDelete: [Payee] = []
     @State private var showBulkDeleteConfirmation = false
+    /// Bénéficiaires à catégoriser en une fois
+    @State private var payeesToCategorize: Set<Payee.ID> = []
+    @State private var showBulkCategorize = false
     @State private var searchQuery = ""
     @State private var selection: Set<Payee.ID> = []
     @State private var sortOrder = [KeyPathComparator(\PayeeTableRow.name, comparator: .localizedStandard)]
@@ -112,6 +115,20 @@ struct PayeeListView: View {
             }
         } message: {
             Text(bulkDeleteMessage)
+        }
+        .sheet(isPresented: $showBulkCategorize) {
+            let ids = payeesToCategorize
+            let uncategorized = uncategorizedTransactions(of: ids).count
+            BulkCategorizeView(
+                subtitle: "\(ids.count) bénéficiaire\(ids.count > 1 ? "s" : "") sélectionné\(ids.count > 1 ? "s" : "") · catégorie par défaut",
+                isPresented: $showBulkCategorize,
+                optionTitle: uncategorized > 0
+                    ? "Catégoriser aussi \(uncategorized == 1 ? "la transaction" : "les \(uncategorized) transactions") sans catégorie de ces bénéficiaires"
+                    : nil,
+                onApply: { categoryID, includeTransactions in
+                    Task { await categorize(ids, with: categoryID, includeTransactions: includeTransactions) }
+                }
+            )
         }
         .task {
             if let bookID = bookController.currentBook?.id {
@@ -213,7 +230,16 @@ struct PayeeListView: View {
                     Label("Supprimer", systemImage: "trash")
                 }
             } else if items.count > 1 {
-                // Sélection multiple (⌘-clic ou ⇧-clic) : suppression groupée
+                // Sélection multiple (⌘-clic ou ⇧-clic) : catégorisation et suppression groupées
+                Button {
+                    payeesToCategorize = items
+                    showBulkCategorize = true
+                } label: {
+                    Label("Catégoriser \(items.count) bénéficiaires…", systemImage: "folder.badge.plus")
+                }
+
+                Divider()
+
                 Button(role: .destructive) {
                     payeesToDelete = items.compactMap { payeesController.getPayee(id: $0) }
                     showBulkDeleteConfirmation = !payeesToDelete.isEmpty
@@ -227,6 +253,28 @@ struct PayeeListView: View {
                 showTransactions(for: payee)
             }
         }
+    }
+
+    // MARK: - Catégorisation groupée
+
+    /// Transactions sans catégorie des bénéficiaires (hors transferts)
+    private func uncategorizedTransactions(of payeeIDs: Set<UUID>) -> [Transaction] {
+        transactionsController.allTransactions.filter { transaction in
+            transaction.categoryID == nil
+                && transaction.type != .transfer
+                && transaction.payeeID.map { payeeIDs.contains($0) } ?? false
+        }
+    }
+
+    /// Catégorie par défaut des bénéficiaires ; en option, aussi leurs transactions sans catégorie
+    private func categorize(_ payeeIDs: Set<UUID>, with categoryID: UUID?, includeTransactions: Bool) async {
+        await payeesController.setDefaultCategory(categoryID, for: payeeIDs)
+        guard includeTransactions, categoryID != nil else { return }
+        for var transaction in uncategorizedTransactions(of: payeeIDs) {
+            transaction.categoryID = categoryID
+            await transactionsController.updateTransaction(transaction)
+        }
+        await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
     }
 
     // MARK: - Suppression groupée
@@ -264,6 +312,25 @@ struct PayeeListView: View {
     private var inspectorContent: some View {
         if let payee = selectedPayee {
             inspectorDetail(payee)
+        } else if selection.count > 1 {
+            InspectorContainer {
+                InspectorHeader(
+                    title: "\(selection.count) bénéficiaires",
+                    caption: "Sélection multiple"
+                )
+
+                InspectorSection {
+                    Button("Catégoriser…") {
+                        payeesToCategorize = selection
+                        showBulkCategorize = true
+                    }
+
+                    Button("Supprimer…", role: .destructive) {
+                        payeesToDelete = selection.compactMap { payeesController.getPayee(id: $0) }
+                        showBulkDeleteConfirmation = !payeesToDelete.isEmpty
+                    }
+                }
+            }
         } else {
             ContentUnavailableView(
                 "Aucune sélection",

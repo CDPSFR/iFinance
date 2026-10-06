@@ -1,9 +1,14 @@
 import SwiftUI
 
+/// Choix d'une catégorie pour plusieurs éléments (transactions ou bénéficiaires).
+/// `optionTitle` affiche une case à cocher dont l'état est transmis à `onApply`.
 struct BulkCategorizeView: View {
-    let transactionIDs: Set<Transaction.ID>
+    let subtitle: String
     @Binding var isPresented: Bool
-    let onApply: (UUID?) -> Void
+    var optionTitle: String? = nil
+    let onApply: (UUID?, Bool) -> Void
+
+    @State private var isOptionOn = true
 
     @EnvironmentObject var categoriesController: CategoriesController
 
@@ -32,7 +37,7 @@ struct BulkCategorizeView: View {
         VStack(spacing: 0) {
             SheetHeader(
                 title: "Catégoriser",
-                subtitle: "\(transactionIDs.count) transaction(s) sélectionnée(s)"
+                subtitle: subtitle
             )
 
             // Search
@@ -89,6 +94,15 @@ struct BulkCategorizeView: View {
             }
             .listStyle(.inset)
 
+            if let optionTitle {
+                Divider()
+                Toggle(optionTitle, isOn: $isOptionOn)
+                    .toggleStyle(.checkbox)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+            }
+
             // Pied : rappel de la catégorie choisie à gauche
             SheetFooter {
                 if let id = selectedCategoryID,
@@ -106,7 +120,7 @@ struct BulkCategorizeView: View {
                     .keyboardShortcut(.cancelAction)
 
                 Button("Appliquer") {
-                    onApply(selectedCategoryID)
+                    onApply(selectedCategoryID, optionTitle != nil && isOptionOn)
                     isPresented = false
                 }
                 .keyboardShortcut(.defaultAction)

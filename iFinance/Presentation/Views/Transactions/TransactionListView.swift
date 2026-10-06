@@ -255,9 +255,9 @@ struct TransactionListView: View {
         }
         .sheet(isPresented: $showBulkCategorize) {
             BulkCategorizeView(
-                transactionIDs: selectedTransactions,
+                subtitle: "\(selectedTransactions.count) transaction(s) sélectionnée(s)",
                 isPresented: $showBulkCategorize,
-                onApply: { categoryID in
+                onApply: { categoryID, _ in
                     let ids = selectedTransactions
                     Task {
                         for id in ids {

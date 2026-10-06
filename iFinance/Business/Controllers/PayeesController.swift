@@ -94,6 +94,22 @@ class PayeesController: ObservableObject {
         }
     }
     
+    /// Catégorie par défaut de plusieurs bénéficiaires, puis un seul rechargement
+    func setDefaultCategory(_ categoryID: UUID?, for payeeIDs: Set<UUID>) async {
+        do {
+            for var payee in payees where payeeIDs.contains(payee.id) && payee.defaultCategoryID != categoryID {
+                payee.defaultCategoryID = categoryID
+                try await repository.update(payee)
+            }
+        } catch {
+            self.error = error
+            print("❌ Erreur catégorisation bénéficiaires: \(error)")
+        }
+        if let bookID = currentBookID {
+            await loadPayees(for: bookID)
+        }
+    }
+
     // MARK: - Delete Payee
     
     /// Crée plusieurs bénéficiaires en une seule écriture, puis recharge la liste une fois.
