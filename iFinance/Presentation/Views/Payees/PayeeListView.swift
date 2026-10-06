@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 
 // MARK: - Ligne de tableau
 
@@ -274,6 +275,11 @@ struct PayeeListView: View {
             return average.formatted(.currency(code: currency))
         }()
         let notes = payee.notes?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        // Sens dominant du bénéficiaire : revenus s'il rapporte plus qu'il ne coûte, dépenses sinon
+        let history = monthlyHistory(for: payee, isIncome: stats.total > 0)
+        let chartColor = payee.defaultCategoryID
+            .flatMap { categoriesController.getCategory(id: $0) }
+            .map { Color(hex: $0.displayColor) } ?? Color.accentColor
 
         return InspectorContainer {
             InspectorHeader(
@@ -290,6 +296,24 @@ struct PayeeListView: View {
                     "Dernière",
                     value: stats.lastDate?.formatted(date: .long, time: .omitted) ?? "—"
                 )
+            }
+
+            InspectorSection(title: "6 derniers mois") {
+                Chart(history, id: \.month) { item in
+                    BarMark(
+                        x: .value("Mois", item.month, unit: .month),
+                        y: .value("Montant", item.amount)
+                    )
+                    .foregroundStyle(chartColor)
+                }
+                .chartXAxis {
+                    AxisMarks(values: .stride(by: .month)) { _ in
+                        AxisValueLabel(format: .dateTime.month(.abbreviated), centered: true)
+                    }
+                }
+                .chartYAxis(.hidden)
+                .frame(height: 96)
+                .privacyBlur(hidden: appSettings.hideAmounts)
             }
 
             InspectorSection(title: "Note") {
@@ -387,6 +411,28 @@ struct PayeeListView: View {
         }
 
         return stats
+    }
+
+    /// Montants des six derniers mois (mois en cours inclus) pour un bénéficiaire, dans son sens dominant.
+    /// Un seul passage sur les transactions ; les débuts de mois sont calculés une fois.
+    private func monthlyHistory(for payee: Payee, isIncome: Bool) -> [(month: Date, amount: Double)] {
+        let calendar = Calendar.current
+        let currentMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
+        let monthStarts = (0..<6).reversed().compactMap { calendar.date(byAdding: .month, value: -$0, to: currentMonth) }
+        guard let firstMonth = monthStarts.first else { return [] }
+
+        var totals = [Decimal](repeating: 0, count: monthStarts.count)
+        for transaction in transactionsController.allTransactions
+        where transaction.payeeID == payee.id && transaction.status != .skipped && transaction.date >= firstMonth {
+            var index = monthStarts.count - 1
+            while index > 0 && transaction.date < monthStarts[index] { index -= 1 }
+            totals[index] += transaction.signedAmount
+        }
+
+        let sign: Decimal = isIncome ? 1 : -1
+        return zip(monthStarts, totals).map { month, total in
+            (month, max(0, NSDecimalNumber(decimal: total * sign).doubleValue))
+        }
     }
 
     /// Filtre les transactions sur le bénéficiaire puis bascule sur la liste des transactions
