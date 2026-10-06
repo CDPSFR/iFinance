@@ -87,6 +87,12 @@ final class CategoryActivityCache: ObservableObject {
     }
 }
 
+/// Ouverture du formulaire de création, avec la catégorie mère éventuelle
+struct NewCategoryRequest: Identifiable {
+    let id = UUID()
+    let parentID: UUID?
+}
+
 // MARK: - Liste des catégories
 
 struct CategoryListView: View {
@@ -115,9 +121,10 @@ struct CategoryListView: View {
     }
 
     @State private var kind: Kind = .expense
-    @State private var showCategoryForm = false
+    /// Demande de création ; le parent voyage avec la demande pour que la feuille le reçoive
+    /// dès sa première ouverture (avec sheet(isPresented:), elle lisait l'état d'avant le clic)
+    @State private var newCategoryRequest: NewCategoryRequest?
     @State private var categoryToEdit: Category?
-    @State private var parentForNewCategory: UUID?
     @State private var categoryToDelete: Category?
     @State private var showDeleteConfirmation = false
     /// Catégories d'une suppression multiple (clic droit sur plusieurs lignes sélectionnées)
@@ -178,10 +185,13 @@ struct CategoryListView: View {
                 .help("Afficher ou masquer l'inspecteur")
             }
         }
-        .sheet(isPresented: $showCategoryForm, onDismiss: { parentForNewCategory = nil }) {
+        .sheet(item: $newCategoryRequest) { request in
             CategoryFormView(
-                isPresented: $showCategoryForm,
-                parentCategory: parentForNewCategory.flatMap { categoriesController.getCategory(id: $0) }
+                isPresented: Binding(
+                    get: { newCategoryRequest != nil },
+                    set: { if !$0 { newCategoryRequest = nil } }
+                ),
+                parentCategory: request.parentID.flatMap { categoriesController.getCategory(id: $0) }
             )
         }
         .sheet(item: $categoryToEdit) { category in
@@ -324,8 +334,7 @@ struct CategoryListView: View {
 
                 if category.isRoot {
                     Button {
-                        parentForNewCategory = category.id
-                        showCategoryForm = true
+                        newCategoryRequest = NewCategoryRequest(parentID: category.id)
                     } label: {
                         Label("Nouvelle sous-catégorie", systemImage: "plus")
                     }
@@ -522,8 +531,7 @@ struct CategoryListView: View {
                     }
 
                     Button("Nouvelle sous-catégorie…") {
-                        parentForNewCategory = category.id
-                        showCategoryForm = true
+                        newCategoryRequest = NewCategoryRequest(parentID: category.id)
                     }
                 }
             }
@@ -688,7 +696,7 @@ struct CategoryListView: View {
                 Text("Créez vos catégories pour organiser vos transactions.")
             } actions: {
                 Button("Créer une catégorie") {
-                    showCategoryForm = true
+                    newCategoryRequest = NewCategoryRequest(parentID: nil)
                 }
             }
         } else {
