@@ -11,7 +11,7 @@ struct NetWorthChartView: View {
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var appSettings: AppSettings
 
-    /// Nombre de fins de mois affichées (le mois en cours compris)
+    /// Recul de la comparaison, en mois : on affiche les fins de mois de M-12 au mois en cours
     private static let monthCount = 12
 
     private enum Series: String, CaseIterable {
@@ -182,7 +182,7 @@ struct NetWorthChartView: View {
             .frame(height: 280)
             .privacyBlur(hidden: appSettings.hideAmounts)
 
-            Text("Le trait noir suit le patrimoine net (actifs moins dettes).")
+            Text("La ligne suit le patrimoine net (actifs moins dettes).")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -241,14 +241,15 @@ struct NetWorthChartView: View {
         )
     }
 
-    /// Premier jour de chacun des derniers mois, du plus ancien au mois en cours
+    /// Premier jour de chacun des derniers mois, de M-12 au mois en cours (13 points : 12 mois d'écart)
     private var monthStarts: [Date] {
         let calendar = Calendar.current
         let current = calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
-        return (0..<Self.monthCount).reversed().compactMap { calendar.date(byAdding: .month, value: -$0, to: current) }
+        return (0...Self.monthCount).reversed().compactMap { calendar.date(byAdding: .month, value: -$0, to: current) }
     }
 
-    /// Valeur de chaque compte à la fin de chaque mois : valeur actuelle moins les mouvements postérieurs
+    /// Valeur de chaque compte à la fin de chaque mois : valeur actuelle moins les mouvements postérieurs.
+    /// Le dernier point est la valeur actuelle, comme sur la page Patrimoine (transactions futures comprises).
     private func values(_ accounts: [Account], months: [Date]) -> [UUID: [Decimal]] {
         let calendar = Calendar.current
         let ends = months.map { calendar.date(byAdding: .month, value: 1, to: $0) ?? $0 }
@@ -263,7 +264,8 @@ struct NetWorthChartView: View {
         for account in accounts {
             let current = valuation.value(of: account)
             let transactions = byAccount[account.id] ?? []
-            result[account.id] = ends.map { end in
+            result[account.id] = ends.enumerated().map { index, end in
+                if index == ends.count - 1 { return current }
                 let later = transactions
                     .filter { $0.date >= end }
                     .reduce(Decimal(0)) { $0 + $1.signedAmount }

@@ -74,57 +74,68 @@ struct PeriodComparisonChartView: View {
 
     // MARK: - Réglages du rapport
 
+    /// Réglages sur deux lignes : la zone du rapport (fenêtre moins la liste) peut être étroite
     private func controls(current: DateInterval, compared: DateInterval) -> some View {
-        HStack(spacing: 12) {
-            Picker("Sens", selection: $flow) {
-                Text("Dépenses").tag(ReportFlow.expense)
-                Text("Revenus").tag(ReportFlow.income)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 180)
-
-            Picker("Durée", selection: $unit) {
-                ForEach(Unit.allCases) { unit in
-                    Text(unit.rawValue).tag(unit)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Picker("Sens", selection: $flow) {
+                    Text("Dépenses").tag(ReportFlow.expense)
+                    Text("Revenus").tag(ReportFlow.income)
                 }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 220)
-            .onChange(of: unit) { _, _ in offset = 0 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
 
-            HStack(spacing: 4) {
-                Button {
-                    offset -= 1
-                } label: {
-                    Image(systemName: "chevron.left")
+                Picker("Durée", selection: $unit) {
+                    ForEach(Unit.allCases) { unit in
+                        Text(unit.rawValue).tag(unit)
+                    }
                 }
-                .help("Période précédente")
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .onChange(of: unit) { _, _ in offset = 0 }
 
-                Text(label(current))
-                    .fontWeight(.semibold)
-                    .frame(minWidth: 130)
-
-                Button {
-                    offset += 1
-                } label: {
-                    Image(systemName: "chevron.right")
-                }
-                .disabled(offset >= 0)
-                .help("Période suivante")
+                Spacer(minLength: 0)
             }
 
-            Spacer()
+            HStack(spacing: 12) {
+                navigation(current)
 
-            Picker("Comparer à", selection: $reference) {
-                ForEach(Reference.allCases) { reference in
-                    Text(reference.rawValue).tag(reference)
+                Spacer(minLength: 0)
+
+                Picker("Comparer à", selection: $reference) {
+                    ForEach(Reference.allCases) { reference in
+                        Text(reference.rawValue).tag(reference)
+                    }
                 }
+                .fixedSize()
+                // Sur une année, « un an avant » et « période précédente » désignent la même chose
+                .disabled(unit == .year)
             }
-            .frame(width: 300)
-            // Sur une année, « un an avant » et « période précédente » désignent la même chose
-            .disabled(unit == .year)
+        }
+    }
+
+    private func navigation(_ current: DateInterval) -> some View {
+        HStack(spacing: 4) {
+            Button {
+                offset -= 1
+            } label: {
+                Image(systemName: "chevron.left")
+            }
+            .help("Période précédente")
+
+            Text(label(current))
+                .fontWeight(.semibold)
+                .frame(minWidth: 130)
+
+            Button {
+                offset += 1
+            } label: {
+                Image(systemName: "chevron.right")
+            }
+            .disabled(offset >= 0)
+            .help("Période suivante")
         }
     }
 
@@ -223,7 +234,7 @@ struct PeriodComparisonChartView: View {
                     ReportCell(text: percentChange(from: line.reference, to: line.current) ?? "nouveau", color: color)
                 ])
             },
-            footnote: "Les sous-catégories sont regroupées dans leur catégorie principale. Les transferts entre comptes sont exclus."
+            footnote: "Les sous-catégories sont regroupées dans leur catégorie principale. Comme dans les rapports par catégorie, les transactions sans catégorie et les transferts entre comptes ne sont pas comptés."
         )
     }
 
@@ -288,17 +299,19 @@ struct PeriodComparisonChartView: View {
         var names: [String: String] = [:]
 
         for transaction in transactionsController.allTransactions {
+            // Même périmètre que « Dépenses par catégorie » : transactions catégorisées seulement
             guard transaction.type == type,
                   transaction.status != .skipped,
+                  transaction.categoryID != nil,
                   accountIDs.contains(transaction.accountID) else { continue }
 
             let inCurrent = transaction.date >= current.start && transaction.date < current.end
             let inReference = transaction.date >= reference.start && transaction.date < reference.end
             guard inCurrent || inReference else { continue }
 
-            let root = rootCategory(of: transaction.categoryID)
-            let key = root?.id.uuidString ?? "none"
-            names[key] = root?.name ?? "Sans catégorie"
+            guard let root = rootCategory(of: transaction.categoryID) else { continue }
+            let key = root.id.uuidString
+            names[key] = root.name
 
             if inCurrent { currentTotals[key, default: 0] += abs(transaction.amount) }
             if inReference { referenceTotals[key, default: 0] += abs(transaction.amount) }
