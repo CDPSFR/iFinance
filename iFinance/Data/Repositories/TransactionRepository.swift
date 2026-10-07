@@ -101,6 +101,10 @@ class TransactionRepository: TransactionRepositoryProtocol {
     // MARK: - Update
     
     func update(_ transaction: Transaction) async throws {
+        try updateRow(transaction)
+    }
+
+    private func updateRow(_ transaction: Transaction) throws {
         let dto = TransactionMapper.toDTO(transaction)
         
         let sql = """
@@ -129,6 +133,23 @@ class TransactionRepository: TransactionRepositoryProtocol {
         ])
     }
     
+    // MARK: - Convert to Transfer
+
+    /// En une seule écriture : la dépense devient le côté source, le côté destination est créé,
+    /// puis les deux sont liés. En cas d'échec, rien n'est modifié.
+    func convertToTransfer(_ transaction: Transaction, destinationAccountID: UUID, memo: String?) async throws -> (Transaction, Transaction) {
+        let (source, destination) = TransferConversion.legs(of: transaction, destinationAccountID: destinationAccountID, memo: memo)
+        try db.inTransaction {
+            // Lien posé en dernier : la clé étrangère exige que les deux lignes existent
+            var unlinked = source
+            unlinked.linkedTransactionID = nil
+            try updateRow(unlinked)
+            try insert(destination)
+            try updateRow(source)
+        }
+        return (source, destination)
+    }
+
     // MARK: - Delete
     
     func delete(id: UUID) async throws {

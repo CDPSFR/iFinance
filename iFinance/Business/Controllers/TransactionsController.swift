@@ -170,6 +170,24 @@ class TransactionsController: ObservableObject {
         }
     }
 
+    // MARK: - Convert to Transfer
+
+    /// Transforme une dépense en transfert, sans rien perdre : identifiant, date, rapprochement,
+    /// projet et catégorie sont conservés. Le nom du bénéficiaire passe dans la note si elle est vide.
+    @discardableResult
+    func convertToTransfer(_ transaction: Transaction, to destinationAccountID: UUID, payeeName: String?) async -> Bool {
+        let note = transaction.memo?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let memo = (note?.isEmpty ?? true) ? payeeName : note
+        do {
+            _ = try await repository.convertToTransfer(transaction, destinationAccountID: destinationAccountID, memo: memo)
+            return true
+        } catch {
+            self.error = error
+            print("❌ Erreur conversion en transfert: \(error)")
+            return false
+        }
+    }
+
     // MARK: - Update Transfer (met à jour les deux transactions liées)
 
     func updateTransfer(_ transaction: Transaction, categoryID: UUID?) async {

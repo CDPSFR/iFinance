@@ -6,6 +6,7 @@ struct ConvertToTransferView: View {
     let onConfirm: (UUID) -> Void   // destinationAccountID
 
     @EnvironmentObject var accountsController: AccountsController
+    @EnvironmentObject var payeesController: PayeesController
 
     @State private var destinationAccountID: UUID? = nil
 
@@ -15,6 +16,19 @@ struct ConvertToTransferView: View {
 
     private var sourceAccount: Account? {
         accountsController.getAccount(id: transaction.accountID)
+    }
+
+    /// Ce que devient la transaction : bénéficiaire, note, et côté créé sur l'autre compte
+    private var conversionNote: String {
+        let payee = transaction.payeeID.flatMap { payeesController.getPayee(id: $0)?.name }
+        let hasNote = !(transaction.memo?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        var text = "La transaction opposée (entrée) sera créée sur le compte de destination."
+        if let payee {
+            text += hasNote
+                ? " Un transfert n'a pas de bénéficiaire : « \(payee) » est retiré, la note est conservée."
+                : " Un transfert n'a pas de bénéficiaire : « \(payee) » est conservé dans la note."
+        }
+        return text + " Date, catégorie, rapprochement et projet sont conservés."
     }
 
     var body: some View {
@@ -105,7 +119,7 @@ struct ConvertToTransferView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "info.circle")
                         .foregroundColor(.orange)
-                    Text("Le bénéficiaire sera supprimé. La transaction opposée (crédit) sera créée sur le compte destination.")
+                    Text(conversionNote)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

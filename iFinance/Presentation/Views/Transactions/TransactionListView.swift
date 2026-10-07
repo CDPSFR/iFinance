@@ -228,16 +228,11 @@ struct TransactionListView: View {
                 ),
                 onConfirm: { destinationAccountID in
                     Task {
-                        // Supprimer la transaction originale
-                        await transactionsController.deleteTransaction(id: transaction.id)
-                        // Créer le transfert lié
-                        await transactionsController.createTransfer(
-                            from: transaction.accountID,
+                        // Conversion en une seule écriture : la dépense devient le côté source du transfert
+                        await transactionsController.convertToTransfer(
+                            transaction,
                             to: destinationAccountID,
-                            amount: transaction.amount,
-                            date: transaction.date,
-                            memo: transaction.memo,
-                            categoryID: transaction.categoryID
+                            payeeName: transaction.payeeID.flatMap { payeesController.getPayee(id: $0)?.name }
                         )
                         await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
                     }
