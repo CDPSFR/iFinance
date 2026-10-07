@@ -3,7 +3,7 @@ import Foundation
 // Cours en ligne : contrat commun à tous les fournisseurs.
 //
 // Pour ajouter ou remplacer un fournisseur :
-//   1. créer un type conforme à `QuoteProvider` (voir TwelveDataQuoteProvider) ;
+//   1. créer un type conforme à `QuoteProvider` (voir YahooFinanceQuoteProvider, TwelveDataQuoteProvider) ;
 //   2. l'ajouter à `QuoteProviderRegistry.all`.
 // Rien d'autre dans l'app ne connaît le fournisseur : QuoteService, les réglages et les vues
 // passent uniquement par ce protocole.
@@ -95,10 +95,12 @@ protocol QuoteProvider {
 /// Fournisseurs disponibles dans l'app
 enum QuoteProviderRegistry {
     static let all: [QuoteProvider] = [
+        YahooFinanceQuoteProvider(),
         TwelveDataQuoteProvider()
     ]
 
-    static let defaultID = "twelvedata"
+    /// Yahoo par défaut : sans clé, et seul à couvrir gratuitement les places européennes
+    static let defaultID = "yahoo"
 
     static func provider(id: String?) -> QuoteProvider {
         all.first { $0.id == id } ?? all.first { $0.id == defaultID } ?? all[0]

@@ -144,39 +144,44 @@ struct QuoteSettingsSection: View {
                             .onSubmit { saveKey() }
                     }
 
-                    HStack(spacing: 8) {
+                }
+
+                HStack(spacing: 8) {
+                    if quoteService.provider.requiresAPIKey {
                         Button("Enregistrer la clé") { saveKey() }
                             .disabled(apiKey == (quoteService.apiKey ?? ""))
-
-                        Button(isTesting ? "Test en cours…" : "Tester la connexion") {
-                            saveKey()
-                            isTesting = true
-                            Task {
-                                let result = await quoteService.testConnection()
-                                testSucceeded = result.success
-                                testMessage = result.message
-                                isTesting = false
-                            }
-                        }
-                        .disabled(isTesting || apiKey.isEmpty)
-
-                        if let url = quoteService.provider.signupURL {
-                            Link("Obtenir une clé", destination: url)
-                        }
                     }
 
-                    if let testMessage {
-                        Text(testMessage)
-                            .font(.caption)
-                            .foregroundStyle(testSucceeded ? Color.green : Color.red)
-                            .fixedSize(horizontal: false, vertical: true)
+                    Button(isTesting ? "Test en cours…" : "Tester la connexion") {
+                        if quoteService.provider.requiresAPIKey { saveKey() }
+                        isTesting = true
+                        Task {
+                            let result = await quoteService.testConnection()
+                            testSucceeded = result.success
+                            testMessage = result.message
+                            isTesting = false
+                        }
                     }
+                    .disabled(isTesting || (quoteService.provider.requiresAPIKey && apiKey.isEmpty))
+
+                    if quoteService.provider.requiresAPIKey, let url = quoteService.provider.signupURL {
+                        Link("Obtenir une clé", destination: url)
+                    }
+                }
+
+                if let testMessage {
+                    Text(testMessage)
+                        .font(.caption)
+                        .foregroundStyle(testSucceeded ? Color.green : Color.red)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Ce qui est envoyé")
                         .fontWeight(.semibold)
-                    Text("Uniquement le symbole ou le code ISIN de chaque position, et votre clé d'API, quand vous cliquez sur « Mettre à jour les cours ». Jamais vos quantités, vos montants, vos comptes ni vos transactions. La clé est conservée dans le trousseau de ce Mac.")
+                    Text(quoteService.provider.requiresAPIKey
+                         ? "Uniquement le symbole ou le code ISIN de chaque position, et votre clé d'API, quand vous cliquez sur « Mettre à jour les cours ». Jamais vos quantités, vos montants, vos comptes ni vos transactions. La clé est conservée dans le trousseau de ce Mac."
+                         : "Uniquement le symbole ou le code ISIN de chaque position, quand vous cliquez sur « Mettre à jour les cours ». Jamais vos quantités, vos montants, vos comptes ni vos transactions.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
