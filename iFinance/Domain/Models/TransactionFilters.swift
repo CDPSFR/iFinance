@@ -6,6 +6,8 @@ struct TransactionFilters: Equatable {
     var categoryID: UUID?
     var payeeID: UUID?
     var dateRange: DateRange
+    /// Opérations sur titres affichées (en lecture seule) parmi les transactions
+    var showInvestmentOperations: Bool = true
     
     enum DateRange: Equatable, Hashable {
         case all
@@ -77,7 +79,8 @@ struct TransactionFilters: Equatable {
                accountID != nil ||
                categoryID != nil ||
                payeeID != nil ||
-               dateRange != .all
+               dateRange != .all ||
+               !showInvestmentOperations
     }
     
     var activeFiltersCount: Int {
@@ -87,6 +90,7 @@ struct TransactionFilters: Equatable {
         if categoryID != nil { count += 1 }
         if payeeID != nil { count += 1 }
         if dateRange != .all { count += 1 }
+        if !showInvestmentOperations { count += 1 }
         return count
     }
 }

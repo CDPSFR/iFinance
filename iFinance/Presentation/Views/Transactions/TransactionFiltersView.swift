@@ -85,6 +85,11 @@ struct TransactionFiltersView: View {
                         .labelsHidden()
                     }
                     
+                    filterSection(title: "Titres", icon: "chart.line.uptrend.xyaxis") {
+                        Toggle("Afficher les opérations sur titres", isOn: $tempFilters.showInvestmentOperations)
+                            .toggleStyle(.checkbox)
+                    }
+
                     Divider()
                         .padding(.vertical, 8)
                     

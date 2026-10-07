@@ -16,6 +16,8 @@ struct TransactionRow: Identifiable {
     let currency: String
     /// Transaction issue d'une récurrence (icône de boucle dans la liste)
     var isRecurring: Bool = false
+    /// Opération sur titres, affichée en lecture seule
+    var isInvestmentOperation: Bool = false
     
     // Propriétés calculées pour le tri
     var payeeNameForSort: String {

@@ -22,6 +22,8 @@ struct TransactionListView: View {
     @State private var showBulkCategorize = false
     @State private var transactionToConvert: Transaction?
     @State private var transactionToRepeat: Transaction?
+    /// Opération sur titres ouverte dans son formulaire d'investissement
+    @State private var operationToOpen: InvestmentTransaction?
     @AppStorage("showTransactionInspector") private var showInspector = true
     @State private var sortOrder = [KeyPathComparator(\TransactionRow.date, order: .reverse)]
     
@@ -109,6 +111,18 @@ struct TransactionListView: View {
                             )
                         }
                         
+                        if !transactionsController.filters.showInvestmentOperations {
+                            FilterBadge(
+                                text: "Opérations sur titres masquées",
+                                icon: "chart.line.uptrend.xyaxis",
+                                onRemove: {
+                                    var newFilters = transactionsController.filters
+                                    newFilters.showInvestmentOperations = true
+                                    transactionsController.updateFilters(newFilters)
+                                }
+                            )
+                        }
+
                         if transactionsController.filters.dateRange != .all {
                             FilterBadge(
                                 text: transactionsController.filters.dateRange.displayName,
@@ -149,7 +163,7 @@ struct TransactionListView: View {
                 if transactionsController.isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if transactionsController.filteredTransactions.isEmpty {
+                } else if transactionsController.filteredTransactions.isEmpty && visibleOperations.isEmpty {
                     emptyStateView
                 } else {
                     transactionTable
@@ -202,12 +216,12 @@ struct TransactionListView: View {
             Text("Cette action est irréversible.")
         }
         .alert(
-            "Supprimer \(selectedTransactions.count) transaction(s) ?",
+            "Supprimer \(selectedTransactionIDs.count) transaction(s) ?",
             isPresented: $showBulkDeleteConfirmation
         ) {
             Button("Annuler", role: .cancel) { }
             Button("Supprimer", role: .destructive) {
-                let ids = selectedTransactions
+                let ids = selectedTransactionIDs
                 Task {
                     for id in ids {
                         await transactionsController.deleteTransaction(id: id)
@@ -239,6 +253,11 @@ struct TransactionListView: View {
                 }
             )
         }
+        .sheet(item: $operationToOpen) { operation in
+            if let account = accountsController.getAccount(id: operation.accountID) {
+                InvestmentOperationFormView(account: account, operationToEdit: operation)
+            }
+        }
         .sheet(item: $transactionToRepeat) { transaction in
             RecurringFormView(
                 isPresented: Binding(
@@ -250,10 +269,10 @@ struct TransactionListView: View {
         }
         .sheet(isPresented: $showBulkCategorize) {
             BulkCategorizeView(
-                subtitle: "\(selectedTransactions.count) transaction(s) sélectionnée(s)",
+                subtitle: "\(selectedTransactionIDs.count) transaction(s) sélectionnée(s)",
                 isPresented: $showBulkCategorize,
                 onApply: { categoryID, _ in
-                    let ids = selectedTransactions
+                    let ids = selectedTransactionIDs
                     Task {
                         for id in ids {
                             if var tx = transactionsController.filteredTransactions.first(where: { $0.id == id }) {
@@ -294,6 +313,12 @@ struct TransactionListView: View {
             TableColumn("Bénéficiaire", value: \.payeeNameForSort) { row in
                 if let payeeName = row.payeeName {
                     HStack(spacing: 5) {
+                        if row.isInvestmentOperation {
+                            Image(systemName: "chart.line.uptrend.xyaxis")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .help("Opération sur titres, en lecture seule : double-clic pour l'ouvrir")
+                        }
                         if row.isRecurring {
                             Image(systemName: "arrow.triangle.2.circlepath")
                                 .font(.caption)
@@ -311,7 +336,10 @@ struct TransactionListView: View {
 
             // Colonne Catégorie
             TableColumn("Catégorie", value: \.categoryNameForSort) { row in
-                if let categoryName = row.categoryName {
+                if row.isInvestmentOperation {
+                    Text(row.categoryName ?? "")
+                        .foregroundStyle(.secondary)
+                } else if let categoryName = row.categoryName {
                     HStack(spacing: 6) {
                         if let categoryColor = row.categoryColor {
                             Circle()
@@ -357,7 +385,13 @@ struct TransactionListView: View {
             }
         }
         .contextMenu(forSelectionType: Transaction.ID.self) { items in
-            if items.count == 1,
+            if items.count == 1, let id = items.first, let operation = operation(id: id) {
+                Button {
+                    operationToOpen = operation
+                } label: {
+                    Label("Ouvrir l'opération…", systemImage: "chart.line.uptrend.xyaxis")
+                }
+            } else if items.count == 1,
                let id = items.first,
                let transaction = transactionsController.filteredTransactions.first(where: { $0.id == id }) {
                 Button {
@@ -390,12 +424,14 @@ struct TransactionListView: View {
                 } label: {
                     Label("Supprimer", systemImage: "trash")
                 }
-            } else if items.count > 1 {
+            } else if transactionIDs(in: items).count > 1 {
+                // Les opérations sur titres de la sélection sont ignorées : elles se gèrent dans leur compte
+                let count = transactionIDs(in: items).count
                 Button {
                     selectedTransactions = items
                     showBulkCategorize = true
                 } label: {
-                    Label("Catégoriser \(items.count) transactions", systemImage: "folder.badge.plus")
+                    Label("Catégoriser \(count) transactions", systemImage: "folder.badge.plus")
                 }
 
                 Divider()
@@ -404,10 +440,48 @@ struct TransactionListView: View {
                     selectedTransactions = items
                     showBulkDeleteConfirmation = true
                 } label: {
-                    Label("Supprimer \(items.count) transactions", systemImage: "trash")
+                    Label("Supprimer \(count) transactions", systemImage: "trash")
                 }
             }
+        } primaryAction: { items in
+            // Double-clic : l'opération sur titres dans son formulaire, ou la transaction
+            guard items.count == 1, let id = items.first else { return }
+            if let operation = operation(id: id) {
+                operationToOpen = operation
+            } else if let transaction = transactionsController.filteredTransactions.first(where: { $0.id == id }) {
+                transactionToEdit = transaction
+            }
         }
+    }
+
+    // MARK: - Opérations sur titres
+
+    /// Opérations sur titres des comptes ouverts qui passent les filtres
+    private var visibleOperations: [InvestmentTransaction] {
+        InvestmentOperationListing.visible(
+            investmentsController.operations,
+            filters: transactionsController.filters,
+            accountIDs: Set(accountsController.activeAccounts.map { $0.id })
+        )
+    }
+
+    private func operation(id: UUID) -> InvestmentTransaction? {
+        investmentsController.operations.values.lazy.compactMap { $0.first { $0.id == id } }.first
+    }
+
+    private func positionName(of operation: InvestmentTransaction) -> String? {
+        guard let positionID = operation.positionID else { return nil }
+        return investmentsController.positions[operation.accountID]?.first { $0.id == positionID }?.name
+    }
+
+    /// Identifiants de la sélection qui sont des transactions (hors opérations sur titres)
+    private func transactionIDs(in ids: Set<UUID>) -> Set<UUID> {
+        let known = Set(transactionsController.filteredTransactions.map { $0.id })
+        return ids.intersection(known)
+    }
+
+    private var selectedTransactionIDs: Set<UUID> {
+        transactionIDs(in: selectedTransactions)
     }
     
     // MARK: - Inspecteur
@@ -421,6 +495,8 @@ struct TransactionListView: View {
     private var inspectorContent: some View {
         if let transaction = selectedTransaction {
             inspectorDetail(transaction)
+        } else if selectedTransactions.count == 1, let id = selectedTransactions.first, let operation = operation(id: id) {
+            operationDetail(operation)
         } else if selectedTransactions.count > 1 {
             ContentUnavailableView(
                 "\(selectedTransactions.count) transactions sélectionnées",
@@ -508,6 +584,62 @@ struct TransactionListView: View {
         }
     }
 
+    /// Détail d'une opération sur titres, en lecture seule
+    private func operationDetail(_ operation: InvestmentTransaction) -> some View {
+        let account = accountsController.getAccount(id: operation.accountID)
+        let currency = account?.currency ?? "EUR"
+        func money(_ value: Decimal) -> String {
+            appSettings.hideAmounts ? "•••" : value.formatted(.currency(code: currency))
+        }
+        let impact = PositionCalculator.cashImpact(operation)
+        let memo = operation.memo?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        return InspectorContainer {
+            InspectorHeader(
+                title: InvestmentOperationListing.label(operation, positionName: positionName(of: operation)),
+                value: money(impact),
+                valueColor: impact > 0 ? .green : .primary,
+                caption: "Opération sur titres"
+            )
+
+            InspectorSection {
+                InspectorRow("Date", value: operation.date.formatted(date: .long, time: .omitted))
+                InspectorRow("Compte", value: account?.name ?? "Inconnu")
+                InspectorRow("Type", value: operation.type.displayName)
+                if let quantity = operation.quantity {
+                    InspectorRow("Quantité", value: quantity.formatted(.number.precision(.fractionLength(0...4))))
+                }
+                if let price = operation.price {
+                    InspectorRow("Prix unitaire", value: money(price))
+                }
+                InspectorRow("Montant brut", value: money(operation.amount))
+                if operation.fees != 0 {
+                    InspectorRow("Frais", value: money(operation.fees))
+                }
+                InspectorRow("Effet sur les espèces", value: money(impact))
+            }
+
+            if !memo.isEmpty {
+                InspectorSection(title: "Note") {
+                    Text(memo)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+            }
+
+            InspectorSection {
+                Text("Les opérations sur titres se gèrent depuis leur compte. Elles ne comptent ni dans les dépenses, ni dans les budgets.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button("Ouvrir l'opération…") {
+                    operationToOpen = operation
+                }
+            }
+        }
+    }
+
     private func projectBinding(for transaction: Transaction) -> Binding<UUID?> {
         Binding(
             get: { projectsController.project(id: transaction.projectID)?.id },
@@ -542,6 +674,10 @@ struct TransactionListView: View {
         let transactions = transactionsController.filteredTransactions
         let count = transactions.count
         var items = ["\(count) transaction\(count > 1 ? "s" : "")"]
+        let operations = visibleOperations.count
+        if operations > 0 {
+            items.append("\(operations) opération\(operations > 1 ? "s" : "") sur titres")
+        }
 
         guard !appSettings.hideAmounts else { return items }
 
@@ -563,13 +699,43 @@ struct TransactionListView: View {
             runningBalances[account.id] = account.initialBalance
         }
         
+        // Opérations sur titres : leur effet sur les espèces entre dans le solde du compte
+        var operationsByDate = visibleOperations.sorted { $0.date < $1.date }[...]
+
         // Trier par date croissante pour calculer les soldes
         let sortedTransactions = transactionsController.filteredTransactions
             .sorted { $0.date < $1.date }
-        
-        // Calculer les soldes cumulés
+
         var rows: [TransactionRow] = []
+        func appendOperations(upTo date: Date?) {
+            while let operation = operationsByDate.first, date.map({ operation.date <= $0 }) ?? true {
+                operationsByDate = operationsByDate.dropFirst()
+                let impact = PositionCalculator.cashImpact(operation)
+                let balance = (runningBalances[operation.accountID] ?? 0) + impact
+                runningBalances[operation.accountID] = balance
+                let account = accountsController.getAccount(id: operation.accountID)
+                rows.append(TransactionRow(
+                    id: operation.id,
+                    date: operation.date,
+                    typeIcon: "chart.line.uptrend.xyaxis",
+                    typeColor: .secondary,
+                    accountName: account?.name ?? "Inconnu",
+                    accountIcon: account?.type.icon ?? "questionmark.circle",
+                    payeeName: InvestmentOperationListing.label(operation, positionName: positionName(of: operation)),
+                    memo: operation.memo,
+                    categoryName: "Opération sur titres",
+                    categoryColor: nil,
+                    amount: impact,
+                    balance: balance,
+                    currency: account?.currency ?? "EUR",
+                    isInvestmentOperation: true
+                ))
+            }
+        }
+
+        // Calculer les soldes cumulés
         for transaction in sortedTransactions {
+            appendOperations(upTo: transaction.date)
             // Mettre à jour le solde
             let previousBalance = runningBalances[transaction.accountID] ?? 0
             let newBalance = previousBalance + transaction.signedAmount
@@ -599,7 +765,8 @@ struct TransactionListView: View {
             
             rows.append(row)
         }
-        
+        appendOperations(upTo: nil)
+
         // Appliquer le tri
         return rows.sorted(using: sortOrder)
     }
