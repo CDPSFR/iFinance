@@ -4,6 +4,7 @@ struct PositionPriceFormView: View {
     let position: InvestmentPosition
 
     @EnvironmentObject var investmentsController: InvestmentsController
+    @EnvironmentObject var quoteService: QuoteService
     @Environment(\.dismiss) private var dismiss
 
     @State private var price: String
@@ -45,6 +46,8 @@ struct PositionPriceFormView: View {
                     guard let parsed = Decimal(userInput: price) else { return }
                     Task {
                         await investmentsController.updatePrice(for: position, price: parsed, date: date)
+                        // Le cours saisi rejoint l'historique des cours
+                        quoteService.recordManualPrice(for: position, price: parsed, date: date)
                         dismiss()
                     }
                 }

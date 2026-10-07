@@ -15,6 +15,7 @@ struct DatabaseSchema {
         createProjectsTable,
         createInvestmentPositionsTable,
         createInvestmentTransactionsTable,
+        createPositionPricesTable,
         createAccountValuationsTable,
         createContributionDetailsTable
     ]
@@ -67,6 +68,7 @@ struct DatabaseSchema {
         
         // Indexes pour Investment Positions
         "CREATE INDEX IF NOT EXISTS idx_positions_account ON investment_positions(account_id);",
+        "CREATE INDEX IF NOT EXISTS idx_position_prices_position_day ON position_prices(position_id, day);",
         
         // Indexes pour Investment Transactions
         "CREATE INDEX IF NOT EXISTS idx_investment_txs_account ON investment_transactions(account_id);",
@@ -173,6 +175,21 @@ struct DatabaseSchema {
     );
     """
     
+    // MARK: - Position Prices
+
+    /// Historique des cours : un cours par position et par jour (saisi à la main ou reçu d'un fournisseur)
+    static let createPositionPricesTable: String = """
+    CREATE TABLE IF NOT EXISTS position_prices (
+        id TEXT PRIMARY KEY,
+        position_id TEXT NOT NULL,
+        day TEXT NOT NULL,
+        date TEXT NOT NULL,
+        price REAL NOT NULL,
+        source TEXT NOT NULL DEFAULT 'manual',
+        FOREIGN KEY (position_id) REFERENCES investment_positions(id) ON DELETE CASCADE
+    );
+    """
+
     // MARK: - Recurring Templates
     
     private static let createRecurringTemplatesTable = """

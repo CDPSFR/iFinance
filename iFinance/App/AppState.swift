@@ -32,6 +32,8 @@ class AppState: ObservableObject {
     let annualBudgetController: AnnualBudgetController
     let projectsController: ProjectsController
     let recurringController: RecurringController
+    let positionPriceRepository: PositionPriceRepository
+    let quoteService: QuoteService
 
     // Sauvegardes de la base
     let backupManager: BackupManager
@@ -86,6 +88,13 @@ class AppState: ObservableObject {
             transactionRepository: investmentTransactionRepository
         )
         self.savingsPlansController = SavingsPlansController(repository: savingsPlanRepository)
+
+        // Cours en ligne (désactivés par défaut) et historique des cours
+        self.positionPriceRepository = PositionPriceRepository(db: db)
+        self.quoteService = QuoteService(
+            investmentsController: investmentsController,
+            priceRepository: positionPriceRepository
+        )
 
         // Le filtre par catégorie parente inclut ses sous-catégories
         transactionsController.subcategoryIDs = { [weak categoriesController] categoryID in

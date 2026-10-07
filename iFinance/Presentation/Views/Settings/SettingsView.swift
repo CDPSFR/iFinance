@@ -636,11 +636,13 @@ struct PrivacySettingsTab: View {
                 }
             }
 
+            QuoteSettingsSection()
+
             Section {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Vos données restent sur ce Mac")
                         .fontWeight(.semibold)
-                    Text("iFinance ne se connecte à aucune banque et n'envoie rien à un serveur. L'app n'a pas d'accès réseau. Les fichiers importés sont lus localement.")
+                    Text("iFinance ne se connecte à aucune banque. Vos comptes, transactions et montants ne quittent jamais ce Mac, et les fichiers importés sont lus localement. La seule connexion possible est la mise à jour des cours ci-dessus, si vous l'activez.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

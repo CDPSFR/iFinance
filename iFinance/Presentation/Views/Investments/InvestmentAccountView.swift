@@ -42,6 +42,9 @@ struct InvestmentAccountView: View {
             header(for: account)
                 .padding()
 
+            // Fraîcheur des cours et mise à jour en ligne (si activée dans les réglages)
+            QuoteUpdateBar(accountID: account.id)
+
             Picker("Vue", selection: $selectedTab) {
                 ForEach(Tab.allCases) { tab in
                     Text(tab.rawValue).tag(tab)
