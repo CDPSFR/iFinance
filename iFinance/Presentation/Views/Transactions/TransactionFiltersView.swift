@@ -41,12 +41,10 @@ struct TransactionFiltersView: View {
                     filterSection(title: "Type de transaction", icon: "arrow.left.arrow.right.circle") {
                         Picker("", selection: $tempFilters.transactionType) {
                             Text("Tout").tag(nil as TransactionType?)
+                            // Label, pas HStack : un menu macOS n'afficherait que l'icône
                             ForEach(TransactionType.allCases, id: \.self) { type in
-                                HStack {
-                                    Image(systemName: type.icon)
-                                    Text(type.displayName)
-                                }
-                                .tag(type as TransactionType?)
+                                Label(type.displayName, systemImage: type.icon)
+                                    .tag(type as TransactionType?)
                             }
                         }
                         .pickerStyle(.menu)
@@ -69,35 +67,10 @@ struct TransactionFiltersView: View {
                     
                     // Catégorie
                     filterSection(title: "Catégorie", icon: "folder") {
-                        Picker("", selection: $tempFilters.categoryID) {
-                            Text("Tout").tag(nil as UUID?)
-                            
-                            ForEach(categoriesController.rootCategories) { category in
-                                HStack {
-                                    if let iconName = category.icon {
-                                        Image(systemName: iconName)
-                                            .foregroundColor(Color(hex: category.displayColor))
-                                    }
-                                    Text(category.name)
-                                }
-                                .tag(category.id as UUID?)
-                                
-                                ForEach(categoriesController.getSubcategories(for: category.id)) { sub in
-                                    HStack {
-                                        Text("  ")
-                                        if let iconName = sub.icon {
-                                            Image(systemName: iconName)
-                                                .foregroundColor(Color(hex: sub.displayColor))
-                                                .font(.caption)
-                                        }
-                                        Text(sub.name)
-                                    }
-                                    .tag(sub.id as UUID?)
-                                }
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .labelsHidden()
+                        // Menu AppKit : icône et nom, sous-catégories indentées (comme les formulaires)
+                        FillPopUpPicker(items: categoryItems, selection: $tempFilters.categoryID)
+                            // Taille naturelle, comme les autres menus de la feuille
+                            .fixedSize()
                     }
                     
                     // Bénéficiaire
@@ -180,6 +153,18 @@ struct TransactionFiltersView: View {
         .sheetBackground()
     }
     
+    /// « Tout », puis les catégories et leurs sous-catégories indentées
+    private var categoryItems: [FillPopUpItem<UUID>] {
+        var items = [FillPopUpItem<UUID>(id: nil, title: "Tout")]
+        for category in categoriesController.rootCategories {
+            items.append(FillPopUpItem(id: category.id, title: category.name, systemImage: category.displayIcon))
+            for sub in categoriesController.getSubcategories(for: category.id) {
+                items.append(FillPopUpItem(id: sub.id, title: sub.name, systemImage: sub.displayIcon, indentationLevel: 1))
+            }
+        }
+        return items
+    }
+
     @ViewBuilder
     private func filterSection<Content: View>(title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
         HStack(alignment: .center) {
