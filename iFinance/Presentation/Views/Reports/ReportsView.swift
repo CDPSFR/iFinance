@@ -13,18 +13,28 @@ struct ReportsView: View {
     
     enum ReportTab: String, CaseIterable {
         case cashFlow = "Revenus et dépenses"
+        case moneyFlow = "Flux de trésorerie"
+        case savingsRate = "Taux d'épargne"
+        case comparison = "Comparaison de périodes"
         case categories = "Dépenses par catégorie"
+        case categoryTrends = "Tendances par catégorie"
         case payees = "Dépenses par bénéficiaire"
         case accounts = "Dépenses par compte"
         case incomeCategories = "Revenus par catégorie"
         case incomePayees = "Revenus par bénéficiaire"
         case incomeAccounts = "Revenus par compte"
+        case netWorth = "Patrimoine net"
         case balance = "Évolution du solde"
         case monthlyBalance = "Solde mensuel"
 
         var icon: String {
             switch self {
             case .cashFlow: return "chart.bar"
+            case .comparison: return "arrow.left.arrow.right"
+            case .moneyFlow: return "arrow.triangle.branch"
+            case .savingsRate: return "percent"
+            case .categoryTrends: return "chart.bar.xaxis"
+            case .netWorth: return "building.columns"
             case .categories, .incomeCategories: return "chart.pie"
             case .payees, .incomePayees: return "person.2"
             case .accounts, .incomeAccounts: return "creditcard"
@@ -32,17 +42,34 @@ struct ReportsView: View {
             case .monthlyBalance: return "chart.bar.xaxis"
             }
         }
+
+        /// Groupe du rapport dans la liste de gauche
+        var group: ReportGroup {
+            switch self {
+            case .cashFlow, .moneyFlow, .savingsRate, .comparison: return .overview
+            case .categories, .categoryTrends, .payees, .accounts, .incomeCategories, .incomePayees, .incomeAccounts: return .breakdown
+            case .netWorth, .balance, .monthlyBalance: return .balances
+            }
+        }
+    }
+
+    enum ReportGroup: String, CaseIterable {
+        case overview = "Vue générale"
+        case breakdown = "Dépenses et revenus"
+        case balances = "Soldes et patrimoine"
     }
 
     var body: some View {
         HStack(spacing: 0) {
             // Liste des rapports (le titre est dans la barre d'outils)
             List(selection: tabSelection) {
-                Section("Rapports") {
-                    ForEach(ReportTab.allCases, id: \.self) { tab in
-                        Label(tab.rawValue, systemImage: tab.icon)
-                            .padding(.vertical, 3)
-                            .tag(Optional(tab))
+                ForEach(ReportGroup.allCases, id: \.self) { group in
+                    Section(group.rawValue) {
+                        ForEach(ReportTab.allCases.filter { $0.group == group }, id: \.self) { tab in
+                            Label(tab.rawValue, systemImage: tab.icon)
+                                .padding(.vertical, 3)
+                                .tag(Optional(tab))
+                        }
                     }
                 }
             }
@@ -219,6 +246,16 @@ struct ReportsView: View {
         switch selectedTab {
         case .balance:
             BalanceChartView()
+        case .netWorth:
+            NetWorthChartView()
+        case .comparison:
+            PeriodComparisonChartView()
+        case .moneyFlow:
+            MoneyFlowChartView()
+        case .savingsRate:
+            SavingsRateChartView()
+        case .categoryTrends:
+            CategoryTrendsChartView()
         case .monthlyBalance:
             MonthlyBalanceChartView()
         case .categories:
