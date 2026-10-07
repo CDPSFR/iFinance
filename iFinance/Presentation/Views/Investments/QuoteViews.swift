@@ -52,28 +52,16 @@ struct QuoteUpdateBar: View {
 
                 Spacer()
 
+                // Le bouton de mise à jour est dans l'en-tête de la fenêtre (QuoteUpdateToolbarButton) ;
+                // ici, l'avancement s'affiche sur la même ligne, sans changer la hauteur de la barre.
                 if quoteService.isUpdating {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("\(quoteService.progress.done) sur \(quoteService.progress.total)")
+                    Text("Mise à jour des cours… \(quoteService.progress.done) sur \(quoteService.progress.total)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
-                } else {
-                    Button {
-                        Task { await quoteService.update(positions) }
-                    } label: {
-                        Label("Mettre à jour les cours", systemImage: "arrow.clockwise")
-                    }
-                    .controlSize(.small)
-                    .disabled(!quoteService.isConfigured)
-                    .help(quoteService.isConfigured
-                          ? "Récupère le dernier cours de chaque position auprès de \(quoteService.provider.displayName). Seuls les symboles sont envoyés."
-                          : "Enregistrez une clé d'API dans Réglages › Confidentialité.")
+                        .lineLimit(1)
                 }
             }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
         }
     }
 
@@ -100,6 +88,49 @@ struct QuoteUpdateBar: View {
         let days = Calendar.current.dateComponents([.day], from: oldest, to: Date()).day ?? 0
         if days <= 1 { return .green }
         return days <= 7 ? .orange : .red
+    }
+}
+
+// MARK: - Bouton de mise à jour (en-tête de la fenêtre)
+
+/// Bouton « Mettre à jour les cours » de la barre d'outils. Pendant la mise à jour, un indicateur
+/// d'activité prend sa place dans le même encombrement.
+struct QuoteUpdateToolbarButton: View {
+    @EnvironmentObject var quoteService: QuoteService
+    @EnvironmentObject var investmentsController: InvestmentsController
+
+    let accountID: UUID
+
+    private var positions: [InvestmentPosition] {
+        (investmentsController.positions[accountID] ?? []).filter { $0.quantity > 0 }
+    }
+
+    var body: some View {
+        Button {
+            Task { await quoteService.update(positions) }
+        } label: {
+            Label("Mettre à jour les cours", systemImage: "arrow.clockwise")
+                .opacity(quoteService.isUpdating ? 0 : 1)
+                .overlay {
+                    if quoteService.isUpdating {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
+        }
+        .disabled(!quoteService.isConfigured || quoteService.isUpdating || positions.isEmpty)
+        .help(helpText)
+        .accessibilityLabel(quoteService.isUpdating ? "Mise à jour des cours en cours" : "Mettre à jour les cours")
+    }
+
+    private var helpText: String {
+        if quoteService.isUpdating {
+            return "Mise à jour en cours : \(quoteService.progress.done) sur \(quoteService.progress.total)"
+        }
+        if !quoteService.isConfigured {
+            return "Enregistrez une clé d'API dans Réglages › Confidentialité."
+        }
+        return "Mettre à jour les cours auprès de \(quoteService.provider.displayName). Seuls les symboles sont envoyés."
     }
 }
 

@@ -7,10 +7,15 @@ struct InvestmentAccountView: View {
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var investmentsController: InvestmentsController
     @EnvironmentObject var savingsPlansController: SavingsPlansController
+    @EnvironmentObject var quoteService: QuoteService
     @EnvironmentObject var appSettings: AppSettings
 
     @State private var selectedTab: Tab = .positions
     @State private var activeSheet: InvestmentSheet?
+    @State private var chartRange: InvestmentValueChart.Range = .oneYear
+    @State private var allocationMode: InvestmentAllocationChart.Mode = .position
+    @State private var priceHistory: [UUID: [PositionPrice]] = [:]
+    @AppStorage("showInvestmentCharts") private var showCharts = true
 
     enum Tab: String, CaseIterable, Identifiable {
         case positions = "Positions"
@@ -38,20 +43,57 @@ struct InvestmentAccountView: View {
 
     @ViewBuilder
     private func content(for account: Account) -> some View {
+        let summary = self.summary(for: account)
+
         VStack(spacing: 0) {
-            header(for: account)
-                .padding()
+            VStack(alignment: .leading, spacing: NativeMetrics.groupSpacing) {
+                topBar(for: account)
+                tiles(summary, account: account)
 
-            // Fraîcheur des cours et mise à jour en ligne (si activée dans les réglages)
-            QuoteUpdateBar(accountID: account.id)
+                if showCharts {
+                    HStack(alignment: .top, spacing: NativeMetrics.groupSpacing) {
+                        InvestmentValueChart(
+                            points: series(for: account, summary: summary),
+                            currency: account.currency,
+                            range: $chartRange
+                        )
+                        .layoutPriority(1)
 
-            Picker("Vue", selection: $selectedTab) {
-                ForEach(Tab.allCases) { tab in
-                    Text(tab.rawValue).tag(tab)
+                        InvestmentAllocationChart(
+                            positions: investmentsController.positions[account.id] ?? [],
+                            cash: summary.cash,
+                            currency: account.currency,
+                            mode: $allocationMode
+                        )
+                        .frame(width: 380)
+                    }
+                    .frame(height: 230)
                 }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            .padding()
+
+            HStack(spacing: 12) {
+                Picker("Vue", selection: $selectedTab) {
+                    ForEach(Tab.allCases) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 460)
+
+                Spacer()
+
+                Button {
+                    showCharts.toggle()
+                } label: {
+                    Label(showCharts ? "Masquer les graphiques" : "Afficher les graphiques",
+                          systemImage: showCharts ? "chevron.up" : "chart.xyaxis.line")
+                }
+                // Même taille de contrôle que le sélecteur d'onglets voisin
+                .controlSize(.regular)
+                .help("Les graphiques masqués laissent plus de place au tableau")
+            }
             .padding(.horizontal)
             .padding(.bottom, 8)
 
@@ -71,30 +113,19 @@ struct InvestmentAccountView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .pageBackground()
-    }
-
-    private func header(for account: Account) -> some View {
-        let valuation = AccountValuation(
-            transactionsController: transactionsController,
-            investmentsController: investmentsController,
-            savingsPlansController: savingsPlansController
-        )
-        let cost = investmentsController.costBasis(for: account.id)
-        let gain = investmentsController.unrealizedGain(for: account.id)
-        let gainRatio: Double? = cost > 0 ? Double(truncating: NSDecimalNumber(decimal: gain / cost)) : nil
-        let year = Calendar.current.component(.year, from: Date())
-        let realized = investmentsController.realizedGain(for: account.id, year: year)
-
-        return VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(account.bank.map { "\(account.type.displayName) · \($0)" } ?? account.type.displayName)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+        .task(id: historyKey) {
+            loadPriceHistory()
+        }
+        .toolbar {
+            // Mise à jour des cours en ligne, seulement si elle est activée dans les réglages
+            if quoteService.isEnabled {
+                ToolbarItem(placement: .automatic) {
+                    QuoteUpdateToolbarButton(accountID: account.id)
                 }
+            }
 
-                Spacer()
-
+            // Ajout d'une opération ou d'une position, dans l'en-tête de la fenêtre
+            ToolbarItem(placement: .automatic) {
                 Menu {
                     Button {
                         activeSheet = .newOperation
@@ -108,52 +139,176 @@ struct InvestmentAccountView: View {
                         Label("Nouvelle position", systemImage: "chart.line.uptrend.xyaxis")
                     }
                 } label: {
-                    Label("Ajouter", systemImage: "plus")
+                    Label("Opération", systemImage: "chart.line.uptrend.xyaxis")
+                        .labelStyle(.titleAndIcon)
                 } primaryAction: {
                     activeSheet = .newOperation
                 }
-                .fixedSize()
-            }
-
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 12) {
-                InvestmentStatCard(
-                    title: "Valeur totale",
-                    value: valuation.value(of: account),
-                    currency: account.currency,
-                    color: .primary
-                )
-                InvestmentStatCard(
-                    title: "Titres",
-                    value: investmentsController.marketValue(for: account.id),
-                    currency: account.currency,
-                    color: .primary
-                )
-                InvestmentStatCard(
-                    title: "Espèces",
-                    value: valuation.cash(of: account),
-                    currency: account.currency,
-                    color: .primary
-                )
-                InvestmentStatCard(
-                    title: "Plus-value latente",
-                    value: gain,
-                    currency: account.currency,
-                    color: gain >= 0 ? .green : .red,
-                    detail: gainRatio.map { $0.formatted(.percent.precision(.fractionLength(2)).sign(strategy: .always())) }
-                )
-            }
-
-            if realized != 0 {
-                HStack {
-                    Text("Plus-values réalisées \(String(year))")
-                        .foregroundColor(.secondary)
-                    Text(realized, format: .currency(code: account.currency))
-                        .foregroundColor(realized >= 0 ? .green : .red)
-                        .privacyBlur(hidden: appSettings.hideAmounts)
-                }
-                .font(.caption)
+                .help("Nouvelle opération sur titres. Maintenez le clic pour créer une position.")
             }
         }
+    }
+
+    // MARK: - Barre du haut
+
+    private func topBar(for account: Account) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(account.bank.map { "\(account.type.displayName) · \($0)" } ?? account.type.displayName)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            // Fraîcheur des cours et mise à jour en ligne (si activée dans les réglages)
+            QuoteUpdateBar(accountID: account.id)
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    // MARK: - Chiffres clés
+
+    private struct Summary {
+        var value: Decimal = 0
+        var cash: Decimal = 0
+        var invested: Decimal = 0
+        var gain: Decimal = 0
+        var gainRatio: Double?
+        var totalGain: Decimal = 0
+        var annualized: Double?
+        var income: Decimal = 0
+        var realized: Decimal = 0
+        var firstDate: Date?
+    }
+
+    private func tiles(_ summary: Summary, account: Account) -> some View {
+        let year = Calendar.current.component(.year, from: Date())
+
+        return ReportTiles {
+            StatTile(
+                title: "Valeur du compte",
+                value: money(summary.value, account),
+                detail: "dont \(money(summary.cash, account)) d'espèces"
+            )
+            .privacyBlur(hidden: appSettings.hideAmounts)
+
+            StatTile(
+                title: "Plus-value latente",
+                value: signed(summary.gain, account),
+                valueColor: summary.gain >= 0 ? .green : .red,
+                detail: summary.gainRatio.map { "\(percent($0)) sur le prix de revient" }
+            )
+            .privacyBlur(hidden: appSettings.hideAmounts)
+
+            StatTile(
+                title: "Versé net",
+                value: money(summary.invested, account),
+                detail: "versements moins retraits"
+            )
+            .privacyBlur(hidden: appSettings.hideAmounts)
+
+            StatTile(
+                title: summary.annualized == nil ? "Gain total" : "Performance annualisée",
+                value: summary.annualized.map(percent) ?? signed(summary.totalGain, account),
+                valueColor: summary.totalGain >= 0 ? .green : .red,
+                detail: summary.annualized == nil
+                    ? "valeur moins versé net"
+                    : "\(signed(summary.totalGain, account)) depuis l'ouverture"
+            )
+            .privacyBlur(hidden: appSettings.hideAmounts)
+
+            StatTile(
+                title: "Dividendes, 12 mois",
+                value: money(summary.income, account),
+                detail: summary.realized != 0
+                    ? "plus-values réalisées \(String(year)) : \(signed(summary.realized, account))"
+                    : "intérêts compris"
+            )
+            .privacyBlur(hidden: appSettings.hideAmounts)
+        }
+    }
+
+    // MARK: - Données
+
+    /// Mouvements d'espèces du compte (versements, retraits), hors occurrences ignorées
+    private func cashTransactions(for account: Account) -> [Transaction] {
+        transactionsController.allTransactions.filter { $0.accountID == account.id && $0.status != .skipped }
+    }
+
+    private func summary(for account: Account) -> Summary {
+        let valuation = AccountValuation(
+            transactionsController: transactionsController,
+            investmentsController: investmentsController,
+            savingsPlansController: savingsPlansController
+        )
+        let calendar = Calendar.current
+        let now = Date()
+        let cashTransactions = self.cashTransactions(for: account)
+        let operations = investmentsController.operations[account.id] ?? []
+
+        var summary = Summary()
+        summary.value = valuation.value(of: account)
+        summary.cash = valuation.cash(of: account)
+        summary.invested = transactionsController.calculateBalance(for: account.id, initialBalance: account.initialBalance)
+        summary.gain = investmentsController.unrealizedGain(for: account.id)
+        let cost = investmentsController.costBasis(for: account.id)
+        summary.gainRatio = cost > 0 ? NSDecimalNumber(decimal: summary.gain / cost).doubleValue : nil
+        summary.totalGain = summary.value - summary.invested
+        summary.income = InvestmentAnalytics.income(operations, since: calendar.date(byAdding: .year, value: -1, to: now) ?? now)
+        summary.realized = investmentsController.realizedGain(for: account.id, year: calendar.component(.year, from: now))
+
+        let dates = cashTransactions.map { $0.date } + operations.map { $0.date }
+        summary.firstDate = dates.min()
+
+        // Flux de l'épargnant : solde initial puis chaque versement ou retrait
+        var flows: [(date: Date, amount: Decimal)] = cashTransactions.map { ($0.date, $0.signedAmount) }
+        if account.initialBalance != 0 {
+            flows.append((account.initialBalanceDate ?? summary.firstDate ?? account.createdAt, account.initialBalance))
+        }
+        summary.annualized = InvestmentAnalytics.annualizedReturn(flows: flows, finalValue: summary.value, at: now)
+        return summary
+    }
+
+    private func series(for account: Account, summary: Summary) -> [InvestmentSeriesPoint] {
+        let now = Date()
+        guard let first = summary.firstDate else { return [] }
+        let start = max(first, chartRange.start(from: now) ?? first)
+
+        return InvestmentAnalytics.series(
+            account: account,
+            cashTransactions: cashTransactions(for: account),
+            operations: investmentsController.operations[account.id] ?? [],
+            positions: investmentsController.positions[account.id] ?? [],
+            priceHistory: priceHistory,
+            from: start,
+            to: now
+        )
+    }
+
+    /// Recharge l'historique des cours quand le compte, ses positions ou leurs cours changent
+    private var historyKey: String {
+        let positions = investmentsController.positions[accountID] ?? []
+        let stamp = positions.map { "\($0.id.uuidString)-\($0.lastUpdated?.timeIntervalSince1970 ?? 0)" }.joined(separator: "|")
+        return "\(accountID.uuidString)#\(stamp)"
+    }
+
+    private func loadPriceHistory() {
+        var history: [UUID: [PositionPrice]] = [:]
+        for position in investmentsController.positions[accountID] ?? [] {
+            history[position.id] = quoteService.history(for: position)
+        }
+        priceHistory = history
+    }
+
+    // MARK: - Format
+
+    private func money(_ amount: Decimal, _ account: Account) -> String {
+        amount.formatted(.currency(code: account.currency))
+    }
+
+    private func signed(_ amount: Decimal, _ account: Account) -> String {
+        (amount > 0 ? "+" : "") + money(amount, account)
+    }
+
+    private func percent(_ ratio: Double) -> String {
+        ratio.formatted(.percent.precision(.fractionLength(1)).sign(strategy: .always()))
     }
 
     // MARK: - Sheets
