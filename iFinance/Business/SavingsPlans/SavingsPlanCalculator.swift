@@ -119,9 +119,14 @@ enum SavingsPlanCalculator {
         let snapshots = valuations.sorted { $0.date < $1.date }
         var summary = SavingsPlanSummary()
 
+        // Un relevé est daté à 23:59:59 de son jour (ValuationFormView) : celui d'aujourd'hui compte
+        // dès sa saisie, on compare donc jusqu'à la fin de la journée en cours
+        let calendar = Calendar.current
+        let endOfToday = calendar.date(byAdding: DateComponents(day: 1, second: -1), to: calendar.startOfDay(for: now)) ?? now
+
         summary.invested = planFlows.reduce(0) { $0 + $1.amount }
-        summary.lastSnapshot = snapshots.last { $0.date <= now } ?? snapshots.last
-        summary.value = estimatedValue(flows: planFlows, snapshots: snapshots, at: now)
+        summary.lastSnapshot = snapshots.last { $0.date <= endOfToday } ?? snapshots.last
+        summary.value = estimatedValue(flows: planFlows, snapshots: snapshots, at: endOfToday)
         if let snapshot = summary.lastSnapshot {
             summary.flowsSinceSnapshot = planFlows.filter { $0.date > snapshot.date }.reduce(0) { $0 + $1.amount }
         }
@@ -146,8 +151,15 @@ enum SavingsPlanCalculator {
                     invested: invested(flows: planFlows, at: snapshot.date)
                 )
             }
-            if let last = snapshots.last, last.date < now {
+            // Point estimé du jour, sauf si un relevé date déjà d'aujourd'hui
+            if let last = snapshots.last, last.date < calendar.startOfDay(for: now) {
                 summary.history.append(SavingsPlanHistoryPoint(date: now, value: summary.value, invested: summary.invested))
+            }
+            // Un seul relevé : la courbe part du premier versement, pour être tracée dès le premier relevé
+            if summary.history.count == 1, let start = summary.history.first,
+               let firstFlow = planFlows.filter({ $0.date < start.date }).min(by: { $0.date < $1.date }) {
+                let invested = invested(flows: planFlows, at: firstFlow.date)
+                summary.history.insert(SavingsPlanHistoryPoint(date: firstFlow.date, value: invested, invested: invested), at: 0)
             }
         }
 
