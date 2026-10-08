@@ -17,6 +17,8 @@ struct SavingsPlanAccountView: View {
     @State private var selectedFlows: Set<PlanFlow.ID> = []
     @State private var selectedSnapshots: Set<ValuationSnapshot.ID> = []
     @AppStorage("savingsPlanShowBlocks") private var showBlocks = true
+    /// Même réglage que l'inspecteur des listes de transactions (onglet Mouvements)
+    @AppStorage("showTransactionInspector") private var showInspector = true
     /// Hauteur naturelle de la zone haute (tuiles et blocs), mesurée après rendu
     @State private var topHeight: CGFloat = 420
 
@@ -116,7 +118,8 @@ struct SavingsPlanAccountView: View {
                     // Les mouvements hébergent l'en-tête du plan : l'inspecteur occupe toute la hauteur de la page
                     TransactionListView(pageHeader: AnyView(planHeader(context, pageHeight: page.size.height)))
                 } else {
-                    VStack(spacing: 0) {
+                    // Apports et relevés : inspecteur de la ligne sélectionnée, sur toute la hauteur de la page
+                    SidePanelLayout(isPresented: $showInspector) {
                         planHeader(context, pageHeight: page.size.height)
 
                         Group {
@@ -129,6 +132,13 @@ struct SavingsPlanAccountView: View {
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                         .clipped()
+                    } panel: {
+                        switch selectedTab {
+                        case .contributions:
+                            contributionInspector(context)
+                        case .valuations, .movements:
+                            valuationInspector(context)
+                        }
                     }
                 }
             }
@@ -136,6 +146,18 @@ struct SavingsPlanAccountView: View {
         }
         .pageBackground()
         .toolbar {
+            // Sur l'onglet Mouvements, la liste des transactions fournit son propre bouton
+            if selectedTab != .movements {
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        showInspector.toggle()
+                    } label: {
+                        Label("Inspecteur", systemImage: "sidebar.right")
+                    }
+                    .help("Afficher ou masquer l'inspecteur")
+                }
+            }
+
             ToolbarItem(placement: .automatic) {
                 Button {
                     activeSheet = .newValuation
@@ -1065,6 +1087,151 @@ struct SavingsPlanAccountView: View {
                     activeSheet = .editValuation(line.snapshot)
                 }
             }
+        }
+    }
+}
+
+// MARK: - Inspecteurs
+
+extension SavingsPlanAccountView {
+    /// Ligne d'inspecteur avec une colonne de libellés assez large pour « Compartiment », « Disponible le »…
+    private func planRow(_ label: String, _ value: String) -> some View {
+        InspectorRow(label: label, labelWidth: 112) { Text(value) }
+    }
+
+    /// Détail de l'apport sélectionné (ou résumé d'une sélection multiple)
+    @ViewBuilder
+    private func contributionInspector(_ context: PlanContext) -> some View {
+        let selected = context.flows.filter { selectedFlows.contains($0.id) }
+
+        if selected.count == 1, let flow = selected.first {
+            flowDetail(flow, context: context)
+        } else if selected.count > 1 {
+            let total = selected.reduce(Decimal(0)) { $0 + $1.amount }
+            InspectorContainer {
+                InspectorHeader(
+                    title: "\(selected.count) lignes sélectionnées",
+                    value: appSettings.hideAmounts ? "•••" : PlanFormat.signed(total, context.currency)
+                )
+                InspectorSection {
+                    planRow("Apports", "\(selected.filter { $0.isContribution }.count)")
+                    planRow("Retraits", "\(selected.filter { !$0.isContribution }.count)")
+                }
+            }
+        } else {
+            ContentUnavailableView(
+                "Aucune sélection",
+                systemImage: "sidebar.right",
+                description: Text("Sélectionnez un apport pour afficher son détail.")
+            )
+        }
+    }
+
+    private func flowDetail(_ flow: PlanFlow, context: PlanContext) -> some View {
+        let title: String = {
+            if flow.isInitialBalance { return "Solde initial" }
+            guard let origin = flow.origin else { return "Retrait / déblocage" }
+            return origin.displayName(for: context.type)
+        }()
+        let memo = flow.transactionID
+            .flatMap { id in transactionsController.allTransactions.first { $0.id == id }?.memo }?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let isEditable = flow.isContribution && flow.transactionID != nil
+
+        return InspectorContainer {
+            InspectorHeader(
+                title: title,
+                value: appSettings.hideAmounts ? "•••" : PlanFormat.signed(flow.amount, context.currency),
+                valueColor: flow.amount >= 0 ? .primary : .red,
+                caption: flow.date.formatted(date: .long, time: .omitted)
+            )
+
+            InspectorSection {
+                if flow.isContribution {
+                    planRow("Disponible le", availabilityText(flow, kind: context.kind))
+                    planRow("État", flow.availableOn.map { $0 <= Date() } == true ? "Disponible" : "Bloqué")
+                    if context.kind == .per {
+                        planRow("Compartiment", flow.origin?.perCompartment.displayName ?? "—")
+                        planRow("Sortie", flow.origin?.perCompartment.exitMode ?? "Capital ou rente")
+                        if flow.origin == .voluntary {
+                            planRow("Déduit", flow.isDeducted ? "Oui" : "Non")
+                        }
+                    }
+                } else {
+                    planRow("Type", flow.isInitialBalance ? "Solde à l'ouverture" : "Retrait ou déblocage")
+                }
+            }
+
+            if flow.isContribution, !flow.hasDetail, !flow.isInitialBalance {
+                InspectorSection {
+                    Text("Origine et disponibilité déduites automatiquement. Modifiez l'apport pour les préciser.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            if !memo.isEmpty {
+                InspectorSection(title: "Note") {
+                    Text(memo)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+            }
+
+            if isEditable {
+                InspectorSection {
+                    Button("Modifier l’apport…") {
+                        activeSheet = .editContribution(flow)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Détail du relevé sélectionné
+    @ViewBuilder
+    private func valuationInspector(_ context: PlanContext) -> some View {
+        let lines = valuationLines(context)
+
+        if selectedSnapshots.count == 1, let id = selectedSnapshots.first, let line = lines.first(where: { $0.id == id }) {
+            let currency = context.currency
+            let investedTitle = context.kind == .article83 ? "Cotisations nettes" : "Versements nets"
+            let note = line.snapshot.note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let money = { (value: Decimal) -> String in appSettings.hideAmounts ? "•••" : PlanFormat.money(value, currency) }
+
+            InspectorContainer {
+                InspectorHeader(
+                    title: "Relevé de valeur",
+                    value: money(line.snapshot.value),
+                    caption: line.snapshot.date.formatted(date: .long, time: .omitted)
+                )
+
+                InspectorSection {
+                    planRow(investedTitle, money(line.invested))
+                    planRow("Plus-value", appSettings.hideAmounts ? "•••" : PlanFormat.signed(line.gain, currency))
+                    planRow("Évolution", line.change ?? "—")
+                }
+
+                if !note.isEmpty {
+                    InspectorSection(title: "Note") {
+                        Text(note)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                    }
+                }
+
+                InspectorSection {
+                    Button("Modifier…") { activeSheet = .editValuation(line.snapshot) }
+                    Button("Supprimer…", role: .destructive) { snapshotToDelete = line.snapshot }
+                }
+            }
+        } else {
+            ContentUnavailableView(
+                "Aucune sélection",
+                systemImage: "sidebar.right",
+                description: Text("Sélectionnez un relevé pour afficher son détail.")
+            )
         }
     }
 }
