@@ -27,150 +27,35 @@ struct TransactionListView: View {
     @AppStorage("showTransactionInspector") private var showInspector = true
     @State private var sortOrder = [KeyPathComparator(\TransactionRow.date, order: .reverse)]
     
+    /// En-tête facultatif de la page hôte (ex. tuiles et blocs d'un plan d'épargne).
+    /// Fourni, il est placé à côté de l'inspecteur : celui-ci occupe alors toute la hauteur de la page.
+    private let pageHeader: AnyView?
+
+    init(pageHeader: AnyView? = nil) {
+        self.pageHeader = pageHeader
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            // Bandeau du compte sélectionné (le titre est dans la barre d'outils)
-            if let accountID = transactionsController.filters.accountID,
-               let account = accountsController.getAccount(id: accountID) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(headerSubtitle)
-                        .foregroundStyle(.secondary)
-
-                    Spacer()
-
-                    Text(headerBalanceLabel(for: account))
-                        .foregroundStyle(.secondary)
-
-                    let balance = AccountValuation(
-                        transactionsController: transactionsController,
-                        investmentsController: investmentsController,
-                        savingsPlansController: savingsPlansController
-                    ).cash(of: account)
-
-                    Text(balance, format: .currency(code: account.currency))
-                        .fontWeight(.semibold)
-                        .monospacedDigit()
-                        .foregroundStyle(balance >= 0 ? Color.primary : Color.red)
-                        .privacyBlur(hidden: appSettings.hideAmounts)
+        Group {
+            if let pageHeader {
+                SidePanelLayout(isPresented: $showInspector) {
+                    pageHeader
+                    listHeader
+                    tableArea
+                } panel: {
+                    inspectorContent
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+            } else {
+                VStack(spacing: 0) {
+                    listHeader
 
-                Divider()
-            }
-
-            // Badges filtres actifs
-            if transactionsController.filters.isActive {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        if let accountID = transactionsController.filters.accountID,
-                           let account = accountsController.getAccount(id: accountID) {
-                            FilterBadge(
-                                text: account.name,
-                                icon: "creditcard",
-                                onRemove: {
-                                    transactionsController.filterByAccount(nil)
-                                }
-                            )
-                        }
-                        
-                        if let type = transactionsController.filters.transactionType {
-                            FilterBadge(
-                                text: type.displayName,
-                                icon: type.icon,
-                                onRemove: {
-                                    var newFilters = transactionsController.filters
-                                    newFilters.transactionType = nil
-                                    transactionsController.updateFilters(newFilters)
-                                }
-                            )
-                        }
-                        
-                        if let categoryID = transactionsController.filters.categoryID {
-                            FilterBadge(
-                                text: categoriesController.getCategoryPath(for: categoryID),
-                                icon: "folder",
-                                onRemove: {
-                                    var newFilters = transactionsController.filters
-                                    newFilters.categoryID = nil
-                                    transactionsController.updateFilters(newFilters)
-                                }
-                            )
-                        }
-                        
-                        if let payeeID = transactionsController.filters.payeeID,
-                           let payee = payeesController.getPayee(id: payeeID) {
-                            FilterBadge(
-                                text: payee.name,
-                                icon: "person.crop.circle",
-                                onRemove: {
-                                    var newFilters = transactionsController.filters
-                                    newFilters.payeeID = nil
-                                    transactionsController.updateFilters(newFilters)
-                                }
-                            )
-                        }
-                        
-                        if !transactionsController.filters.showInvestmentOperations {
-                            FilterBadge(
-                                text: "Opérations sur titres masquées",
-                                icon: "chart.line.uptrend.xyaxis",
-                                onRemove: {
-                                    var newFilters = transactionsController.filters
-                                    newFilters.showInvestmentOperations = true
-                                    transactionsController.updateFilters(newFilters)
-                                }
-                            )
-                        }
-
-                        if transactionsController.filters.dateRange != .all {
-                            FilterBadge(
-                                text: transactionsController.filters.dateRange.displayName,
-                                icon: "calendar",
-                                onRemove: {
-                                    var newFilters = transactionsController.filters
-                                    newFilters.dateRange = .all
-                                    transactionsController.updateFilters(newFilters)
-                                }
-                            )
-                        }
-                        
-                        Button {
-                            transactionsController.resetFilters()
-                        } label: {
-                            Text("Tout effacer")
-                                .font(.caption)
-                                .foregroundStyle(Color.accentColor)
-                        }
-                        .buttonStyle(.plain)
+                    // L'inspecteur se loge sous l'en-tête de la page
+                    SidePanelLayout(isPresented: $showInspector) {
+                        tableArea
+                    } panel: {
+                        inspectorContent
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
                 }
-                
-                Divider()
-            }
-            
-            // Échéances à venir des récurrences (du compte affiché, ou de tous les comptes)
-            UpcomingOccurrencesBand(
-                accountID: transactionsController.filters.accountID,
-                currentBalance: upcomingBandBalance
-            )
-
-            // L'inspecteur se loge sous l'en-tête de la page
-            SidePanelLayout(isPresented: $showInspector) {
-                // Table des transactions
-                if transactionsController.isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if transactionsController.filteredTransactions.isEmpty && visibleOperations.isEmpty {
-                    emptyStateView
-                } else {
-                    transactionTable
-                    TableStatusBar(items: statusItems)
-                }
-            } panel: {
-                inspectorContent
             }
         }
         .toolbar {
@@ -296,6 +181,154 @@ struct TransactionListView: View {
             investmentsController: investmentsController,
             savingsPlansController: savingsPlansController
         ).cash(of: account)
+    }
+
+    // MARK: - En-tête et zone de la liste
+
+    /// Bandeau du compte, badges des filtres et échéances à venir
+    @ViewBuilder
+    private var listHeader: some View {
+        // Bandeau du compte sélectionné (le titre est dans la barre d'outils)
+        if let accountID = transactionsController.filters.accountID,
+           let account = accountsController.getAccount(id: accountID) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(headerSubtitle)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Text(headerBalanceLabel(for: account))
+                    .foregroundStyle(.secondary)
+
+                let balance = AccountValuation(
+                    transactionsController: transactionsController,
+                    investmentsController: investmentsController,
+                    savingsPlansController: savingsPlansController
+                ).cash(of: account)
+
+                Text(balance, format: .currency(code: account.currency))
+                    .fontWeight(.semibold)
+                    .monospacedDigit()
+                    .foregroundStyle(balance >= 0 ? Color.primary : Color.red)
+                    .privacyBlur(hidden: appSettings.hideAmounts)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+
+            Divider()
+        }
+
+        // Badges filtres actifs
+        if transactionsController.filters.isActive {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    if let accountID = transactionsController.filters.accountID,
+                       let account = accountsController.getAccount(id: accountID) {
+                        FilterBadge(
+                            text: account.name,
+                            icon: "creditcard",
+                            onRemove: {
+                                transactionsController.filterByAccount(nil)
+                            }
+                        )
+                    }
+                    
+                    if let type = transactionsController.filters.transactionType {
+                        FilterBadge(
+                            text: type.displayName,
+                            icon: type.icon,
+                            onRemove: {
+                                var newFilters = transactionsController.filters
+                                newFilters.transactionType = nil
+                                transactionsController.updateFilters(newFilters)
+                            }
+                        )
+                    }
+                    
+                    if let categoryID = transactionsController.filters.categoryID {
+                        FilterBadge(
+                            text: categoriesController.getCategoryPath(for: categoryID),
+                            icon: "folder",
+                            onRemove: {
+                                var newFilters = transactionsController.filters
+                                newFilters.categoryID = nil
+                                transactionsController.updateFilters(newFilters)
+                            }
+                        )
+                    }
+                    
+                    if let payeeID = transactionsController.filters.payeeID,
+                       let payee = payeesController.getPayee(id: payeeID) {
+                        FilterBadge(
+                            text: payee.name,
+                            icon: "person.crop.circle",
+                            onRemove: {
+                                var newFilters = transactionsController.filters
+                                newFilters.payeeID = nil
+                                transactionsController.updateFilters(newFilters)
+                            }
+                        )
+                    }
+                    
+                    if !transactionsController.filters.showInvestmentOperations {
+                        FilterBadge(
+                            text: "Opérations sur titres masquées",
+                            icon: "chart.line.uptrend.xyaxis",
+                            onRemove: {
+                                var newFilters = transactionsController.filters
+                                newFilters.showInvestmentOperations = true
+                                transactionsController.updateFilters(newFilters)
+                            }
+                        )
+                    }
+
+                    if transactionsController.filters.dateRange != .all {
+                        FilterBadge(
+                            text: transactionsController.filters.dateRange.displayName,
+                            icon: "calendar",
+                            onRemove: {
+                                var newFilters = transactionsController.filters
+                                newFilters.dateRange = .all
+                                transactionsController.updateFilters(newFilters)
+                            }
+                        )
+                    }
+                    
+                    Button {
+                        transactionsController.resetFilters()
+                    } label: {
+                        Text("Tout effacer")
+                            .font(.caption)
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+            }
+            
+            Divider()
+        }
+        
+        // Échéances à venir des récurrences (du compte affiché, ou de tous les comptes)
+        UpcomingOccurrencesBand(
+            accountID: transactionsController.filters.accountID,
+            currentBalance: upcomingBandBalance
+        )
+    }
+
+    @ViewBuilder
+    private var tableArea: some View {
+        // Table des transactions
+        if transactionsController.isLoading {
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if transactionsController.filteredTransactions.isEmpty && visibleOperations.isEmpty {
+            emptyStateView
+        } else {
+            transactionTable
+            TableStatusBar(items: statusItems)
+        }
     }
 
     // MARK: - Transaction Table

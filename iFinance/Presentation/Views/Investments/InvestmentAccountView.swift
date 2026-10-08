@@ -45,6 +45,68 @@ struct InvestmentAccountView: View {
     private func content(for account: Account) -> some View {
         let summary = self.summary(for: account)
 
+        Group {
+            if selectedTab == .cash {
+                // Les espèces hébergent l'en-tête du compte : l'inspecteur occupe toute la hauteur de la page
+                TransactionListView(pageHeader: AnyView(accountHeader(for: account, summary: summary)))
+            } else {
+                VStack(spacing: 0) {
+                    accountHeader(for: account, summary: summary)
+
+                    Group {
+                        switch selectedTab {
+                        case .positions:
+                            PositionListView(account: account, activeSheet: $activeSheet)
+                        case .operations:
+                            InvestmentOperationListView(account: account, activeSheet: $activeSheet)
+                        case .cash:
+                            EmptyView()
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .pageBackground()
+        .task(id: historyKey) {
+            loadPriceHistory()
+        }
+        .toolbar {
+            // Mise à jour des cours en ligne, seulement si elle est activée dans les réglages
+            if quoteService.isEnabled {
+                ToolbarItem(placement: .automatic) {
+                    QuoteUpdateToolbarButton(accountID: account.id)
+                }
+            }
+
+            // Ajout d'une opération ou d'une position, dans l'en-tête de la fenêtre
+            ToolbarItem(placement: .automatic) {
+                Menu {
+                    Button {
+                        activeSheet = .newOperation
+                    } label: {
+                        Label("Nouvelle opération", systemImage: "plus.circle")
+                    }
+
+                    Button {
+                        activeSheet = .newPosition
+                    } label: {
+                        Label("Nouvelle position", systemImage: "chart.line.uptrend.xyaxis")
+                    }
+                } label: {
+                    Label("Opération", systemImage: "chart.line.uptrend.xyaxis")
+                        .labelStyle(.titleAndIcon)
+                } primaryAction: {
+                    activeSheet = .newOperation
+                }
+                .help("Nouvelle opération sur titres. Maintenez le clic pour créer une position.")
+            }
+        }
+    }
+
+    /// En-tête du compte : chiffres clés, graphiques, puis barre d'onglets
+    private func accountHeader(for account: Account, summary: Summary) -> some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: NativeMetrics.groupSpacing) {
                 topBar(for: account)
@@ -98,54 +160,6 @@ struct InvestmentAccountView: View {
             .padding(.bottom, 8)
 
             Divider()
-
-            Group {
-                switch selectedTab {
-                case .positions:
-                    PositionListView(account: account, activeSheet: $activeSheet)
-                case .operations:
-                    InvestmentOperationListView(account: account, activeSheet: $activeSheet)
-                case .cash:
-                    TransactionListView()
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .pageBackground()
-        .task(id: historyKey) {
-            loadPriceHistory()
-        }
-        .toolbar {
-            // Mise à jour des cours en ligne, seulement si elle est activée dans les réglages
-            if quoteService.isEnabled {
-                ToolbarItem(placement: .automatic) {
-                    QuoteUpdateToolbarButton(accountID: account.id)
-                }
-            }
-
-            // Ajout d'une opération ou d'une position, dans l'en-tête de la fenêtre
-            ToolbarItem(placement: .automatic) {
-                Menu {
-                    Button {
-                        activeSheet = .newOperation
-                    } label: {
-                        Label("Nouvelle opération", systemImage: "plus.circle")
-                    }
-
-                    Button {
-                        activeSheet = .newPosition
-                    } label: {
-                        Label("Nouvelle position", systemImage: "chart.line.uptrend.xyaxis")
-                    }
-                } label: {
-                    Label("Opération", systemImage: "chart.line.uptrend.xyaxis")
-                        .labelStyle(.titleAndIcon)
-                } primaryAction: {
-                    activeSheet = .newOperation
-                }
-                .help("Nouvelle opération sur titres. Maintenez le clic pour créer une position.")
-            }
         }
     }
 
