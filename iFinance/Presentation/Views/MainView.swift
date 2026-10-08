@@ -146,6 +146,10 @@ struct MainView: View {
                         Label("Vue d'ensemble", systemImage: "square.grid.2x2")
                     }
 
+                    NavigationLink(value: SidebarItem.reports) {
+                        Label("Rapports", systemImage: "chart.bar")
+                    }
+
                     NavigationLink(value: SidebarItem.allTransactions) {
                         Label("Toutes les transactions", systemImage: "list.bullet")
                     }
@@ -203,10 +207,6 @@ struct MainView: View {
                         Label("Récurrent", systemImage: "arrow.triangle.2.circlepath")
                             // Échéances arrivées à terme, à valider ou à passer
                             .badge(recurringController.dueCount)
-                    }
-
-                    NavigationLink(value: SidebarItem.reports) {
-                        Label("Rapports", systemImage: "chart.bar")
                     }
                 }
             }

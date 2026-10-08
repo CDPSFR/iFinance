@@ -8,6 +8,8 @@ class SavingsPlansController: ObservableObject {
     @Published var valuations: [UUID: [ValuationSnapshot]] = [:]
     /// Origine / disponibilité des apports, par compte puis par transaction
     @Published var details: [UUID: [UUID: ContributionDetail]] = [:]
+    /// Réglages saisis pour chaque plan (plafond d'abondement, plafonds de déduction, TMI)
+    @Published var settings: [UUID: SavingsPlanSettings] = [:]
     @Published var isLoading = false
     @Published var error: Error?
 
@@ -25,6 +27,7 @@ class SavingsPlansController: ObservableObject {
 
         valuations = [:]
         details = [:]
+        settings = [:]
         for account in accounts where account.type.trackingMode == .valuations {
             await reload(accountID: account.id)
         }
@@ -35,6 +38,7 @@ class SavingsPlansController: ObservableObject {
             valuations[accountID] = try await repository.fetchValuations(for: accountID)
             let fetched = try await repository.fetchContributionDetails(for: accountID)
             details[accountID] = Dictionary(fetched.map { ($0.transactionID, $0) }, uniquingKeysWith: { _, last in last })
+            settings[accountID] = try await repository.fetchSettings(for: accountID)
         } catch {
             self.error = error
             print("❌ Erreur chargement plan d'épargne: \(error)")
@@ -82,6 +86,22 @@ class SavingsPlansController: ObservableObject {
         } catch {
             self.error = error
             print("❌ Erreur enregistrement apport: \(error)")
+        }
+    }
+
+    // MARK: - Settings
+
+    func planSettings(for accountID: UUID) -> SavingsPlanSettings {
+        settings[accountID] ?? SavingsPlanSettings(accountID: accountID)
+    }
+
+    func saveSettings(_ newSettings: SavingsPlanSettings) async {
+        do {
+            try await repository.saveSettings(newSettings)
+            settings[newSettings.accountID] = newSettings
+        } catch {
+            self.error = error
+            print("❌ Erreur enregistrement réglages du plan: \(error)")
         }
     }
 

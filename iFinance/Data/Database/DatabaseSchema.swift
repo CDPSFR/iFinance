@@ -17,7 +17,8 @@ struct DatabaseSchema {
         createInvestmentTransactionsTable,
         createPositionPricesTable,
         createAccountValuationsTable,
-        createContributionDetailsTable
+        createContributionDetailsTable,
+        createSavingsPlanSettingsTable
     ]
     
     static let migrationStatements: [String] = [
@@ -35,7 +36,9 @@ struct DatabaseSchema {
         // Recurring templates
         "ALTER TABLE recurring_templates ADD COLUMN next_due_date TEXT;",
         "ALTER TABLE recurring_templates ADD COLUMN auto_post INTEGER NOT NULL DEFAULT 0;",
-        "ALTER TABLE recurring_templates ADD COLUMN is_variable INTEGER NOT NULL DEFAULT 0;"
+        "ALTER TABLE recurring_templates ADD COLUMN is_variable INTEGER NOT NULL DEFAULT 0;",
+        // Contribution details (PER : versement déduit ou non du revenu imposable)
+        "ALTER TABLE contribution_details ADD COLUMN is_deducted INTEGER;"
     ]
 
     static let createIndexStatements: [String] = [
@@ -339,6 +342,18 @@ struct DatabaseSchema {
         origin TEXT NOT NULL,
         available_on TEXT,
         FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE
+    );
+    """
+
+    // MARK: - Savings Plan Settings (réglages propres à chaque plan)
+
+    static let createSavingsPlanSettingsTable = """
+    CREATE TABLE IF NOT EXISTS savings_plan_settings (
+        account_id TEXT PRIMARY KEY,
+        matching_cap REAL,
+        deduction_ceilings TEXT,
+        marginal_rate REAL,
+        FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
     );
     """
 }

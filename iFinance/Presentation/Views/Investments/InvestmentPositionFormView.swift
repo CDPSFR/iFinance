@@ -88,7 +88,7 @@ struct InvestmentPositionFormView: View {
     static func defaultAssetType(for accountType: AccountType) -> AssetType {
         switch accountType {
         case .crypto: return .crypto
-        case .perco, .pee, .lifeInsurance, .retirement: return .mutualFund
+        case .perco, .pee, .lifeInsurance, .retirement, .article83: return .mutualFund
         case .pea: return .etf
         default: return .stock
         }

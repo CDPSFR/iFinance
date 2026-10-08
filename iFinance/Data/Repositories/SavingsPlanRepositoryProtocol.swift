@@ -11,4 +11,8 @@ protocol SavingsPlanRepositoryProtocol {
     func fetchContributionDetails(for accountID: UUID) async throws -> [ContributionDetail]
     func saveContributionDetail(_ detail: ContributionDetail) async throws
     func deleteContributionDetail(transactionID: UUID) async throws
+
+    // Réglages du plan
+    func fetchSettings(for accountID: UUID) async throws -> SavingsPlanSettings?
+    func saveSettings(_ settings: SavingsPlanSettings) async throws
 }

@@ -10,7 +10,8 @@ struct ContributionDetailMapper {
         return ContributionDetailDTO(
             transactionID: detail.transactionID.uuidString,
             origin: detail.origin.rawValue,
-            availableOn: detail.availableOn.map { dateFormatter.string(from: $0) }
+            availableOn: detail.availableOn.map { dateFormatter.string(from: $0) },
+            isDeducted: detail.isDeducted.map { $0 ? 1 : 0 }
         )
     }
 
@@ -23,7 +24,8 @@ struct ContributionDetailMapper {
         return ContributionDetail(
             transactionID: transactionID,
             origin: origin,
-            availableOn: dto.availableOn.flatMap { dateFormatter.date(from: $0) }
+            availableOn: dto.availableOn.flatMap { dateFormatter.date(from: $0) },
+            isDeducted: dto.isDeducted.map { $0 != 0 }
         )
     }
 
@@ -33,10 +35,14 @@ struct ContributionDetailMapper {
             return nil
         }
 
+        // SQLite renvoie les entiers en Int64
+        let isDeducted: Int? = (row["is_deducted"] as? Int64).map { Int($0) } ?? (row["is_deducted"] as? Int)
+
         return fromDTO(ContributionDetailDTO(
             transactionID: transactionID,
             origin: origin,
-            availableOn: row["available_on"] as? String
+            availableOn: row["available_on"] as? String,
+            isDeducted: isDeducted
         ))
     }
 }

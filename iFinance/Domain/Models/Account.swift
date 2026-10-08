@@ -61,6 +61,7 @@ enum AccountType: String, Codable, CaseIterable {
     case lifeInsurance = "life_insurance" // Assurance vie
     case perco = "perco"                 // PERCO / PERECO
     case pee = "pee"                     // PEE
+    case article83 = "article_83"        // Article 83 (retraite supplémentaire d'entreprise)
     // Dettes
     case loan = "loan"                   // Prêt
     // Autre
@@ -84,6 +85,7 @@ enum AccountType: String, Codable, CaseIterable {
         case .lifeInsurance: return "Assurance vie"
         case .perco: return "PERCO / PERECO"
         case .pee: return "PEE"
+        case .article83: return "Article 83"
         case .loan: return "Prêt"
         case .other: return "Autre"
         }
@@ -103,6 +105,7 @@ enum AccountType: String, Codable, CaseIterable {
         case .retirement: return "calendar"
         case .lifeInsurance: return "umbrella.fill"
         case .perco, .pee: return "briefcase.fill"
+        case .article83: return "building.columns.fill"
         case .loan: return "house.fill"
         case .other: return "folder.fill"
         }
@@ -113,7 +116,7 @@ enum AccountType: String, Codable, CaseIterable {
         case .checking, .creditCard: return .liquidity
         case .livretA, .ldds, .lep, .pel, .cel, .termDeposit, .savings: return .savings
         case .investment, .pea, .crypto: return .investment
-        case .retirement, .lifeInsurance, .perco, .pee: return .retirement
+        case .retirement, .lifeInsurance, .perco, .pee, .article83: return .retirement
         case .loan: return .debt
         case .other: return .other
         }
@@ -137,7 +140,7 @@ enum AccountType: String, Codable, CaseIterable {
     var availabilityRule: AvailabilityRule {
         switch self {
         case .pee: return .lockedYears(5)
-        case .perco, .retirement: return .untilRetirement
+        case .perco, .retirement, .article83: return .untilRetirement
         default: return .immediate
         }
     }

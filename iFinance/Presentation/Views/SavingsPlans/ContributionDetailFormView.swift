@@ -11,6 +11,7 @@ struct ContributionDetailFormView: View {
     @State private var origin: ContributionOrigin
     @State private var availability: AvailabilityChoice
     @State private var availableDate: Date
+    @State private var isDeducted: Bool
 
     init(account: Account, flow: PlanFlow) {
         self.account = account
@@ -18,6 +19,21 @@ struct ContributionDetailFormView: View {
         _origin = State(initialValue: flow.origin ?? .voluntary)
         _availability = State(initialValue: AvailabilityChoice(availableOn: flow.availableOn, contributionDate: flow.date))
         _availableDate = State(initialValue: flow.availableOn ?? flow.date)
+        _isDeducted = State(initialValue: flow.isDeducted)
+    }
+
+    /// PER : le versement volontaire peut être déduit du revenu imposable (compartiment 1)
+    private var asksDeduction: Bool {
+        SavingsPlanPageKind(account.type) == .per && origin == .voluntary
+    }
+
+    /// Origines du plan, plus celle de l'apport si elle n'en fait pas partie
+    private var origins: [ContributionOrigin] {
+        var list = ContributionOrigin.origins(for: account.type)
+        if let current = flow.origin, !list.contains(current) {
+            list.append(current)
+        }
+        return list
     }
 
     var body: some View {
@@ -30,14 +46,20 @@ struct ContributionDetailFormView: View {
             Form {
                 Section {
                     Picker("Origine", selection: $origin) {
-                        ForEach(ContributionOrigin.allCases, id: \.self) { origin in
-                            Label(origin.displayName, systemImage: origin.icon).tag(origin)
+                        ForEach(origins, id: \.self) { origin in
+                            Label(origin.displayName(for: account.type), systemImage: origin.icon).tag(origin)
                         }
                     }
                 } footer: {
                     Text("Le montant et la date se modifient depuis l'onglet Mouvements.")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                }
+
+                if asksDeduction {
+                    Section {
+                        Toggle("Déduit du revenu imposable", isOn: $isDeducted)
+                    }
                 }
 
                 Section {
@@ -56,7 +78,8 @@ struct ContributionDetailFormView: View {
                             ContributionDetail(
                                 transactionID: transactionID,
                                 origin: origin,
-                                availableOn: availability.availableOn(contributionDate: flow.date, chosenDate: availableDate)
+                                availableOn: availability.availableOn(contributionDate: flow.date, chosenDate: availableDate),
+                                isDeducted: asksDeduction ? isDeducted : nil
                             ),
                             accountID: account.id
                         )
@@ -67,7 +90,7 @@ struct ContributionDetailFormView: View {
                 .disabled(flow.transactionID == nil)
             }
         }
-        .frame(width: 520, height: 400)
+        .frame(width: 520, height: 440)
         .sheetBackground()
     }
 }

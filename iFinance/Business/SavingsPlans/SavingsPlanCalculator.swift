@@ -9,6 +9,7 @@ struct PlanFlow: Identifiable, Equatable {
     let availableOn: Date?              // nil = jusqu'à la retraite
     let transactionID: UUID?            // nil pour le solde initial
     let hasDetail: Bool                 // false = origine / disponibilité déduites par défaut
+    var isDeducted: Bool = true         // PER : versement volontaire déduit du revenu imposable
 
     var isContribution: Bool { amount > 0 }
     var isInitialBalance: Bool { transactionID == nil }
@@ -92,7 +93,8 @@ enum SavingsPlanCalculator {
                 origin: isContribution ? (detail?.origin ?? defaultOrigin(for: transaction)) : nil,
                 availableOn: detail.map { $0.availableOn } ?? rule.defaultAvailability(for: transaction.date),
                 transactionID: transaction.id,
-                hasDetail: detail != nil
+                hasDetail: detail != nil,
+                isDeducted: detail?.isDeducted ?? true
             ))
         }
 

@@ -16,6 +16,7 @@ struct ContributionFormView: View {
     @State private var memo = ""
     @State private var availability: AvailabilityChoice
     @State private var availableDate: Date
+    @State private var isDeducted = true
 
     @State private var isSaving = false
     @State private var errorMessage: String?
@@ -26,6 +27,12 @@ struct ContributionFormView: View {
         let defaultDate = account.type.availabilityRule.defaultAvailability(for: now)
         _availability = State(initialValue: AvailabilityChoice(availableOn: defaultDate, contributionDate: now))
         _availableDate = State(initialValue: defaultDate ?? now)
+        _origin = State(initialValue: ContributionOrigin.origins(for: account.type).first ?? .voluntary)
+    }
+
+    /// PER : le versement volontaire peut être déduit du revenu imposable (compartiment 1)
+    private var asksDeduction: Bool {
+        SavingsPlanPageKind(account.type) == .per && origin == .voluntary
     }
 
     var body: some View {
@@ -35,8 +42,8 @@ struct ContributionFormView: View {
             Form {
                 Section {
                     Picker("Origine", selection: $origin) {
-                        ForEach(ContributionOrigin.allCases, id: \.self) { origin in
-                            Label(origin.displayName, systemImage: origin.icon).tag(origin)
+                        ForEach(ContributionOrigin.origins(for: account.type), id: \.self) { origin in
+                            Label(origin.displayName(for: account.type), systemImage: origin.icon).tag(origin)
                         }
                     }
 
@@ -60,12 +67,26 @@ struct ContributionFormView: View {
                         }
                     }
                 } footer: {
-                    if origin.isEmployerFunded {
+                    if origin == .employeeMandatory {
+                        Text("Cotisation prélevée sur votre salaire, telle qu'elle figure sur votre fiche de paie.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else if origin.isEmployerFunded {
                         Text("Saisissez le montant net investi, après CSG/CRDS, tel qu'il figure sur votre relevé.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     } else if sourceAccountID != nil {
                         Text("Un virement est créé : le compte source est débité du même montant.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                if asksDeduction {
+                    Section {
+                        Toggle("Déduit du revenu imposable", isOn: $isDeducted)
+                    } footer: {
+                        Text("Un versement déduit est imposé à la sortie en capital ; un versement non déduit ne l'est que sur ses gains.")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -150,7 +171,7 @@ struct ContributionFormView: View {
                     date: date,
                     amount: value,
                     type: .credit,
-                    memo: trimmedMemo.isEmpty ? origin.displayName : trimmedMemo
+                    memo: trimmedMemo.isEmpty ? origin.displayName(for: account.type) : trimmedMemo
                 )
             }
 
@@ -164,7 +185,8 @@ struct ContributionFormView: View {
                 ContributionDetail(
                     transactionID: transaction.id,
                     origin: origin,
-                    availableOn: availability.availableOn(contributionDate: date, chosenDate: availableDate)
+                    availableOn: availability.availableOn(contributionDate: date, chosenDate: availableDate),
+                    isDeducted: asksDeduction ? isDeducted : nil
                 ),
                 accountID: account.id
             )
