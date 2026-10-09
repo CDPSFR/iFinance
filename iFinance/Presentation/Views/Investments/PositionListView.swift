@@ -3,13 +3,14 @@ import SwiftUI
 struct PositionListView: View {
     let account: Account
     @Binding var activeSheet: InvestmentSheet?
+    /// Sélection et demande de suppression, partagées avec l'inspecteur de la page
+    @Binding var selection: Set<InvestmentPosition.ID>
+    @Binding var positionToDelete: InvestmentPosition?
 
     @EnvironmentObject var investmentsController: InvestmentsController
     @EnvironmentObject var appSettings: AppSettings
 
     @State private var showClosedPositions = false
-    @State private var positionToDelete: InvestmentPosition?
-    @State private var selection: Set<InvestmentPosition.ID> = []
 
     var body: some View {
         VStack(spacing: 0) {

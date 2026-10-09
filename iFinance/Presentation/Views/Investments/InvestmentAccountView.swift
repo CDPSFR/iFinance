@@ -16,6 +16,12 @@ struct InvestmentAccountView: View {
     @State private var allocationMode: InvestmentAllocationChart.Mode = .position
     @State private var priceHistory: [UUID: [PositionPrice]] = [:]
     @AppStorage("showInvestmentCharts") private var showCharts = true
+    /// Même réglage que l'inspecteur des listes de transactions (onglet Espèces)
+    @AppStorage("showTransactionInspector") private var showInspector = true
+    @State private var selectedPositions: Set<InvestmentPosition.ID> = []
+    @State private var selectedOperations: Set<InvestmentTransaction.ID> = []
+    @State private var positionToDelete: InvestmentPosition?
+    @State private var operationToDelete: InvestmentTransaction?
 
     enum Tab: String, CaseIterable, Identifiable {
         case positions = "Positions"
@@ -50,20 +56,25 @@ struct InvestmentAccountView: View {
                 // Les espèces hébergent l'en-tête du compte : l'inspecteur occupe toute la hauteur de la page
                 TransactionListView(pageHeader: AnyView(accountHeader(for: account, summary: summary)))
             } else {
-                VStack(spacing: 0) {
+                // Positions et opérations : inspecteur de la ligne sélectionnée, sur toute la hauteur de la page
+                SidePanelLayout(isPresented: $showInspector) {
                     accountHeader(for: account, summary: summary)
 
                     Group {
                         switch selectedTab {
                         case .positions:
-                            PositionListView(account: account, activeSheet: $activeSheet)
+                            PositionListView(account: account, activeSheet: $activeSheet,
+                                             selection: $selectedPositions, positionToDelete: $positionToDelete)
                         case .operations:
-                            InvestmentOperationListView(account: account, activeSheet: $activeSheet)
+                            InvestmentOperationListView(account: account, activeSheet: $activeSheet,
+                                                        selection: $selectedOperations, operationToDelete: $operationToDelete)
                         case .cash:
                             EmptyView()
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                } panel: {
+                    inspector(for: account)
                 }
             }
         }
@@ -73,6 +84,18 @@ struct InvestmentAccountView: View {
             loadPriceHistory()
         }
         .toolbar {
+            // Sur l'onglet Espèces, la liste des transactions fournit son propre bouton
+            if selectedTab != .cash {
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        showInspector.toggle()
+                    } label: {
+                        Label("Inspecteur", systemImage: "sidebar.right")
+                    }
+                    .help("Afficher ou masquer l'inspecteur")
+                }
+            }
+
             // Mise à jour des cours en ligne, seulement si elle est activée dans les réglages
             if quoteService.isEnabled {
                 ToolbarItem(placement: .automatic) {
@@ -103,6 +126,59 @@ struct InvestmentAccountView: View {
                 .help("Nouvelle opération sur titres. Maintenez le clic pour créer une position.")
             }
         }
+    }
+
+    // MARK: - Inspecteur
+
+    @ViewBuilder
+    private func inspector(for account: Account) -> some View {
+        switch selectedTab {
+        case .positions:
+            if selectedPositions.count == 1, let id = selectedPositions.first,
+               let position = investmentsController.position(id: id, in: account.id) {
+                PositionInspector(
+                    position: position,
+                    weight: weight(of: position, in: account),
+                    history: priceHistory[position.id] ?? [],
+                    onUpdatePrice: { activeSheet = .price(position) },
+                    onNewOperation: { activeSheet = .newOperationFor(position) },
+                    onEdit: { activeSheet = .editPosition(position) },
+                    onDelete: { positionToDelete = position }
+                )
+            } else {
+                ContentUnavailableView(
+                    "Aucune sélection",
+                    systemImage: "sidebar.right",
+                    description: Text("Sélectionnez une position pour afficher son détail.")
+                )
+            }
+        case .operations:
+            if selectedOperations.count == 1, let id = selectedOperations.first,
+               let operation = investmentsController.operations[account.id]?.first(where: { $0.id == id }) {
+                OperationInspector(
+                    operation: operation,
+                    positionName: investmentsController.position(id: operation.positionID, in: account.id)?.name,
+                    currency: account.currency,
+                    onEdit: { activeSheet = .editOperation(operation) },
+                    onDelete: { operationToDelete = operation }
+                )
+            } else {
+                ContentUnavailableView(
+                    "Aucune sélection",
+                    systemImage: "sidebar.right",
+                    description: Text("Sélectionnez une opération pour afficher son détail.")
+                )
+            }
+        case .cash:
+            EmptyView()
+        }
+    }
+
+    /// Part de la position dans la valeur des titres du compte
+    private func weight(of position: InvestmentPosition, in account: Account) -> Double {
+        let total = investmentsController.marketValue(for: account.id)
+        guard total > 0 else { return 0 }
+        return NSDecimalNumber(decimal: PositionCalculator.marketValue(position) / total).doubleValue
     }
 
     /// En-tête du compte : chiffres clés, graphiques, puis barre d'onglets

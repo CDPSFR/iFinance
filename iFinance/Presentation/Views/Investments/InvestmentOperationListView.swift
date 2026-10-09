@@ -3,12 +3,13 @@ import SwiftUI
 struct InvestmentOperationListView: View {
     let account: Account
     @Binding var activeSheet: InvestmentSheet?
+    /// Sélection et demande de suppression, partagées avec l'inspecteur de la page
+    @Binding var selection: Set<InvestmentTransaction.ID>
+    @Binding var operationToDelete: InvestmentTransaction?
 
     @EnvironmentObject var investmentsController: InvestmentsController
     @EnvironmentObject var appSettings: AppSettings
 
-    @State private var selection: Set<InvestmentTransaction.ID> = []
-    @State private var operationToDelete: InvestmentTransaction?
     @State private var deleteError: String?
 
     var body: some View {
