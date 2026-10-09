@@ -27,6 +27,8 @@ struct QIFImportView: View {
     @State private var importError: String? = nil
     /// Lignes dont l'utilisateur a retiré le rapprochement avec une récurrence
     @State private var unlinked: Set<Int> = []
+    /// Libellés bancaires simplifiés en noms de bénéficiaires (« CB CARREFOUR FACT 280924 » → « CARREFOUR »)
+    @State private var simplifyLabels = true
     @State private var reconciledCount = 0
 
     private var currency: String { booksController.currentBook?.currency ?? "EUR" }
@@ -165,6 +167,8 @@ struct QIFImportView: View {
 
             dateFormatBar
 
+            payeeLabelBar
+
             if !matches.isEmpty {
                 recurringSummary(matches)
             }
@@ -184,8 +188,15 @@ struct QIFImportView: View {
                         .disabled(tx.date == nil)
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(tx.payee ?? tx.memo ?? "Transaction")
+                            Text(payeeName(for: tx) ?? tx.memo ?? "Transaction")
                                 .font(.body)
+                            // Libellé d'origine, quand il a été simplifié (il sera conservé dans la note)
+                            if let raw = tx.payee, let name = payeeName(for: tx), name != raw {
+                                Text(raw)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                            }
                             HStack(spacing: 6) {
                                 if let date = tx.date {
                                     Text(date, format: .dateTime.day().month().year())
@@ -274,6 +285,41 @@ struct QIFImportView: View {
         }
         let count = analysis.order == .dayMonth ? analysis.dayFirstCount : analysis.monthFirstCount
         return ("Format \(analysis.order.displayName) détecté sur \(count) date(s) sans ambiguïté.", false)
+    }
+
+    // MARK: - Bénéficiaires
+
+    /// Nom du bénéficiaire tiré de la ligne : libellé simplifié, ou libellé brut
+    private func payeeName(for tx: QIFTransaction) -> String? {
+        guard let raw = tx.payee?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else { return nil }
+        return simplifyLabels ? BankLabelCleaner.payeeName(from: raw) : raw
+    }
+
+    /// Note de la transaction importée : mémo du fichier, libellé d'origine s'il a été simplifié, catégorie du fichier
+    private func importedMemo(for tx: QIFTransaction) -> String? {
+        let raw = tx.payee?.trimmingCharacters(in: .whitespaces)
+        let rawLabel = (raw != nil && raw != payeeName(for: tx)) ? raw : nil
+        return [tx.memo, rawLabel, tx.category].compactMap { $0 }.joined(separator: " – ").nilIfEmpty
+    }
+
+    /// Case « Simplifier les libellés » et effet sur le nombre de bénéficiaires
+    private var payeeLabelBar: some View {
+        let raw = Set(parsedTransactions.compactMap { $0.payee?.trimmingCharacters(in: .whitespaces).lowercased() }.filter { !$0.isEmpty })
+        let simplified = Set(parsedTransactions.compactMap { payeeName(for: $0)?.lowercased() })
+
+        return HStack(spacing: 8) {
+            Toggle("Simplifier les libellés en bénéficiaires", isOn: $simplifyLabels)
+                .toggleStyle(.checkbox)
+                .help("Retire « CB », « PRLV SEPA », « FACT 280924 », les dates et références : les opérations d'un même commerçant partagent un bénéficiaire. Le libellé d'origine est gardé dans la note.")
+            Spacer()
+            if simplifyLabels, simplified.count < raw.count {
+                Text("\(raw.count) libellés → \(simplified.count) bénéficiaires")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 8)
     }
 
     // MARK: - Récurrences
@@ -497,7 +543,7 @@ struct QIFImportView: View {
         for (index, tx) in zip(importedIndices, toImport) {
             // Une ligne rattachée prend le bénéficiaire de sa récurrence ; un virement n'en a pas
             if let template = settled[index], template.payeeID != nil || template.isTransfer { continue }
-            guard let name = tx.payee?.trimmingCharacters(in: .whitespaces), !name.isEmpty else { continue }
+            guard let name = payeeName(for: tx) else { continue }
             let nameKey = key(name)
             if payeesByKey[nameKey] == nil, seen.insert(nameKey).inserted {
                 newNames.append(name)
@@ -520,12 +566,10 @@ struct QIFImportView: View {
             var transferLinks: [Transaction] = []
             let transactions: [Transaction] = zip(importedIndices, toImport).flatMap { index, tx -> [Transaction] in
                 guard let date = tx.date else { return [] }
-                let payee = tx.payee
-                    .map { $0.trimmingCharacters(in: .whitespaces) }
-                    .flatMap { payeesByKey[key($0)] }
+                let payee = payeeName(for: tx).flatMap { payeesByKey[key($0)] }
                 let amount = tx.amount ?? 0
                 let template = settled[index]
-                let memo = [tx.memo, tx.category].compactMap { $0 }.joined(separator: " – ").nilIfEmpty
+                let memo = importedMemo(for: tx)
 
                 if let template, template.isTransfer,
                    let otherAccountID = accountID == template.accountID ? template.toAccountID : template.accountID {
