@@ -9,6 +9,7 @@ struct MainView: View {
     @EnvironmentObject var transactionsController: TransactionsController
     @EnvironmentObject var investmentsController: InvestmentsController
     @EnvironmentObject var savingsPlansController: SavingsPlansController
+    @EnvironmentObject var accountTermsController: AccountTermsController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var payeesController: PayeesController
     @EnvironmentObject var budgetsController: BudgetsController
@@ -121,6 +122,7 @@ struct MainView: View {
                 )
                 await investmentsController.load(for: accountsController.activeAccounts)
                 await savingsPlansController.load(for: accountsController.activeAccounts)
+                await accountTermsController.load()
                 await budgetsController.loadBudgets(for: bookID)
                 await projectsController.loadProjects(for: bookID)
             }

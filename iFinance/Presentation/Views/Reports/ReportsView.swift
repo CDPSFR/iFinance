@@ -27,6 +27,10 @@ struct ReportsView: View {
         case netWorth = "Patrimoine net"
         case balance = "Évolution du solde"
         case monthlyBalance = "Solde mensuel"
+        case liquidity = "Pyramide de liquidité"
+        case investments = "Performance des placements"
+        case retirement = "Retraite et épargne salariale"
+        case debts = "Dettes et crédits"
 
         var icon: String {
             switch self {
@@ -42,6 +46,10 @@ struct ReportsView: View {
             case .accounts, .incomeAccounts: return "creditcard"
             case .balance: return "chart.line.uptrend.xyaxis"
             case .monthlyBalance: return "chart.bar.xaxis"
+            case .liquidity: return "drop"
+            case .investments: return "chart.line.uptrend.xyaxis.circle"
+            case .retirement: return "figure.walk"
+            case .debts: return "house"
             }
         }
 
@@ -52,7 +60,14 @@ struct ReportsView: View {
             case .categories, .categoryTrends, .payees, .accounts,
                  .incomeCategoryTrends, .incomeCategories, .incomePayees, .incomeAccounts: return .breakdown
             case .netWorth, .balance, .monthlyBalance: return .balances
+            case .liquidity, .investments, .retirement, .debts: return .longTerm
             }
+        }
+
+        /// Rapport filtré par la période et le compte de la barre d'outils
+        /// (les rapports patrimoniaux donnent des valeurs au jour)
+        var usesTransactionFilters: Bool {
+            group != .longTerm
         }
     }
 
@@ -60,6 +75,7 @@ struct ReportsView: View {
         case overview = "Vue générale"
         case breakdown = "Dépenses et revenus"
         case balances = "Soldes et patrimoine"
+        case longTerm = "Placements, retraite et dettes"
     }
 
     /// Hauteur des titres de la liste : celle du bandeau des filtres, pour que le premier titre
@@ -94,7 +110,9 @@ struct ReportsView: View {
             VStack(spacing: 0) {
             // Filtres actifs, en étiquettes (comme la liste des transactions) ;
             // la période et les comptes se choisissent aussi dans la barre d'outils
-            ActiveFiltersBar(periodTitle: periodTitle, showsInvestmentOperationsFilter: false)
+            if selectedTab.usesTransactionFilters {
+                ActiveFiltersBar(periodTitle: periodTitle, showsInvestmentOperationsFilter: false)
+            }
 
             // Contenu du graphique
             contentView
@@ -112,6 +130,7 @@ struct ReportsView: View {
             }
         }
         .toolbar {
+            if selectedTab.usesTransactionFilters {
             ToolbarItemGroup(placement: .automatic) {
                 // Période
                 Menu {
@@ -139,6 +158,7 @@ struct ReportsView: View {
                         .labelStyle(.titleAndIcon)
                 }
                 .help("Comptes pris en compte")
+            }
             }
         }
     }
@@ -221,6 +241,14 @@ struct ReportsView: View {
             PayeesChartView(flow: .income)
         case .cashFlow:
             CashFlowChartView()
+        case .liquidity:
+            LiquidityReportView()
+        case .investments:
+            InvestmentPerformanceReportView()
+        case .retirement:
+            RetirementReportView()
+        case .debts:
+            DebtReportView()
         }
     }
 }

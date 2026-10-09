@@ -19,6 +19,7 @@ struct AccountFormView: View {
     @State private var isHiddenFromSidebar: Bool
     @State private var isExcludedFromBudgets: Bool
     @State private var isCreating = false
+    @State private var showTerms = false
     
     let availableCurrencies = ["EUR", "USD", "GBP", "CHF", "CAD", "JPY", "AUD"]
     
@@ -89,6 +90,21 @@ struct AccountFormView: View {
                     TextField("BIC", text: $bic, prompt: Text("Facultatif"))
                 }
 
+                // Conditions du prêt ou frais : utilisés par les rapports patrimoniaux
+                if accountToEdit != nil, hasTerms {
+                    Section {
+                        Button(selectedType.group == .debt ? "Conditions du prêt…" : "Frais du compte…") {
+                            showTerms = true
+                        }
+                    } footer: {
+                        Text(selectedType.group == .debt
+                             ? "Montant emprunté, taux, durée et assurance : ils alimentent le rapport « Dettes et crédits »."
+                             : "Frais annuels en pourcentage de l’encours : ils alimentent le rapport « Performance des placements ».")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
                 Section {
                     Toggle("Inclure dans le patrimoine net", isOn: inverted($isExcludedFromReports))
 
@@ -118,6 +134,16 @@ struct AccountFormView: View {
         }
         .frame(width: 520, height: 700)
         .sheetBackground()
+        .sheet(isPresented: $showTerms) {
+            if let account = accountToEdit {
+                AccountTermsFormView(account: account)
+            }
+        }
+    }
+
+    /// Types de compte qui ont des conditions (prêt) ou des frais (placements)
+    private var hasTerms: Bool {
+        selectedType.group == .debt || selectedType.group == .investment || selectedType == .lifeInsurance
     }
 
     /// Options affichées à l'endroit (« inclure », « afficher ») mais stockées à l'envers

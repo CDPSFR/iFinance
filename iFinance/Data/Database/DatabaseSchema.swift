@@ -18,7 +18,8 @@ struct DatabaseSchema {
         createPositionPricesTable,
         createAccountValuationsTable,
         createContributionDetailsTable,
-        createSavingsPlanSettingsTable
+        createSavingsPlanSettingsTable,
+        createAccountTermsTable
     ]
     
     static let migrationStatements: [String] = [
@@ -353,6 +354,22 @@ struct DatabaseSchema {
         matching_cap REAL,
         deduction_ceilings TEXT,
         marginal_rate REAL,
+        FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+    );
+    """
+
+    // MARK: - Account Terms (conditions de prêt et frais des comptes)
+
+    static let createAccountTermsTable = """
+    CREATE TABLE IF NOT EXISTS account_terms (
+        account_id TEXT PRIMARY KEY,
+        loan_principal REAL,
+        loan_rate REAL,
+        loan_months INTEGER,
+        loan_first_payment TEXT,
+        loan_insurance REAL,
+        loan_is_mortgage INTEGER,
+        fee_rate REAL,
         FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
     );
     """
