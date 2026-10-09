@@ -6,6 +6,7 @@ struct TransactionRowView: View {
     let onDelete: () -> Void
     
     @EnvironmentObject var payeesController: PayeesController
+    @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var appSettings: AppSettings
     
@@ -27,6 +28,9 @@ struct TransactionRowView: View {
                 if let payeeID = transaction.payeeID,
                    let payee = payeesController.getPayee(id: payeeID) {
                     Text(payee.name)
+                        .font(.headline)
+                } else if let transfer = accountsController.transferLabel(for: transaction) {
+                    Text(transfer)
                         .font(.headline)
                 } else if let memo = transaction.memo, !memo.isEmpty {
                     Text(memo)

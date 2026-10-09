@@ -557,7 +557,7 @@ struct TransactionListView: View {
 
         return InspectorContainer {
             InspectorHeader(
-                title: payee?.name ?? transaction.type.displayName,
+                title: payee?.name ?? accountsController.transferLabel(for: transaction) ?? transaction.type.displayName,
                 value: amountText,
                 valueColor: transaction.type == .credit ? .green : .primary
             )
@@ -786,7 +786,8 @@ struct TransactionListView: View {
                 typeColor: colorForType(transaction.type),
                 accountName: account?.name ?? "Inconnu",
                 accountIcon: account?.type.icon ?? "questionmark.circle",
-                payeeName: payee?.name,
+                // Un transfert n'a pas de bénéficiaire : on affiche le compte d'en face
+                payeeName: payee?.name ?? accountsController.transferLabel(for: transaction),
                 memo: transaction.memo,
                 categoryName: category.map { categoriesController.getCategoryPath(for: $0.id) },
                 categoryColor: category.map { Color(hex: $0.displayColor) },

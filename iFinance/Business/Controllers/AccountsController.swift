@@ -204,6 +204,14 @@ class AccountsController: ObservableObject {
         Set(activeAccounts.filter { $0.countsInCashFlow }.map { $0.id })
     }
 
+    /// Libellé d'un transfert, à afficher à la place du bénéficiaire : « Transfert vers Livret A »
+    /// côté sortie, « Transfert depuis Compte courant » côté entrée. nil pour une autre transaction.
+    func transferLabel(for transaction: Transaction) -> String? {
+        guard transaction.type == .transfer, let otherID = transaction.toAccountID else { return nil }
+        let name = getAccount(id: otherID)?.name ?? "un autre compte"
+        return transaction.amount < 0 ? "Transfert vers \(name)" : "Transfert depuis \(name)"
+    }
+
     /// Un filtre explicite sur un compte l'emporte sur l'exclusion des rapports
     func isReported(_ transaction: Transaction, accountFilter: UUID?) -> Bool {
         accountFilter != nil || cashFlowAccountIDs.contains(transaction.accountID)

@@ -156,7 +156,7 @@ struct TransactionsWindowView: View {
                 id: transaction.id,
                 date: transaction.date,
                 account: accountNames[transaction.accountID] ?? "",
-                payee: transaction.payeeID.flatMap { payeeNames[$0] } ?? "",
+                payee: transaction.payeeID.flatMap { payeeNames[$0] } ?? accountsController.transferLabel(for: transaction) ?? "",
                 category: transaction.categoryID.map { categoriesController.getCategoryPath(for: $0) } ?? "",
                 amount: transaction.signedAmount,
                 memo: transaction.memo ?? "",

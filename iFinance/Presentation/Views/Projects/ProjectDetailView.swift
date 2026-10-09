@@ -277,6 +277,9 @@ struct ProjectDetailView: View {
         if let payeeID = transaction.payeeID, let payee = payeesController.getPayee(id: payeeID) {
             return payee.name
         }
+        if let transfer = accountsController.transferLabel(for: transaction) {
+            return transfer
+        }
         if let memo = transaction.memo, !memo.isEmpty {
             return memo
         }
@@ -472,6 +475,9 @@ struct ProjectTransactionPicker: View {
     private func label(_ transaction: Transaction) -> String {
         if let payeeID = transaction.payeeID, let payee = payeesController.getPayee(id: payeeID) {
             return payee.name
+        }
+        if let transfer = accountsController.transferLabel(for: transaction) {
+            return transfer
         }
         if let memo = transaction.memo, !memo.isEmpty {
             return memo
