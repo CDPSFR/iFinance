@@ -34,7 +34,6 @@ struct RecurringFormView: View {
 
     // Création à la volée : on retient les identifiants existants pour repérer le nouvel élément
     @State private var showPayeeForm = false
-    @State private var showCategoryForm = false
     @State private var knownIDs: Set<UUID> = []
 
     private static let controlWidth: CGFloat = 260
@@ -157,12 +156,12 @@ struct RecurringFormView: View {
                     }
 
                     LabeledContent {
-                        control(addHelp: "Nouvelle catégorie") {
-                            FillPopUpPicker(items: categoryItems, selection: $categoryID)
-                        } add: {
-                            knownIDs = Set(categoriesController.categories.map { $0.id })
-                            showCategoryForm = true
-                        }
+                        CategoryPicker(
+                            selection: $categoryID,
+                            kind: isTransfer ? .all : CategoryPicker.Kind(isIncome: type == .credit),
+                            width: Self.controlWidth,
+                            onCreate: { _ in categoryWasSuggested = false }
+                        )
                     } label: {
                         Text("Catégorie")
                         if categoryWasSuggested, categoryID != nil {
@@ -256,14 +255,6 @@ struct RecurringFormView: View {
             }
         }) {
             PayeeFormView(isPresented: $showPayeeForm)
-        }
-        .sheet(isPresented: $showCategoryForm, onDismiss: {
-            if let created = categoriesController.categories.first(where: { !knownIDs.contains($0.id) }) {
-                categoryID = created.id
-                categoryWasSuggested = false
-            }
-        }) {
-            CategoryFormView(isPresented: $showCategoryForm, initialIsIncome: type == .credit)
         }
         .alert("Supprimer la récurrence ?", isPresented: $showDeleteConfirmation) {
             Button("Annuler", role: .cancel) { }
@@ -377,21 +368,6 @@ struct RecurringFormView: View {
             + payeesController.payees.map { payee in
                 FillPopUpItem(id: payee.id, title: payee.locationDisplay.map { "\(payee.name) (\($0))" } ?? payee.name)
             }
-    }
-
-    /// Catégories du sens de la récurrence (toutes pour un virement), sous-catégories indentées
-    private var categoryItems: [FillPopUpItem<UUID>] {
-        let roots = isTransfer
-            ? categoriesController.rootCategories
-            : categoriesController.rootCategories.filter { $0.isIncome == (type == .credit) }
-        var items = [FillPopUpItem<UUID>(id: nil, title: "Aucune")]
-        for category in roots {
-            items.append(FillPopUpItem(id: category.id, title: category.name, systemImage: category.icon ?? "folder"))
-            for sub in categoriesController.getSubcategories(for: category.id) {
-                items.append(FillPopUpItem(id: sub.id, title: sub.name, systemImage: sub.icon ?? "folder", indentationLevel: 1))
-            }
-        }
-        return items
     }
 
     // MARK: - Logique

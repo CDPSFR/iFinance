@@ -37,18 +37,6 @@ struct MergePayeesView: View {
         }
     }
 
-    /// Catégories par défaut déjà utilisées par les bénéficiaires sélectionnés, puis « Aucune »
-    private var categoryItems: [FillPopUpItem<UUID>] {
-        var seen = Set<UUID>()
-        var items: [FillPopUpItem<UUID>] = []
-        for entry in payees {
-            guard let id = entry.payee.defaultCategoryID, seen.insert(id).inserted,
-                  let category = categoriesController.getCategory(id: id) else { continue }
-            items.append(FillPopUpItem(id: id, title: categoriesController.getCategoryPath(for: id), systemImage: category.displayIcon))
-        }
-        return [FillPopUpItem(id: nil, title: "Aucune")] + items
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             SheetHeader(
@@ -66,11 +54,8 @@ struct MergePayeesView: View {
                             .frame(width: 260)
                     }
 
-                    if categoryItems.count > 1 {
-                        LabeledContent("Catégorie par défaut") {
-                            FillPopUpPicker(items: categoryItems, selection: $categoryID)
-                                .frame(width: 260)
-                        }
+                    LabeledContent("Catégorie par défaut") {
+                        CategoryPicker(selection: $categoryID, width: 260)
                     }
                 } footer: {
                     if let clash = nameClash {

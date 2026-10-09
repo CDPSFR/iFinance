@@ -139,15 +139,14 @@ struct BudgetFormView: View {
 
     @ViewBuilder
     private func categoryToggleRow(_ category: Category, indent: Bool = false) -> some View {
-        HStack {
+        // Même présentation que le choix de catégorie des formulaires : icône, nom, sous-catégorie indentée
+        HStack(spacing: 8) {
             if indent {
-                Spacer().frame(width: 20)
+                Spacer().frame(width: 16)
             }
-            if let icon = category.icon {
-                Image(systemName: icon)
-                    .foregroundColor(Color(hex: category.color ?? "#888888"))
-                    .frame(width: 20)
-            }
+            Image(systemName: category.icon ?? "folder")
+                .foregroundColor(Color(hex: categoriesController.displayColor(of: category)))
+                .frame(width: 20)
             Text(category.name)
             Spacer()
             if selectedCategoryIDs.contains(category.id) {

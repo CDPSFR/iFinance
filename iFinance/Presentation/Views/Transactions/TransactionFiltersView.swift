@@ -68,7 +68,7 @@ struct TransactionFiltersView: View {
                     // Catégorie
                     filterSection(title: "Catégorie", icon: "folder") {
                         // Menu AppKit : icône et nom, sous-catégories indentées (comme les formulaires)
-                        FillPopUpPicker(items: categoryItems, selection: $tempFilters.categoryID)
+                        CategoryPicker(selection: $tempFilters.categoryID, noneTitle: "Tout", allowsAdd: false, width: nil)
                             // Taille naturelle, comme les autres menus de la feuille
                             .fixedSize()
                     }
@@ -158,18 +158,6 @@ struct TransactionFiltersView: View {
         .sheetBackground()
     }
     
-    /// « Tout », puis les catégories et leurs sous-catégories indentées
-    private var categoryItems: [FillPopUpItem<UUID>] {
-        var items = [FillPopUpItem<UUID>(id: nil, title: "Tout")]
-        for category in categoriesController.rootCategories {
-            items.append(FillPopUpItem(id: category.id, title: category.name, systemImage: category.displayIcon))
-            for sub in categoriesController.getSubcategories(for: category.id) {
-                items.append(FillPopUpItem(id: sub.id, title: sub.name, systemImage: sub.displayIcon, indentationLevel: 1))
-            }
-        }
-        return items
-    }
-
     @ViewBuilder
     private func filterSection<Content: View>(title: String, icon: String, @ViewBuilder content: () -> Content) -> some View {
         HStack(alignment: .center) {

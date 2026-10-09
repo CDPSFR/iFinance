@@ -37,7 +37,6 @@ struct TransactionFormView: View {
 
     // Création à la volée : on retient les identifiants existants pour repérer le nouvel élément
     @State private var showPayeeForm = false
-    @State private var showCategoryForm = false
     @State private var showProjectForm = false
     @State private var knownIDs: Set<UUID> = []
 
@@ -146,12 +145,12 @@ struct TransactionFormView: View {
                     }
 
                     LabeledContent {
-                        control(addHelp: "Nouvelle catégorie") {
-                            FillPopUpPicker(items: categoryItems, selection: $selectedCategory)
-                        } add: {
-                            knownIDs = Set(categoriesController.categories.map { $0.id })
-                            showCategoryForm = true
-                        }
+                        CategoryPicker(
+                            selection: $selectedCategory,
+                            kind: isTransfer ? .all : CategoryPicker.Kind(isIncome: selectedType == .credit),
+                            width: Self.controlWidth,
+                            onCreate: { _ in categoryWasSuggested = false }
+                        )
                     } label: {
                         Text("Catégorie")
                         if categoryWasSuggested, selectedCategory != nil {
@@ -268,14 +267,6 @@ struct TransactionFormView: View {
         }) {
             PayeeFormView(isPresented: $showPayeeForm)
         }
-        .sheet(isPresented: $showCategoryForm, onDismiss: {
-            if let created = categoriesController.categories.first(where: { !knownIDs.contains($0.id) }) {
-                selectedCategory = created.id
-                categoryWasSuggested = false
-            }
-        }) {
-            CategoryFormView(isPresented: $showCategoryForm, initialIsIncome: selectedType == .credit)
-        }
         .sheet(isPresented: $showProjectForm, onDismiss: {
             if let created = projectsController.projects.first(where: { !knownIDs.contains($0.id) }) {
                 selectedProject = created.id
@@ -387,22 +378,6 @@ struct TransactionFormView: View {
             + payeesController.payees.map { payee in
                 FillPopUpItem(id: payee.id, title: payee.locationDisplay.map { "\(payee.name) (\($0))" } ?? payee.name)
             }
-    }
-
-    /// Catégories du sens de la transaction (toutes pour un transfert), sous-catégories indentées
-    private var categoryItems: [FillPopUpItem<UUID>] {
-        let roots = isTransfer
-            ? categoriesController.rootCategories
-            : categoriesController.rootCategories.filter { $0.isIncome == (selectedType == .credit) }
-
-        var items = [FillPopUpItem<UUID>(id: nil, title: "Aucune")]
-        for category in roots {
-            items.append(FillPopUpItem(id: category.id, title: category.name, systemImage: category.icon ?? "folder"))
-            for sub in categoriesController.getSubcategories(for: category.id) {
-                items.append(FillPopUpItem(id: sub.id, title: sub.name, systemImage: sub.icon ?? "folder", indentationLevel: 1))
-            }
-        }
-        return items
     }
 
     private var projectItems: [FillPopUpItem<UUID>] {

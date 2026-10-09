@@ -8,6 +8,13 @@ class CategoriesController: ObservableObject {
     @Published var rootCategories: [Category] = []
     @Published var incomeCategories: [Category] = []
     @Published var expenseCategories: [Category] = []
+
+    /// Couleur d'affichage : celle de la catégorie, sinon celle de sa catégorie parente
+    func displayColor(of category: Category) -> String {
+        if let color = category.color { return color }
+        if let parent = category.parentID.flatMap({ getCategory(id: $0) }), let color = parent.color { return color }
+        return category.displayColor
+    }
     @Published var selectedCategory: Category?
     @Published var isLoading = false
     @Published var error: Error?

@@ -58,17 +58,8 @@ struct PayeeFormView: View {
                 }
                 
                 Section("Catégorie par défaut") {
-                    Picker("Catégorie", selection: $selectedCategory) {
-                        Text("Aucune").tag(nil as UUID?)
-                        
-                        ForEach(categoriesController.rootCategories) { category in
-                            Text(category.name).tag(category.id as UUID?)
-                            
-                            // Sous-catégories
-                            ForEach(categoriesController.getSubcategories(for: category.id)) { sub in
-                                Text("  \(sub.name)").tag(sub.id as UUID?)
-                            }
-                        }
+                    LabeledContent("Catégorie") {
+                        CategoryPicker(selection: $selectedCategory, width: 260)
                     }
                     
                     Text("Les transactions futures avec ce bénéficiaire utiliseront automatiquement cette catégorie")

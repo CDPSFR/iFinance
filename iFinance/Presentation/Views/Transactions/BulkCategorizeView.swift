@@ -16,24 +16,34 @@ struct BulkCategorizeView: View {
 
     @State private var searchQuery = ""
     @State private var selectedCategoryID: UUID? = nil
+    // Création d'une catégorie depuis la fenêtre (bouton « + »)
+    @State private var showCategoryForm = false
+    @State private var knownIDs: Set<UUID> = []
 
-    private var allCategories: [Category] {
-        categoriesController.categories.sorted {
-            categoriesController.getCategoryPath(for: $0.id) <
-            categoriesController.getCategoryPath(for: $1.id)
-        }
+    /// Une catégorie et ses sous-catégories retenues par la recherche, comme dans le menu des formulaires
+    private struct Group: Identifiable {
+        let parent: Category
+        let subcategories: [Category]
+        var id: UUID { parent.id }
     }
 
-    private var filtered: [Category] {
-        guard !searchQuery.isEmpty else { return allCategories }
-        return allCategories.filter {
-            categoriesController.getCategoryPath(for: $0.id)
-                .localizedCaseInsensitiveContains(searchQuery)
+    /// Catégories du sens demandé, chacune suivie de ses sous-catégories. Une recherche garde une
+    /// catégorie si son nom correspond ou si l'une de ses sous-catégories correspond.
+    private func groups(isIncome: Bool) -> [Group] {
+        let query = searchQuery.trimmingCharacters(in: .whitespaces)
+        func matches(_ category: Category) -> Bool {
+            query.isEmpty || category.name.localizedCaseInsensitiveContains(query)
         }
+        return categoriesController.rootCategories
+            .filter { $0.isIncome == isIncome }
+            .compactMap { parent in
+                let subs = categoriesController.getSubcategories(for: parent.id)
+                // Parent trouvé : toutes ses sous-catégories restent visibles
+                let shownSubs = matches(parent) ? subs : subs.filter(matches)
+                guard matches(parent) || !shownSubs.isEmpty else { return nil }
+                return Group(parent: parent, subcategories: shownSubs)
+            }
     }
-
-    private var expenses: [Category] { filtered.filter { !$0.isIncome } }
-    private var incomes: [Category]  { filtered.filter {  $0.isIncome } }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -42,21 +52,39 @@ struct BulkCategorizeView: View {
                 subtitle: subtitle
             )
 
-            // Search
-            HStack {
-                Image(systemName: "magnifyingglass").foregroundColor(.secondary)
-                TextField("Rechercher…", text: $searchQuery)
-                    .textFieldStyle(.plain)
-                if !searchQuery.isEmpty {
-                    Button { searchQuery = "" } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
+            // Recherche, et création d'une catégorie
+            HStack(spacing: 8) {
+                HStack {
+                    Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                    TextField("Rechercher…", text: $searchQuery)
+                        .textFieldStyle(.plain)
+                    if !searchQuery.isEmpty {
+                        Button { searchQuery = "" } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(8)
+                .background(Color(NSColor.controlBackgroundColor))
+                .cornerRadius(8)
+
+                Button {
+                    knownIDs = Set(categoriesController.categories.map { $0.id })
+                    showCategoryForm = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 28, height: 28)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(Color.primary.opacity(0.06))
+                        )
+                }
+                .buttonStyle(.plain)
+                .help("Nouvelle catégorie")
+                .accessibilityLabel("Nouvelle catégorie")
             }
-            .padding(8)
-            .background(Color(NSColor.controlBackgroundColor))
-            .cornerRadius(8)
             .padding(.horizontal, 20)
             .padding(.bottom, 12)
 
@@ -65,31 +93,28 @@ struct BulkCategorizeView: View {
             // Category list
             List(selection: $selectedCategoryID) {
                 // "Aucune catégorie" option
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     Image(systemName: "xmark.circle")
-                        .font(.subheadline)
-                        .foregroundColor(.white)
-                        .frame(width: 28, height: 28)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.gray))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20)
                     Text("Aucune catégorie")
                         .foregroundColor(.secondary)
                 }
+                .padding(.vertical, 2)
                 .tag(nil as UUID?)
 
-                if !expenses.isEmpty {
-                    Section("Dépenses") {
-                        ForEach(expenses) { category in
-                            categoryRow(category)
-                                .tag(category.id as UUID?)
-                        }
-                    }
-                }
-
-                if !incomes.isEmpty {
-                    Section("Revenus") {
-                        ForEach(incomes) { category in
-                            categoryRow(category)
-                                .tag(category.id as UUID?)
+                ForEach([false, true], id: \.self) { isIncome in
+                    let groups = groups(isIncome: isIncome)
+                    if !groups.isEmpty {
+                        Section(isIncome ? "Revenus" : "Dépenses") {
+                            ForEach(groups) { group in
+                                categoryRow(group.parent)
+                                    .tag(group.parent.id as UUID?)
+                                ForEach(group.subcategories) { sub in
+                                    categoryRow(sub, indented: true)
+                                        .tag(sub.id as UUID?)
+                                }
+                            }
                         }
                     }
                 }
@@ -133,6 +158,14 @@ struct BulkCategorizeView: View {
         }
         .frame(width: 480, height: transactionCounts == nil ? 520 : 640)
         .sheetBackground()
+        .sheet(isPresented: $showCategoryForm, onDismiss: {
+            // La catégorie créée est sélectionnée
+            if let created = categoriesController.categories.first(where: { !knownIDs.contains($0.id) }) {
+                selectedCategoryID = created.id
+            }
+        }) {
+            CategoryFormView(isPresented: $showCategoryForm)
+        }
         .alert(
             "\(overwrittenCount) transaction\(overwrittenCount > 1 ? "s vont" : " va") changer de catégorie",
             isPresented: $confirmOverwrite
@@ -157,27 +190,15 @@ struct BulkCategorizeView: View {
     // Allow applying "no category" only when explicitly selecting the nil row
     private var canApplyNone: Bool { false }
 
-    @ViewBuilder
-    private func categoryRow(_ category: Category) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: category.displayIcon)
-                .font(.subheadline)
-                .foregroundColor(.white)
-                .frame(width: 28, height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color(hex: category.displayColor))
-                )
-            VStack(alignment: .leading, spacing: 1) {
-                Text(category.name)
-                    .font(.body)
-                if let parentID = category.parentID,
-                   let parent = categoriesController.getCategory(id: parentID) {
-                    Text(parent.name)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
+    /// Ligne de catégorie : icône et nom, sous-catégorie indentée (comme le menu des formulaires)
+    private func categoryRow(_ category: Category, indented: Bool = false) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: category.icon ?? "folder")
+                .foregroundStyle(Color(hex: categoriesController.displayColor(of: category)))
+                .frame(width: 20)
+            Text(category.name)
         }
+        .padding(.leading, indented ? 24 : 0)
+        .padding(.vertical, 2)
     }
 }
