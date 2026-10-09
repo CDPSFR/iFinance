@@ -10,13 +10,15 @@ struct ContributionFormView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var origin: ContributionOrigin = .voluntary
-    @State private var date = Date()
+    @State private var date: Date
     @State private var amount = ""
     @State private var sourceAccountID: UUID?
     @State private var memo = ""
     @State private var availability: AvailabilityChoice
     @State private var availableDate: Date
     @State private var isDeducted = true
+    /// Vrai tant que la disponibilité n'a pas été modifiée à la main : elle suit alors la date du versement
+    @State private var followsContributionDate = true
 
     @State private var isSaving = false
     @State private var errorMessage: String?
@@ -24,6 +26,8 @@ struct ContributionFormView: View {
     init(account: Account) {
         self.account = account
         let now = Date()
+        // Même instant pour la date du versement et sa disponibilité par défaut
+        _date = State(initialValue: now)
         let defaultDate = account.type.availabilityRule.defaultAvailability(for: now)
         _availability = State(initialValue: AvailabilityChoice(availableOn: defaultDate, contributionDate: now))
         _availableDate = State(initialValue: defaultDate ?? now)
@@ -124,15 +128,23 @@ struct ContributionFormView: View {
                 sourceAccountID = sourceAccounts.first { $0.type.group == .liquidity }?.id
             }
         }
-        .onChange(of: date) { oldDate, newDate in
-            // Suit la date du versement tant que la disponibilité est celle par défaut
-            let previous = defaultAvailability(for: oldDate)
-            guard availability == previous.choice,
-                  availability != .onDate || availableDate == previous.date else { return }
+        .onChange(of: date) { _, newDate in
+            // La disponibilité par défaut suit la date du versement (ex. versement + 5 ans pour un PEE)
+            guard followsContributionDate else { return }
             let next = defaultAvailability(for: newDate)
             availability = next.choice
             availableDate = next.date
         }
+        .onChange(of: availability) { _, _ in noteManualAvailability() }
+        .onChange(of: availableDate) { _, _ in noteManualAvailability() }
+    }
+
+    /// Une disponibilité différente du défaut (au jour près) a été choisie à la main : elle ne suit plus la date
+    private func noteManualAvailability() {
+        let expected = defaultAvailability(for: date)
+        let isDefault = availability == expected.choice
+            && (availability != .onDate || Calendar.current.isDate(availableDate, inSameDayAs: expected.date))
+        if !isDefault { followsContributionDate = false }
     }
 
     private func defaultAvailability(for contributionDate: Date) -> (choice: AvailabilityChoice, date: Date) {
@@ -185,7 +197,10 @@ struct ContributionFormView: View {
                 ContributionDetail(
                     transactionID: transaction.id,
                     origin: origin,
-                    availableOn: availability.availableOn(contributionDate: date, chosenDate: availableDate),
+                    // Par défaut : la règle du plan appliquée à la date du versement (pas à la date de saisie)
+                    availableOn: followsContributionDate
+                        ? account.type.availabilityRule.defaultAvailability(for: date)
+                        : availability.availableOn(contributionDate: date, chosenDate: availableDate),
                     isDeducted: asksDeduction ? isDeducted : nil
                 ),
                 accountID: account.id
