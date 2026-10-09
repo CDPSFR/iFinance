@@ -39,7 +39,8 @@ struct LiquidityReportView: View {
     }
 
     private var currency: String { booksController.currentBook?.currency ?? "EUR" }
-    private func money(_ value: Decimal) -> String { PlanFormat.round(value, currency) }
+    /// Montant affiché, ou « ••• » quand les montants sont masqués (tuiles, lignes, tableaux)
+    private func money(_ value: Decimal) -> String { appSettings.hideAmounts ? "•••" : PlanFormat.round(value, currency) }
 
     private func color(_ tier: LiquidityTier) -> Color {
         switch tier {

@@ -118,15 +118,16 @@ struct LoanSchedule {
             interestSaved: max(interestBefore - interestAfter, 0),
             monthsSaved: monthsSaved,
             newPayment: newPayment,
-            penalty: penalty(on: paid, remainingMonths: remaining)
+            penalty: penalty(on: paid, remainingMonths: remaining, balanceBefore: balance)
         )
     }
 
-    /// Indemnités : immobilier, 6 mois d'intérêts plafonnés à 3 % du capital remboursé ;
-    /// crédit à la consommation, 1 % (0,5 % à moins d'un an de la fin) au-delà de 10 000 € sur 12 mois
-    func penalty(on amount: Double, remainingMonths: Int) -> Double {
+    /// Indemnités : immobilier, 6 mois d'intérêts sur la somme remboursée, plafonnés à 3 % du capital
+    /// restant dû avant le remboursement ; crédit à la consommation, 1 % (0,5 % à moins d'un an de la fin)
+    /// au-delà de 10 000 € sur 12 mois
+    func penalty(on amount: Double, remainingMonths: Int, balanceBefore: Double) -> Double {
         if terms.isMortgage {
-            return min(amount * 0.03, amount * monthlyRate * 6)
+            return min(amount * monthlyRate * 6, balanceBefore * 0.03)
         }
         guard amount > 10_000 else { return 0 }
         return amount * (remainingMonths > 12 ? 0.01 : 0.005)

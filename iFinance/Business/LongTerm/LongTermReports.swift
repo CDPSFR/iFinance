@@ -287,7 +287,12 @@ struct LongTermReportBuilder {
             ids.contains($0.accountID) && $0.status != .skipped && $0.type == type && $0.date >= start && $0.date <= now
         }
         guard let first = transactions.map(\.date).min() else { return nil }
-        let months = max(min(calendar.dateComponents([.month], from: first, to: now).month ?? 12, 12), 1)
+        // Mois couverts, du mois de la première transaction au mois en cours compris
+        // (6 mois de données → 6, et non les 5 mois pleins écoulés), au plus 12
+        let firstMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: first)) ?? first
+        let currentMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) ?? now
+        let spanned = (calendar.dateComponents([.month], from: firstMonth, to: currentMonth).month ?? 11) + 1
+        let months = max(min(spanned, 12), 1)
         let total = transactions.reduce(Decimal(0)) { $0 + abs($1.amount) }
         return total / Decimal(months)
     }

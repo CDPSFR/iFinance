@@ -62,8 +62,9 @@ struct DebtReportView: View {
     }
 
     private var currency: String { booksController.currentBook?.currency ?? "EUR" }
-    private func money(_ value: Decimal) -> String { PlanFormat.round(value, currency) }
-    private func money(_ value: Double) -> String { PlanFormat.round(Decimal(value), currency) }
+    /// Montant affiché, ou « ••• » quand les montants sont masqués (tuiles, lignes, tableaux)
+    private func money(_ value: Decimal) -> String { appSettings.hideAmounts ? "•••" : PlanFormat.round(value, currency) }
+    private func money(_ value: Double) -> String { money(Decimal(value)) }
     private func monthYear(_ date: Date) -> String { date.formatted(.dateTime.month(.abbreviated).year()) }
     /// Taux avec deux décimales (1,45 %)
     private func ratePercent(_ rate: Double) -> String { rate.formatted(.percent.precision(.fractionLength(0...2))) }
@@ -322,7 +323,7 @@ struct DebtReportView: View {
                 }
                 Divider()
                 row("Indemnités de remboursement anticipé", schedule.terms.isMortgage
-                    ? "au plus 6 mois d’intérêts, plafonnés à 3 % de la somme"
+                    ? "au plus 6 mois d’intérêts, plafonnés à 3 % du capital restant dû"
                     : "crédit à la consommation : 1 % au-delà de 10 000 € sur 12 mois",
                     "≈ \(money(result.penalty))", color: result.penalty > 0 ? .red : .primary)
                 Divider()

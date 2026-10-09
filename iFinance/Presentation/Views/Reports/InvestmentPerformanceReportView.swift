@@ -60,8 +60,9 @@ struct InvestmentPerformanceReportView: View {
     }
 
     private var currency: String { booksController.currentBook?.currency ?? "EUR" }
-    private func money(_ value: Decimal) -> String { PlanFormat.round(value, currency) }
-    private func signed(_ value: Decimal) -> String { (value > 0 ? "+" : "") + money(value) }
+    /// Montant affiché, ou « ••• » quand les montants sont masqués (tuiles, lignes, tableaux)
+    private func money(_ value: Decimal) -> String { appSettings.hideAmounts ? "•••" : PlanFormat.round(value, currency) }
+    private func signed(_ value: Decimal) -> String { appSettings.hideAmounts ? "•••" : (value > 0 ? "+" : "") + money(value) }
     private func percent(_ value: Double?) -> String { value.map { PlanFormat.percent($0, signed: true) } ?? "—" }
 
     // MARK: - Chiffres clés
