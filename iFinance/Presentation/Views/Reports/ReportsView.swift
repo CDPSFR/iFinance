@@ -16,10 +16,11 @@ struct ReportsView: View {
         case moneyFlow = "Flux de trésorerie"
         case savingsRate = "Taux d'épargne"
         case comparison = "Comparaison de périodes"
+        case categoryTrends = "Tendances des dépenses"
         case categories = "Dépenses par catégorie"
-        case categoryTrends = "Tendances par catégorie"
         case payees = "Dépenses par bénéficiaire"
         case accounts = "Dépenses par compte"
+        case incomeCategoryTrends = "Tendances des revenus"
         case incomeCategories = "Revenus par catégorie"
         case incomePayees = "Revenus par bénéficiaire"
         case incomeAccounts = "Revenus par compte"
@@ -36,6 +37,7 @@ struct ReportsView: View {
             case .categoryTrends: return "chart.bar.xaxis"
             case .netWorth: return "building.columns"
             case .categories, .incomeCategories: return "chart.pie"
+            case .incomeCategoryTrends: return "chart.bar.xaxis"
             case .payees, .incomePayees: return "person.2"
             case .accounts, .incomeAccounts: return "creditcard"
             case .balance: return "chart.line.uptrend.xyaxis"
@@ -47,7 +49,8 @@ struct ReportsView: View {
         var group: ReportGroup {
             switch self {
             case .cashFlow, .moneyFlow, .savingsRate, .comparison: return .overview
-            case .categories, .categoryTrends, .payees, .accounts, .incomeCategories, .incomePayees, .incomeAccounts: return .breakdown
+            case .categories, .categoryTrends, .payees, .accounts,
+                 .incomeCategoryTrends, .incomeCategories, .incomePayees, .incomeAccounts: return .breakdown
             case .netWorth, .balance, .monthlyBalance: return .balances
             }
         }
@@ -59,21 +62,28 @@ struct ReportsView: View {
         case balances = "Soldes et patrimoine"
     }
 
+    /// Hauteur des titres de la liste : celle du bandeau des filtres, pour que le premier titre
+    /// et son filet s'alignent sur les étiquettes de la colonne voisine
+    static let sectionHeaderHeight: CGFloat = 34
+
     var body: some View {
         HStack(spacing: 0) {
             // Liste des rapports (le titre est dans la barre d'outils)
             List(selection: tabSelection) {
                 ForEach(ReportGroup.allCases, id: \.self) { group in
-                    Section(group.rawValue) {
+                    Section {
                         ForEach(ReportTab.allCases.filter { $0.group == group }, id: \.self) { tab in
                             Label(tab.rawValue, systemImage: tab.icon)
                                 .padding(.vertical, 3)
                                 .tag(Optional(tab))
                         }
+                    } header: {
+                        Text(group.rawValue)
                     }
                 }
             }
             .listStyle(.inset)
+            .environment(\.defaultMinListHeaderHeight, ReportsView.sectionHeaderHeight)
             // Fond de liste limité à la zone sous la barre d'outils (sinon il remonte sous l'en-tête)
             .scrollContentBackground(.hidden)
             .background(Color(nsColor: .controlBackgroundColor), ignoresSafeAreaEdges: [])
@@ -82,67 +92,10 @@ struct ReportsView: View {
             Divider()
 
             VStack(spacing: 0) {
-            // Badges filtres actifs
-            if hasExtraFilters {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        if let type = transactionsController.filters.transactionType {
-                            FilterBadge(
-                                text: type.displayName,
-                                icon: type.icon,
-                                onRemove: {
-                                    var newFilters = transactionsController.filters
-                                    newFilters.transactionType = nil
-                                    transactionsController.updateFilters(newFilters)
-                                }
-                            )
-                        }
-                        
-                        if let categoryID = transactionsController.filters.categoryID {
-                            FilterBadge(
-                                text: categoriesController.getCategoryPath(for: categoryID),
-                                icon: "folder",
-                                onRemove: {
-                                    var newFilters = transactionsController.filters
-                                    newFilters.categoryID = nil
-                                    transactionsController.updateFilters(newFilters)
-                                }
-                            )
-                        }
-                        
-                        if let payeeID = transactionsController.filters.payeeID,
-                           let payee = payeesController.getPayee(id: payeeID) {
-                            FilterBadge(
-                                text: payee.name,
-                                icon: "person.2",
-                                onRemove: {
-                                    var newFilters = transactionsController.filters
-                                    newFilters.payeeID = nil
-                                    transactionsController.updateFilters(newFilters)
-                                }
-                            )
-                        }
+            // Filtres actifs, en étiquettes (comme la liste des transactions) ;
+            // la période et les comptes se choisissent aussi dans la barre d'outils
+            ActiveFiltersBar(periodTitle: periodTitle, showsInvestmentOperationsFilter: false)
 
-                        Button {
-                            var newFilters = transactionsController.filters
-                            newFilters.transactionType = nil
-                            newFilters.categoryID = nil
-                            newFilters.payeeID = nil
-                            transactionsController.updateFilters(newFilters)
-                        } label: {
-                            Text("Tout effacer")
-                                .font(.caption)
-                                .foregroundStyle(Color.accentColor)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-                }
-                
-                Divider()
-            }
-            
             // Contenu du graphique
             contentView
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -188,12 +141,6 @@ struct ReportsView: View {
                 .help("Comptes pris en compte")
             }
         }
-    }
-
-    /// Filtres autres que la période et le compte, affichés en badges
-    private var hasExtraFilters: Bool {
-        let filters = transactionsController.filters
-        return filters.transactionType != nil || filters.categoryID != nil || filters.payeeID != nil
     }
 
     // MARK: - Période et comptes
@@ -266,6 +213,8 @@ struct ReportsView: View {
             PayeesChartView()
         case .incomeCategories:
             CategoriesChartView(flow: .income)
+        case .incomeCategoryTrends:
+            CategoryTrendsChartView(flow: .income)
         case .incomeAccounts:
             AccountsChartView(flow: .income)
         case .incomePayees:

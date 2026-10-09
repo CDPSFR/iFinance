@@ -1,6 +1,6 @@
 import Foundation
 
-// Outils communs aux rapports « Tendances par catégorie », « Flux de trésorerie » et « Taux d'épargne »
+// Outils communs aux rapports « Tendances des dépenses / des revenus », « Flux de trésorerie » et « Taux d'épargne »
 
 extension CategoriesController {
     /// Catégorie principale d'une catégorie (elle-même si elle n'a pas de parent)

@@ -1,7 +1,7 @@
 import SwiftUI
 import Charts
 
-/// Rapport « Tendances par catégorie » : dépenses mensuelles empilées par catégorie principale,
+/// Rapports « Tendances des dépenses » et « Tendances des revenus » (selon `flow`) : montants mensuels empilés par catégorie principale,
 /// et tendance récente de chaque catégorie. Suit la période et le compte de la barre d'outils.
 struct CategoryTrendsChartView: View {
     @EnvironmentObject var accountsController: AccountsController
@@ -9,6 +9,8 @@ struct CategoryTrendsChartView: View {
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var appSettings: AppSettings
+
+    var flow: ReportFlow = .expense
 
     /// Catégories affichées séparément ; les suivantes sont regroupées dans « Autres »
     private static let maxSeries = 6
@@ -42,7 +44,7 @@ struct CategoryTrendsChartView: View {
         let data = self.data
 
         if data.months.isEmpty {
-            ReportEmptyState(systemImage: "chart.bar.xaxis", message: "Aucune dépense sur la période et les comptes choisis.")
+            ReportEmptyState(systemImage: "chart.bar.xaxis", message: "Aucun\(flow == .expense ? "e dépense" : " revenu") sur la période et les comptes choisis.")
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: NativeMetrics.groupSpacing) {
@@ -66,7 +68,7 @@ struct CategoryTrendsChartView: View {
 
         return ReportTiles {
             StatTile(
-                title: "Dépense mensuelle moyenne",
+                title: flow == .expense ? "Dépense mensuelle moyenne" : "Revenu mensuel moyen",
                 value: money(total / Decimal(max(data.months.count, 1))),
                 detail: "sur \(data.months.count) mois"
             )
@@ -80,13 +82,13 @@ struct CategoryTrendsChartView: View {
             .privacyBlur(hidden: appSettings.hideAmounts)
 
             if let rising, (rising.change ?? 0) > 0 {
-                StatTile(title: "En hausse", value: rising.name, valueColor: .red, detail: "\(percent(rising.change)) sur \(Self.recentMonths) mois")
+                StatTile(title: "En hausse", value: rising.name, valueColor: riseColor, detail: "\(percent(rising.change)) sur \(Self.recentMonths) mois")
             } else {
                 StatTile(title: "En hausse", value: "—", detail: "aucune catégorie")
             }
 
             if let falling, (falling.change ?? 0) < 0 {
-                StatTile(title: "En baisse", value: falling.name, valueColor: .green, detail: "\(percent(falling.change)) sur \(Self.recentMonths) mois")
+                StatTile(title: "En baisse", value: falling.name, valueColor: fallColor, detail: "\(percent(falling.change)) sur \(Self.recentMonths) mois")
             } else {
                 StatTile(title: "En baisse", value: "—", detail: "aucune catégorie")
             }
@@ -102,7 +104,7 @@ struct CategoryTrendsChartView: View {
         }
 
         return VStack(alignment: .leading, spacing: 12) {
-            GroupTitle("Dépenses mensuelles par catégorie")
+            GroupTitle(flow == .expense ? "Dépenses mensuelles par catégorie" : "Revenus mensuels par catégorie")
 
             Chart(data.cells) { cell in
                 BarMark(
@@ -132,7 +134,7 @@ struct CategoryTrendsChartView: View {
             rows: data.trends.map { trend in
                 let change = trend.change ?? 0
                 // Seuil de 5 % : en dessous, on considère la catégorie comme stable
-                let color: Color = change > 0.05 ? .red : (change < -0.05 ? .green : .secondary)
+                let color: Color = change > 0.05 ? riseColor : (change < -0.05 ? fallColor : .secondary)
                 return ReportRow(id: trend.id, cells: [
                     ReportCell(text: trend.name),
                     ReportCell(text: money(trend.total)),
@@ -142,7 +144,7 @@ struct CategoryTrendsChartView: View {
                     ReportCell(text: trend.change == nil ? "—" : percent(trend.change), color: color)
                 ])
             },
-            footnote: "Tendance : moyenne des \(Self.recentMonths) derniers mois comparée à la moyenne de la période. Les sous-catégories sont regroupées dans leur catégorie principale ; les dépenses sans catégorie ne sont pas comptées."
+            footnote: "Tendance : moyenne des \(Self.recentMonths) derniers mois comparée à la moyenne de la période. Les sous-catégories sont regroupées dans leur catégorie principale ; les \(flow.plural) sans catégorie ne sont pas comptés."
         )
     }
 
@@ -161,9 +163,9 @@ struct CategoryTrendsChartView: View {
 
     private var data: TrendData {
         let calendar = Calendar.current
-        // Même périmètre que « Dépenses par catégorie » : dépenses catégorisées seulement
+        // Même périmètre que « Dépenses / Revenus par catégorie » : transactions catégorisées seulement
         let expenses = transactionsController.filteredTransactions.filter {
-            $0.type == .debit && $0.status != .skipped && $0.categoryID != nil
+            $0.type == flow.transactionType && $0.status != .skipped && $0.categoryID != nil
                 && accountsController.isReported($0, accountFilter: transactionsController.filters.accountID)
         }
         guard !expenses.isEmpty else { return TrendData() }
@@ -229,6 +231,10 @@ struct CategoryTrendsChartView: View {
     }
 
     // MARK: - Format
+
+    /// Une hausse des dépenses est défavorable (rouge), une hausse des revenus favorable (vert)
+    private var riseColor: Color { flow == .expense ? .red : .green }
+    private var fallColor: Color { flow == .expense ? .green : .red }
 
     private var currency: String {
         booksController.currentBook?.currency ?? "EUR"
