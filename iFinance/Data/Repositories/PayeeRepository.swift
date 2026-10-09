@@ -87,6 +87,10 @@ class PayeeRepository: PayeeRepositoryProtocol {
     // MARK: - Update
     
     func update(_ payee: Payee) async throws {
+        try updateRow(payee)
+    }
+
+    private func updateRow(_ payee: Payee) throws {
         let dto = PayeeMapper.toDTO(payee)
         
         let sql = """
@@ -105,6 +109,29 @@ class PayeeRepository: PayeeRepositoryProtocol {
         ])
     }
     
+    // MARK: - Merge
+
+    func merge(_ payeeIDs: [UUID], into target: Payee) async throws {
+        let others = payeeIDs.filter { $0 != target.id }.map { $0.uuidString }
+        guard !others.isEmpty else {
+            try updateRow(target)
+            return
+        }
+        let placeholders = Array(repeating: "?", count: others.count).joined(separator: ", ")
+        try db.inTransaction {
+            try db.execute(
+                sql: "UPDATE transactions SET payee_id = ? WHERE payee_id IN (\(placeholders));",
+                parameters: [target.id.uuidString] + others
+            )
+            try db.execute(
+                sql: "UPDATE recurring_templates SET payee_id = ? WHERE payee_id IN (\(placeholders));",
+                parameters: [target.id.uuidString] + others
+            )
+            try updateRow(target)
+            try db.execute(sql: "DELETE FROM payees WHERE id IN (\(placeholders));", parameters: others)
+        }
+    }
+
     // MARK: - Delete
     
     func delete(id: UUID) async throws {

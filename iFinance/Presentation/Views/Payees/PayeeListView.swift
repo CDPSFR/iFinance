@@ -30,6 +30,7 @@ struct PayeeListView: View {
     @Environment(\.openWindow) private var openWindow
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var appSettings: AppSettings
+    @EnvironmentObject var recurringController: RecurringController
 
     /// Navigation vers les transactions du bénéficiaire
     @Binding var selectedTab: MainView.SidebarItem
@@ -44,6 +45,9 @@ struct PayeeListView: View {
     /// Bénéficiaires à catégoriser en une fois
     @State private var payeesToCategorize: Set<Payee.ID> = []
     @State private var showBulkCategorize = false
+    /// Bénéficiaires à regrouper en un seul
+    @State private var payeesToMerge: Set<Payee.ID> = []
+    @State private var showMerge = false
     @State private var searchQuery = ""
     @State private var selection: Set<Payee.ID> = []
     @State private var sortOrder = [KeyPathComparator(\PayeeTableRow.name, comparator: .localizedStandard)]
@@ -115,6 +119,19 @@ struct PayeeListView: View {
             }
         } message: {
             Text(bulkDeleteMessage)
+        }
+        .sheet(isPresented: $showMerge) {
+            let stats = payeeStats()
+            MergePayeesView(
+                payees: payeesToMerge.compactMap { id in
+                    payeesController.getPayee(id: id).map { ($0, stats[id]?.count ?? 0) }
+                },
+                isPresented: $showMerge,
+                onMerge: { targetID, name, categoryID in
+                    let ids = payeesToMerge
+                    Task { await merge(ids, into: targetID, name: name, categoryID: categoryID) }
+                }
+            )
         }
         .sheet(isPresented: $showBulkCategorize) {
             let ids = payeesToCategorize
@@ -230,7 +247,14 @@ struct PayeeListView: View {
                     Label("Supprimer", systemImage: "trash")
                 }
             } else if items.count > 1 {
-                // Sélection multiple (⌘-clic ou ⇧-clic) : catégorisation et suppression groupées
+                // Sélection multiple (⌘-clic ou ⇧-clic) : regroupement, catégorisation et suppression groupées
+                Button {
+                    payeesToMerge = items
+                    showMerge = true
+                } label: {
+                    Label("Regrouper les bénéficiaires…", systemImage: "arrow.triangle.merge")
+                }
+
                 Button {
                     payeesToCategorize = items
                     showBulkCategorize = true
@@ -252,6 +276,18 @@ struct PayeeListView: View {
             if let id = items.first, let payee = payeesController.getPayee(id: id) {
                 showTransactions(for: payee)
             }
+        }
+    }
+
+    // MARK: - Regroupement
+
+    /// Regroupe les bénéficiaires, puis recharge ce qui pointait vers eux (transactions, récurrences)
+    private func merge(_ ids: Set<UUID>, into targetID: UUID, name: String, categoryID: UUID?) async {
+        guard await payeesController.merge(ids, into: targetID, name: name, defaultCategoryID: categoryID) != nil else { return }
+        selection = [targetID]
+        await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
+        if let bookID = bookController.currentBook?.id {
+            await recurringController.load(for: bookID)
         }
     }
 
@@ -320,6 +356,11 @@ struct PayeeListView: View {
                 )
 
                 InspectorSection {
+                    Button("Regrouper…") {
+                        payeesToMerge = selection
+                        showMerge = true
+                    }
+
                     Button("Catégoriser…") {
                         payeesToCategorize = selection
                         showBulkCategorize = true

@@ -110,6 +110,26 @@ class PayeesController: ObservableObject {
         }
     }
 
+    /// Regroupe plusieurs bénéficiaires sous `target` (renommé `name`). Renvoie le bénéficiaire conservé,
+    /// ou nil en cas d'échec. Les transactions et récurrences sont à recharger par l'appelant.
+    @discardableResult
+    func merge(_ payeeIDs: Set<UUID>, into targetID: UUID, name: String, defaultCategoryID: UUID?) async -> Payee? {
+        guard var target = getPayee(id: targetID) else { return nil }
+        target.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        target.defaultCategoryID = defaultCategoryID
+        do {
+            try await repository.merge(Array(payeeIDs), into: target)
+        } catch {
+            self.error = error
+            print("❌ Erreur regroupement bénéficiaires: \(error)")
+            return nil
+        }
+        if let bookID = currentBookID {
+            await loadPayees(for: bookID)
+        }
+        return target
+    }
+
     // MARK: - Delete Payee
     
     /// Crée plusieurs bénéficiaires en une seule écriture, puis recharge la liste une fois.
