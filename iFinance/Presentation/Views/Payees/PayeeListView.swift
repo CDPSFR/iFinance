@@ -135,15 +135,17 @@ struct PayeeListView: View {
         }
         .sheet(isPresented: $showBulkCategorize) {
             let ids = payeesToCategorize
-            let uncategorized = uncategorizedTransactions(of: ids).count
+            let transactions = transactionsController.allTransactions
             BulkCategorizeView(
-                subtitle: "\(ids.count) bénéficiaire\(ids.count > 1 ? "s" : "") sélectionné\(ids.count > 1 ? "s" : "") · catégorie par défaut",
+                subtitle: ids.count == 1
+                    ? "\(payeesController.getPayee(id: ids.first!)?.name ?? "Bénéficiaire") · catégorie par défaut"
+                    : "\(ids.count) bénéficiaires sélectionnés · catégorie par défaut",
                 isPresented: $showBulkCategorize,
-                optionTitle: uncategorized > 0
-                    ? "Catégoriser aussi \(uncategorized == 1 ? "la transaction" : "les \(uncategorized) transactions") sans catégorie de ces bénéficiaires"
-                    : nil,
-                onApply: { categoryID, includeTransactions in
-                    Task { await categorize(ids, with: categoryID, includeTransactions: includeTransactions) }
+                transactionCounts: { categoryID in
+                    PayeeCategoryPropagation.counts(in: transactions, payeeIDs: ids, categoryID: categoryID)
+                },
+                onApply: { categoryID, scope in
+                    Task { await categorize(ids, with: categoryID, scope: scope) }
                 }
             )
         }
@@ -238,6 +240,13 @@ struct PayeeListView: View {
                     Label("Modifier", systemImage: "pencil")
                 }
 
+                Button {
+                    payeesToCategorize = [payee.id]
+                    showBulkCategorize = true
+                } label: {
+                    Label("Catégoriser…", systemImage: "folder.badge.plus")
+                }
+
                 Divider()
 
                 Button(role: .destructive) {
@@ -293,23 +302,14 @@ struct PayeeListView: View {
 
     // MARK: - Catégorisation groupée
 
-    /// Transactions sans catégorie des bénéficiaires (hors transferts)
-    private func uncategorizedTransactions(of payeeIDs: Set<UUID>) -> [Transaction] {
-        transactionsController.allTransactions.filter { transaction in
-            transaction.categoryID == nil
-                && transaction.type != .transfer
-                && transaction.payeeID.map { payeeIDs.contains($0) } ?? false
-        }
-    }
-
-    /// Catégorie par défaut des bénéficiaires ; en option, aussi leurs transactions sans catégorie
-    private func categorize(_ payeeIDs: Set<UUID>, with categoryID: UUID?, includeTransactions: Bool) async {
+    /// Catégorie par défaut des bénéficiaires, puis catégorie des transactions selon `scope`
+    private func categorize(_ payeeIDs: Set<UUID>, with categoryID: UUID?, scope: PayeeTransactionScope) async {
+        let toUpdate = PayeeCategoryPropagation.transactionsToUpdate(
+            in: transactionsController.allTransactions, payeeIDs: payeeIDs, categoryID: categoryID, scope: scope
+        )
         await payeesController.setDefaultCategory(categoryID, for: payeeIDs)
-        guard includeTransactions, categoryID != nil else { return }
-        for var transaction in uncategorizedTransactions(of: payeeIDs) {
-            transaction.categoryID = categoryID
-            await transactionsController.updateTransaction(transaction)
-        }
+        guard !toUpdate.isEmpty else { return }
+        await transactionsController.setCategory(categoryID, for: toUpdate)
         await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
     }
 
@@ -454,6 +454,11 @@ struct PayeeListView: View {
                     }
                 }
                 .help("⌥-clic pour ouvrir dans une nouvelle fenêtre")
+
+                Button("Catégoriser…") {
+                    payeesToCategorize = [payee.id]
+                    showBulkCategorize = true
+                }
 
                 HStack(spacing: 8) {
                     Button("Modifier…") {

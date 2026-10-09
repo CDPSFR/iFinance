@@ -1,14 +1,16 @@
 import SwiftUI
 
 /// Choix d'une catégorie pour plusieurs éléments (transactions ou bénéficiaires).
-/// `optionTitle` affiche une case à cocher dont l'état est transmis à `onApply`.
+/// `transactionCounts`, fourni pour des bénéficiaires, affiche le choix « Transactions existantes »
+/// (compté pour la catégorie choisie) ; le choix est transmis à `onApply`.
 struct BulkCategorizeView: View {
     let subtitle: String
     @Binding var isPresented: Bool
-    var optionTitle: String? = nil
-    let onApply: (UUID?, Bool) -> Void
+    var transactionCounts: ((UUID?) -> PayeeTransactionCounts)? = nil
+    let onApply: (UUID?, PayeeTransactionScope) -> Void
 
-    @State private var isOptionOn = true
+    @State private var scope: PayeeTransactionScope = .uncategorized
+    @State private var confirmOverwrite = false
 
     @EnvironmentObject var categoriesController: CategoriesController
 
@@ -94,11 +96,9 @@ struct BulkCategorizeView: View {
             }
             .listStyle(.inset)
 
-            if let optionTitle {
+            if let transactionCounts {
                 Divider()
-                Toggle(optionTitle, isOn: $isOptionOn)
-                    .toggleStyle(.checkbox)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                PayeeTransactionScopePicker(counts: transactionCounts(selectedCategoryID), scope: $scope)
                     .padding(.horizontal, 20)
                     .padding(.vertical, 10)
             }
@@ -120,15 +120,38 @@ struct BulkCategorizeView: View {
                     .keyboardShortcut(.cancelAction)
 
                 Button("Appliquer") {
-                    onApply(selectedCategoryID, optionTitle != nil && isOptionOn)
-                    isPresented = false
+                    // Écraser des catégories déjà choisies demande une confirmation
+                    if scope == .all, overwrittenCount > 0 {
+                        confirmOverwrite = true
+                    } else {
+                        apply()
+                    }
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(selectedCategoryID == nil && !canApplyNone)
             }
         }
-        .frame(width: 480, height: 520)
+        .frame(width: 480, height: transactionCounts == nil ? 520 : 640)
         .sheetBackground()
+        .alert(
+            "\(overwrittenCount) transaction\(overwrittenCount > 1 ? "s vont" : " va") changer de catégorie",
+            isPresented: $confirmOverwrite
+        ) {
+            Button("Annuler", role: .cancel) { }
+            Button("Appliquer à toutes") { apply() }
+        } message: {
+            Text("Leur catégorie actuelle sera remplacée. Cette action ne peut pas être annulée.")
+        }
+    }
+
+    /// Transactions déjà catégorisées autrement, que « toutes » remplacerait
+    private var overwrittenCount: Int {
+        transactionCounts?(selectedCategoryID).recategorized ?? 0
+    }
+
+    private func apply() {
+        onApply(selectedCategoryID, transactionCounts == nil ? .none : scope)
+        isPresented = false
     }
 
     // Allow applying "no category" only when explicitly selecting the nil row

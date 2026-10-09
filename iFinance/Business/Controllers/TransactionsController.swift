@@ -210,6 +210,14 @@ class TransactionsController: ObservableObject {
         }
     }
     
+    /// Donne la catégorie `categoryID` à plusieurs transactions (le rechargement reste à l'appelant)
+    func setCategory(_ categoryID: UUID?, for transactions: [Transaction]) async {
+        for var transaction in transactions {
+            transaction.categoryID = categoryID
+            await updateTransaction(transaction)
+        }
+    }
+
     // MARK: - Update Transaction
     
     func updateTransaction(_ transaction: Transaction) async {
