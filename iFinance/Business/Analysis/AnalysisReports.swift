@@ -335,6 +335,23 @@ struct AnalysisReportBuilder {
         }
     }
 
+    /// Date de la première opération des comptes donnés (comptes courants par défaut)
+    func firstTransactionDate(accountIDs: Set<UUID>? = nil) -> Date? {
+        let ids = accountIDs ?? accountsController.cashFlowAccountIDs
+        return transactionsController.allTransactions
+            .filter { ids.contains($0.accountID) && $0.status != .skipped }
+            .map(\.date)
+            .min()
+    }
+
+    /// Nombre de mois de [start, end) couverts par l'historique, à partir du mois de la première opération
+    func coveredMonths(from start: Date, to end: Date, since first: Date?) -> Int {
+        guard let first else { return 0 }
+        let from = max(monthStart(start), monthStart(first))
+        guard from < end else { return 0 }
+        return max(calendar.dateComponents([.month], from: from, to: end).month ?? 0, 0)
+    }
+
     /// Catégorie principale d'une opération (la catégorie parente, sinon elle-même)
     func topCategory(of transaction: Transaction) -> Category? {
         guard let id = transaction.categoryID, let category = categoriesController.getCategory(id: id) else { return nil }
@@ -373,13 +390,16 @@ struct AnalysisReportBuilder {
             }
         }
 
-        // Dépenses courantes hors récurrences : moyenne par jour des 90 derniers jours
+        // Dépenses courantes hors récurrences : moyenne par jour des 90 derniers jours,
+        // ou des jours réellement couverts quand l'historique est plus court
         let past = calendar.date(byAdding: .day, value: -90, to: today) ?? today
+        let firstDay = firstTransactionDate(accountIDs: accountIDs).map { calendar.startOfDay(for: $0) } ?? today
+        let coveredDays = max(min(calendar.dateComponents([.day], from: max(firstDay, past), to: today).day ?? 90, 90), 1)
         let variable = transactionsController.allTransactions.filter {
             accountIDs.contains($0.accountID) && $0.status != .skipped && $0.type == .debit
                 && $0.recurringTemplateID == nil && $0.date >= past && $0.date < today
         }
-        report.dailySpending = variable.reduce(Decimal(0)) { $0 + abs($1.amount) } / 90
+        report.dailySpending = variable.reduce(Decimal(0)) { $0 + abs($1.amount) } / Decimal(coveredDays)
 
         var balance = startBalance
         for offset in 0...days {
@@ -493,12 +513,14 @@ struct AnalysisReportBuilder {
         let yearHistory = cashFlowTransactions(from: addMonths(-12, to: start), to: start).filter { $0.type == .debit }
 
         report.total = current.reduce(0) { $0 + abs($1.amount) }
-        report.usualTotal = history.reduce(0) { $0 + abs($1.amount) } / 6
+        // Moyenne sur les 6 mois précédents, ou sur les mois réellement couverts par l'historique
+        let historyMonths = Decimal(max(coveredMonths(from: addMonths(-6, to: start), to: start, since: firstTransactionDate()), 1))
+        report.usualTotal = history.reduce(0) { $0 + abs($1.amount) } / historyMonths
 
         // Par catégorie principale
         let key: (Transaction) -> UUID = { tx in topCategory(of: tx)?.id ?? UUID(uuidString: "00000000-0000-0000-0000-000000000000")! }
         let nowBy = Dictionary(grouping: current, by: key).mapValues { $0.reduce(Decimal(0)) { $0 + abs($1.amount) } }
-        let beforeBy = Dictionary(grouping: history, by: key).mapValues { $0.reduce(Decimal(0)) { $0 + abs($1.amount) } / 6 }
+        let beforeBy = Dictionary(grouping: history, by: key).mapValues { $0.reduce(Decimal(0)) { $0 + abs($1.amount) } / historyMonths }
         for id in Set(nowBy.keys).union(beforeBy.keys) {
             let name = categoriesController.getCategory(id: id)?.name ?? "Sans catégorie"
             report.categories.append(CategoryDeviation(id: id, name: name, amount: nowBy[id] ?? 0, usual: beforeBy[id] ?? 0))
@@ -594,12 +616,15 @@ struct AnalysisReportBuilder {
         let key: (Transaction) -> UUID? = { topCategory(of: $0)?.id }
         let recent = cashFlowTransactions(from: recentStart, to: currentMonth).filter { $0.type == .debit }
         let previous = cashFlowTransactions(from: previousStart, to: previousEnd).filter { $0.type == .debit }
-        let sum: ([Transaction]) -> [UUID: Decimal] = { list in
+        // Moyennes mensuelles sur les mois réellement couverts par l'historique de chaque période
+        let first = firstTransactionDate()
+        let sum: ([Transaction], Int) -> [UUID: Decimal] = { list, months in
             var result: [UUID: Decimal] = [:]
             for tx in list { if let id = key(tx) { result[id, default: 0] += abs(tx.amount) } }
-            return result.mapValues { $0 / 3 }
+            return result.mapValues { $0 / Decimal(max(months, 1)) }
         }
-        let recentBy = sum(recent), previousBy = sum(previous)
+        let recentBy = sum(recent, coveredMonths(from: recentStart, to: currentMonth, since: first))
+        let previousBy = sum(previous, coveredMonths(from: previousStart, to: previousEnd, since: first))
         for id in Set(recentBy.keys).union(previousBy.keys) {
             guard let category = categoriesController.getCategory(id: id) else { continue }
             report.posts.append(PriceChange(
