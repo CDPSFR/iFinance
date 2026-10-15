@@ -19,7 +19,8 @@ struct DatabaseSchema {
         createAccountValuationsTable,
         createContributionDetailsTable,
         createSavingsPlanSettingsTable,
-        createAccountTermsTable
+        createAccountTermsTable,
+        createCategoryTaxCasesTable
     ]
     
     static let migrationStatements: [String] = [
@@ -371,6 +372,16 @@ struct DatabaseSchema {
         loan_is_mortgage INTEGER,
         fee_rate REAL,
         FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+    );
+    """
+
+    // MARK: - Category Tax Cases (catégories reliées aux cases de la déclaration)
+
+    static let createCategoryTaxCasesTable = """
+    CREATE TABLE IF NOT EXISTS category_tax_cases (
+        category_id TEXT PRIMARY KEY,
+        tax_case TEXT NOT NULL,
+        FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
     );
     """
 }

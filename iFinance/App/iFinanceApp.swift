@@ -25,6 +25,7 @@ struct iFinanceApp: App {
                 .environmentObject(appState.investmentsController)
                 .environmentObject(appState.savingsPlansController)
                 .environmentObject(appState.accountTermsController)
+                .environmentObject(appState.taxMappingController)
                 .frame(minWidth: 1000, minHeight: 700)
                 // NSApp.appearance plutôt que preferredColorScheme : revenir à « Système » fonctionne
                 .onAppear {
@@ -72,6 +73,7 @@ struct iFinanceApp: App {
                     .environmentObject(appState.investmentsController)
                     .environmentObject(appState.savingsPlansController)
                     .environmentObject(appState.accountTermsController)
+                    .environmentObject(appState.taxMappingController)
                     .frame(minWidth: 700, minHeight: 400)
             }
         }
@@ -96,6 +98,7 @@ struct iFinanceApp: App {
                 .environmentObject(appState.investmentsController)
                 .environmentObject(appState.savingsPlansController)
                 .environmentObject(appState.accountTermsController)
+                .environmentObject(appState.taxMappingController)
         }
     }
 

@@ -31,6 +31,14 @@ struct ReportsView: View {
         case investments = "Performance des placements"
         case retirement = "Retraite et épargne salariale"
         case debts = "Dettes et crédits"
+        case forecast = "Prévision de trésorerie"
+        case fixedCharges = "Charges fixes et abonnements"
+        case unusual = "Dépenses inhabituelles"
+        case bankFees = "Frais bancaires"
+        case inflation = "Inflation personnelle"
+        case yearReview = "Bilan de l’année"
+        case independence = "Indépendance financière"
+        case taxReturn = "Préparer la déclaration"
 
         var icon: String {
             switch self {
@@ -50,6 +58,14 @@ struct ReportsView: View {
             case .investments: return "chart.line.uptrend.xyaxis.circle"
             case .retirement: return "figure.walk"
             case .debts: return "house"
+            case .forecast: return "calendar.badge.clock"
+            case .fixedCharges: return "repeat"
+            case .unusual: return "exclamationmark.magnifyingglass"
+            case .bankFees: return "building.columns.circle"
+            case .inflation: return "cart"
+            case .yearReview: return "calendar"
+            case .independence: return "sun.horizon"
+            case .taxReturn: return "doc.text"
             }
         }
 
@@ -61,19 +77,23 @@ struct ReportsView: View {
                  .incomeCategoryTrends, .incomeCategories, .incomePayees, .incomeAccounts: return .breakdown
             case .netWorth, .balance, .monthlyBalance: return .balances
             case .liquidity, .investments, .retirement, .debts: return .longTerm
+            case .forecast, .fixedCharges, .unusual, .bankFees, .inflation: return .daily
+            case .yearReview, .independence, .taxReturn: return .reviews
             }
         }
 
         /// Rapport filtré par la période et le compte de la barre d'outils
         /// (les rapports patrimoniaux donnent des valeurs au jour)
         var usesTransactionFilters: Bool {
-            group != .longTerm
+            group == .overview || group == .breakdown || group == .balances
         }
     }
 
     enum ReportGroup: String, CaseIterable {
         case overview = "Vue générale"
+        case daily = "Au quotidien"
         case breakdown = "Dépenses et revenus"
+        case reviews = "Bilans et objectifs"
         case balances = "Soldes et patrimoine"
         case longTerm = "Placements, retraite et dettes"
     }
@@ -249,6 +269,22 @@ struct ReportsView: View {
             RetirementReportView()
         case .debts:
             DebtReportView()
+        case .forecast:
+            ForecastReportView()
+        case .fixedCharges:
+            FixedChargesReportView()
+        case .unusual:
+            UnusualSpendingReportView()
+        case .bankFees:
+            BankFeesReportView()
+        case .inflation:
+            PersonalInflationReportView()
+        case .yearReview:
+            YearReviewReportView()
+        case .independence:
+            IndependenceReportView()
+        case .taxReturn:
+            TaxReturnReportView()
         }
     }
 }

@@ -22,6 +22,7 @@ class AppState: ObservableObject {
     let investmentTransactionRepository: InvestmentTransactionRepository
     let savingsPlanRepository: SavingsPlanRepository
     let accountTermsRepository: AccountTermsRepository
+    let taxMappingRepository: TaxMappingRepository
 
     // Controllers
     let bookController: BooksController
@@ -41,6 +42,7 @@ class AppState: ObservableObject {
     let investmentsController: InvestmentsController
     let savingsPlansController: SavingsPlansController
     let accountTermsController: AccountTermsController
+    let taxMappingController: TaxMappingController
 
     init() {
         // Une restauration demandée à la session précédente s'applique avant d'ouvrir la base
@@ -71,6 +73,7 @@ class AppState: ObservableObject {
         self.investmentTransactionRepository = InvestmentTransactionRepository(db: db)
         self.savingsPlanRepository = SavingsPlanRepository(db: db)
         self.accountTermsRepository = AccountTermsRepository(db: db)
+        self.taxMappingRepository = TaxMappingRepository(db: db)
 
         // Initialiser les controllers
         self.bookController = BooksController(repository: bookRepository)
@@ -92,6 +95,7 @@ class AppState: ObservableObject {
         )
         self.savingsPlansController = SavingsPlansController(repository: savingsPlanRepository)
         self.accountTermsController = AccountTermsController(repository: accountTermsRepository)
+        self.taxMappingController = TaxMappingController(repository: taxMappingRepository)
 
         // Cours en ligne (désactivés par défaut) et historique des cours
         self.positionPriceRepository = PositionPriceRepository(db: db)
