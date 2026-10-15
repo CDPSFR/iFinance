@@ -31,7 +31,6 @@ struct PersonalInflationReportView: View {
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: NativeMetrics.groupSpacing) {
-                    headline(report)
                     tiles(report)
                     postsBlock(report)
                     LTBlockGrid(blocks: [AnyView(yearsBlock(report)), AnyView(methodBlock)])
@@ -42,27 +41,6 @@ struct PersonalInflationReportView: View {
 
     private var prices: InflationTable { inflationService.table }
     private var reference: String { "INSEE \(String(prices.lastYear))" }
-
-    // MARK: - Réponse
-
-    private func headline(_ report: InflationReport) -> some View {
-        let change = report.change ?? 0
-        let gap = change - prices.last
-        let drivers = report.posts
-            .filter { ($0.change ?? 0) > prices.last + 0.02 && $0.now >= 50 }
-            .sorted { PlanFormat.double($0.now - $0.before) > PlanFormat.double($1.now - $1.before) }
-            .prefix(2)
-            .map(\.name)
-
-        return ReportHeadline(
-            question: "Mes dépenses augmentent-elles plus vite que les prix ?",
-            answer: "Vos dépenses courantes ont \(change >= 0 ? "augmenté" : "baissé") de \(format.percent(abs(change))) en un an, contre \(format.percent(prices.last)) pour les prix en France.",
-            detail: gap > 0.01
-                ? (drivers.isEmpty ? "" : "\(drivers.joined(separator: " et ")) tire\(drivers.count > 1 ? "nt" : "") la hausse. ") + "Une partie vient de ce que vous consommez plus, pas seulement des prix."
-                : "Vos dépenses suivent la hausse des prix, ou progressent moins vite.",
-            tone: gap > 0.02 ? .warning : .good
-        )
-    }
 
     // MARK: - Chiffres clés
 

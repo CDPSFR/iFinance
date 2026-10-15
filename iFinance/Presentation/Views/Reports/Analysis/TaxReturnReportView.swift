@@ -78,7 +78,6 @@ struct TaxReturnReportView: View {
                     Button("Relier les catégories…") { showMapping = true }
                 }
 
-                headline(report)
                 tiles(report)
                 creditsBlock(report)
                 LTBlockGrid(blocks: [AnyView(investmentsBlock(report)), AnyView(checksBlock(report))])
@@ -87,27 +86,6 @@ struct TaxReturnReportView: View {
         }
         .sheet(isPresented: $showMapping) {
             TaxCategoryMappingView()
-        }
-    }
-
-    // MARK: - Réponse
-
-    @ViewBuilder
-    private func headline(_ report: TaxReport) -> some View {
-        if report.lines.isEmpty {
-            ReportHeadline(
-                question: "Qu’est-ce que je dois déclarer, et combien je récupère ?",
-                answer: "Reliez vos catégories (dons, garde d’enfant, emploi à domicile…) aux cases de la déclaration pour repérer vos réductions d’impôt.",
-                detail: "Bouton « Relier les catégories… » en haut à droite. Une fois fait, le rapport se remplit tout seul chaque année.",
-                tone: .info
-            )
-        } else {
-            ReportHeadline(
-                question: "Qu’est-ce que je dois déclarer, et combien je récupère ?",
-                answer: "Environ \(format.money(report.advantage)) de réductions et crédits d’impôt repérés dans vos dépenses de \(String(year)).",
-                detail: "À reporter au printemps \(String(year + 1)) sur votre déclaration. Les montants viennent de vos catégories : vérifiez-les avec vos reçus et attestations.",
-                tone: .good
-            )
         }
     }
 

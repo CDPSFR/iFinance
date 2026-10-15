@@ -32,26 +32,12 @@ struct BankFeesReportView: View {
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: NativeMetrics.groupSpacing) {
-                    headline(report)
                     tiles(report)
                     LTBlockGrid(blocks: [AnyView(kindsBlock(report)), AnyView(monthsBlock(report)), AnyView(adviceBlock(report))])
                     table(report)
                 }
             }
         }
-    }
-
-    // MARK: - Réponse
-
-    private func headline(_ report: BankFeesReport) -> some View {
-        ReportHeadline(
-            question: "Combien me coûte ma banque ?",
-            answer: "Vos banques vous ont coûté \(format.money(report.total)) sur les 12 derniers mois.",
-            detail: report.avoidable > 0
-                ? "Dont \(format.money(report.avoidable)) de commissions et d’agios, liés aux passages à découvert : ce sont les plus faciles à éviter."
-                : "Aucun frais lié à un découvert : ce sont surtout des cotisations.",
-            tone: report.avoidable > 0 ? .warning : .info
-        )
     }
 
     // MARK: - Chiffres clés

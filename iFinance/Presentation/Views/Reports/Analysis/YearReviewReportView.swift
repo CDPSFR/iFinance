@@ -50,7 +50,6 @@ struct YearReviewReportView: View {
                 if review.income == 0 && review.expense == 0 {
                     ReportEmptyState(systemImage: "calendar", message: "Aucune opération sur les comptes courants en \(String(year)).")
                 } else {
-                    headline(review)
                     tiles(review)
                     LTBlockGrid(blocks: [AnyView(monthsBlock(review)), AnyView(highlightsBlock(review)), AnyView(categoriesBlock(review))])
                     table(review)
@@ -69,23 +68,6 @@ struct YearReviewReportView: View {
     private func change(_ now: Decimal, _ before: Decimal) -> String? {
         guard before > 0 else { return nil }
         return "\(format.percent(PlanFormat.double((now - before) / before), signed: true)) vs \(isCurrentYear ? "même période " : "")\(String(year - 1))"
-    }
-
-    // MARK: - Réponse
-
-    private func headline(_ review: YearReview) -> some View {
-        let saving = review.saving
-        let previousSaving = review.previousIncome - review.previousExpense
-        let period = isCurrentYear ? "Depuis janvier" : String(year)
-        return ReportHeadline(
-            question: "Comment s’est passée mon année ?",
-            answer: saving >= 0
-                ? "\(period) : vous avez mis de côté \(format.money(saving)), soit \(format.percent(PlanFormat.ratio(saving, review.income) ?? 0)) de vos revenus."
-                : "\(period) : vos dépenses ont dépassé vos revenus de \(format.money(-saving)).",
-            detail: "\(review.positiveMonths) mois sur \(review.months.count) se terminent en positif."
-                + (previousSaving > 0 && saving > previousSaving ? (isCurrentYear ? " Vous avez épargné plus que sur \(previousPeriod)." : " Vous avez épargné plus qu’en \(previousPeriod).") : ""),
-            tone: saving > 0 ? .good : .warning
-        )
     }
 
     // MARK: - Chiffres clés

@@ -43,7 +43,6 @@ struct ForecastReportView: View {
         let accounts = selectedAccounts
         let start = accounts.reduce(Decimal(0)) { $0 + transactionsController.calculateBalance(for: $1.id, initialBalance: $1.initialBalance) }
         let report = builder.forecast(accountIDs: Set(accounts.map(\.id)), days: horizon, startBalance: start)
-        let scope = accounts.count == 1 ? accounts[0].name : "Vos comptes courants"
 
         if currentAccounts.isEmpty {
             ReportEmptyState(systemImage: "calendar.badge.clock", message: "Aucun compte courant à prévoir.")
@@ -51,7 +50,6 @@ struct ForecastReportView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: NativeMetrics.groupSpacing) {
                     controls
-                    headline(report, scope: scope)
                     tiles(report)
                     chartBlock(report)
                     LTBlockGrid(blocks: [AnyView(eventsBlock(report)), AnyView(methodBlock(report))])
@@ -81,30 +79,6 @@ struct ForecastReportView: View {
             .labelsHidden()
             .fixedSize()
             Spacer()
-        }
-    }
-
-    // MARK: - Réponse
-
-    @ViewBuilder
-    private func headline(_ report: ForecastReport, scope: String) -> some View {
-        if let first = report.firstNegative, let lowest = report.lowest {
-            let calendar = Calendar.current
-            let deadline = calendar.date(byAdding: .day, value: -1, to: first.date) ?? first.date
-            let transfer = Decimal((PlanFormat.double(-lowest.balance) / 100).rounded(.up) * 100 + 100)
-            ReportHeadline(
-                question: "Mon compte va-t-il passer dans le rouge ?",
-                answer: "\(scope) risque\(selectedAccounts.count > 1 ? "nt" : "") de passer à \(format.money(lowest.balance)) le \(format.day(lowest.date)), pendant \(report.negativeDays) jour\(report.negativeDays > 1 ? "s" : "").",
-                detail: "Un virement d’environ \(format.money(transfer)) depuis un livret d’ici le \(format.day(deadline)) suffirait à l’éviter.",
-                tone: .bad
-            )
-        } else if let lowest = report.lowest {
-            ReportHeadline(
-                question: "Mon compte va-t-il passer dans le rouge ?",
-                answer: "Non : pas de découvert prévu dans les \(horizon) prochains jours.",
-                detail: "Point le plus bas : \(format.money(lowest.balance)) le \(format.day(lowest.date)).",
-                tone: lowest.balance < 300 ? .warning : .good
-            )
         }
     }
 

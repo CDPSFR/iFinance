@@ -65,37 +65,12 @@ struct UnusualSpendingReportView: View {
                 if report.total == 0 {
                     ReportEmptyState(systemImage: "sparkle.magnifyingglass", message: "Aucune dépense ce mois-ci sur les comptes courants.")
                 } else {
-                    headline(report)
                     tiles(report)
                     categoriesBlock(report)
                     LTBlockGrid(blocks: [AnyView(itemsBlock(report)), AnyView(methodBlock)])
                 }
             }
         }
-    }
-
-    // MARK: - Réponse
-
-    private func headline(_ report: UnusualReport) -> some View {
-        let unusual = report.unusualCategories
-        let monthName = report.month.formatted(.dateTime.month(.wide))
-        if unusual.isEmpty && report.items.isEmpty {
-            return ReportHeadline(
-                question: "Qu’est-ce qui sort de l’ordinaire ce mois-ci ?",
-                answer: "Rien de particulier en \(monthName) : vos dépenses sont dans vos habitudes.",
-                detail: "Comparaison avec la moyenne des 6 mois précédents.",
-                tone: .good
-            )
-        }
-        let biggest = unusual.max { $0.excess < $1.excess }
-        return ReportHeadline(
-            question: "Qu’est-ce qui sort de l’ordinaire ce mois-ci ?",
-            answer: unusual.isEmpty
-                ? "\(report.items.count) opération\(report.items.count > 1 ? "s" : "") à regarder en \(monthName)."
-                : "\(unusual.count) poste\(unusual.count > 1 ? "s sortent" : " sort") de l’ordinaire en \(monthName) : \(format.money(report.unusualExcess)) de plus que d’habitude.",
-            detail: biggest.map { "Surtout « \($0.name) » (\(format.signed($0.excess))). Le reste de vos dépenses est dans vos habitudes." },
-            tone: .warning
-        )
     }
 
     // MARK: - Chiffres clés

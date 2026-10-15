@@ -30,7 +30,6 @@ struct FixedChargesReportView: View {
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: NativeMetrics.groupSpacing) {
-                    headline(report)
                     tiles(report)
                     groupsBlock(report)
                     LTBlockGrid(blocks: [AnyView(subscriptionsBlock(report)), AnyView(monthsBlock(report))])
@@ -42,22 +41,6 @@ struct FixedChargesReportView: View {
 
     private func checks(_ report: FixedChargesReport) -> Int {
         report.increases.count + report.duplicates.count
-    }
-
-    // MARK: - Réponse
-
-    private func headline(_ report: FixedChargesReport) -> some View {
-        let share = report.monthlyIncome.flatMap { PlanFormat.ratio(report.total, $0) }
-        let left = report.monthlyIncome.map { $0 - report.total }
-        let count = checks(report)
-
-        return ReportHeadline(
-            question: "Combien me coûtent mes charges incompressibles ?",
-            answer: "Vos charges fixes représentent \(format.money(report.total)) par mois" + (share.map { ", soit \(format.percent($0)) de vos revenus." } ?? "."),
-            detail: (left.map { "Il reste \(format.money($0)) par mois pour tout le reste : courses, loisirs, épargne." } ?? "")
-                + (count > 0 ? " \(count) point\(count > 1 ? "s" : "") mérite\(count > 1 ? "nt" : "") un coup d’œil." : ""),
-            tone: (share ?? 0) > 0.6 ? .warning : .info
-        )
     }
 
     // MARK: - Chiffres clés

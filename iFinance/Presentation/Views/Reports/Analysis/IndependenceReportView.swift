@@ -66,7 +66,6 @@ struct IndependenceReportView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: NativeMetrics.groupSpacing) {
                     controls
-                    headline(inputs)
                     tiles(inputs)
                     chartBlock(inputs)
                     LTBlockGrid(blocks: [AnyView(leversBlock(inputs)), AnyView(methodBlock(inputs))])
@@ -96,28 +95,6 @@ struct IndependenceReportView: View {
 
     private func ageText(_ year: Int) -> String {
         birthYear > 0 ? ", à \(year - birthYear) ans" : ""
-    }
-
-    // MARK: - Réponse
-
-    private func headline(_ inputs: Inputs) -> some View {
-        let share = inputs.capital / inputs.target
-        if share >= 1 {
-            return ReportHeadline(
-                question: "Quand pourrais-je vivre de mon épargne ?",
-                answer: "C’est déjà le cas en théorie : votre épargne couvre 25 fois vos dépenses annuelles.",
-                detail: "Pensez aux impôts sur les retraits et aux imprévus avant de décider quoi que ce soit.",
-                tone: .good
-            )
-        }
-        let year = targetYear(inputs)
-        return ReportHeadline(
-            question: "Quand pourrais-je vivre de mon épargne ?",
-            answer: year.map { "À votre rythme actuel, vous pourriez vivre de votre épargne vers \(String($0))\(ageText($0))." }
-                ?? "À votre rythme actuel, l’objectif n’est pas atteignable : il faudrait épargner davantage.",
-            detail: "Il faudrait un capital d’environ \(format.money(Decimal(inputs.target))), soit 25 fois vos dépenses annuelles. Vous en avez déjà \(format.percent(share)).",
-            tone: .info
-        )
     }
 
     // MARK: - Chiffres clés
