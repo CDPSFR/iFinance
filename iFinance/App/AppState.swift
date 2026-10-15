@@ -42,6 +42,8 @@ class AppState: ObservableObject {
 
     // Sauvegardes de la base
     let backupManager: BackupManager
+    // Verrouillage des livres protégés par un mot de passe
+    let bookLockController: BookLockController
     let investmentsController: InvestmentsController
     let savingsPlansController: SavingsPlansController
     let accountTermsController: AccountTermsController
@@ -78,9 +80,15 @@ class AppState: ObservableObject {
 
         // Initialiser les controllers
         self.bookController = BooksController(repository: bookRepository)
-        // Choisir un livre ouvre sa base, avant que les vues ne chargent ses données
-        bookController.openBook = { [library] id in try library.open(bookID: id) }
-        bookController.deleteBookData = { [library] id in try library.deleteBookFile(id) }
+        // Choisir un livre ouvre sa base, avant que les vues ne chargent ses données ;
+        // un livre protégé reste fermé (verrouillé) jusqu'à son mot de passe
+        let bookLockController = BookLockController(library: library)
+        self.bookLockController = bookLockController
+        bookController.openBook = { id in try bookLockController.open(id) }
+        bookController.deleteBookData = { [library] id in
+            bookLockController.forget(id)
+            try library.deleteBookFile(id)
+        }
         self.accountsController = AccountsController(repository: accountRepository)
         self.transactionsController = TransactionsController(repository: transactionRepository)
         self.categoriesController = CategoriesController(repository: categoryRepository)

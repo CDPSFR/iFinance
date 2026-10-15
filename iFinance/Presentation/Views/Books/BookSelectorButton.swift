@@ -15,7 +15,7 @@ struct BookSelectorButton: View {
                 showPopover.toggle()
             } label: {
                 HStack(spacing: 10) {
-                    Image(systemName: "book.closed.fill")
+                    Image(systemName: book.isProtected ? "lock.fill" : "book.closed.fill")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(.white)
                         .frame(width: 30, height: 30)
@@ -98,6 +98,7 @@ struct BookSelectorButton: View {
 /// Liste des livres actifs, ancrée sous le sélecteur de la barre latérale.
 /// Un clic sur un livre le sélectionne et referme le popover.
 struct BookSwitcherPopover: View {
+    @EnvironmentObject var appState: AppState
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var accountsController: AccountsController
     @Binding var isPresented: Bool
@@ -177,7 +178,8 @@ struct BookSwitcherPopover: View {
         .padding(10)
         .frame(width: 320)
         .task {
-            accountCounts = await accountsController.activeAccountCounts(for: booksController.activeBooks.map(\.id))
+            // Chaque livre a sa base : les comptes des autres livres sont lus dans leur fichier
+            accountCounts = appState.library.activeAccountCounts(for: booksController.activeBooks.map(\.id))
         }
     }
 
@@ -241,9 +243,16 @@ private struct BookSwitcherRow: View {
                     )
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(book.name)
-                        .fontWeight(.semibold)
-                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(book.name)
+                            .fontWeight(.semibold)
+                            .lineLimit(1)
+                        if book.isProtected {
+                            Image(systemName: "lock.fill")
+                                .font(.caption2)
+                                .accessibilityLabel("protégé")
+                        }
+                    }
                     Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(isCurrent ? Color.white.opacity(0.8) : Color.secondary)

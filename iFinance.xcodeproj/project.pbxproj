@@ -7,12 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		D9545CB72EFF235B0052E3A5 /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = D9545CB62EFF235B0052E3A5 /* libsqlite3.tbd */; };
+		D9A1C0032F00000100A1B2C3 /* SQLCipher in Frameworks */ = {isa = PBXBuildFile; productRef = D9A1C0022F00000100A1B2C3 /* SQLCipher */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		D940C3B62E97956A005FED23 /* iFinance.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iFinance.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		D9545CB62EFF235B0052E3A5 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -28,7 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D9545CB72EFF235B0052E3A5 /* libsqlite3.tbd in Frameworks */,
+				D9A1C0032F00000100A1B2C3 /* SQLCipher in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -55,7 +54,6 @@
 		D9545CB52EFF235B0052E3A5 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				D9545CB62EFF235B0052E3A5 /* libsqlite3.tbd */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -80,6 +78,7 @@
 			);
 			name = iFinance;
 			packageProductDependencies = (
+				D9A1C0022F00000100A1B2C3 /* SQLCipher */,
 			);
 			productName = iFinance;
 			productReference = D940C3B62E97956A005FED23 /* iFinance.app */;
@@ -110,6 +109,9 @@
 			);
 			mainGroup = D940C3AD2E97956A005FED23;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D9A1C0012F00000100A1B2C3 /* XCRemoteSwiftPackageReference "SQLCipher" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D940C3B72E97956A005FED23 /* Products */;
 			projectDirPath = "";
@@ -357,6 +359,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D9A1C0012F00000100A1B2C3 /* XCRemoteSwiftPackageReference "SQLCipher" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sqlcipher/SQLCipher.swift";
+			requirement = {
+				kind = exactVersion;
+				version = 4.19.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D9A1C0022F00000100A1B2C3 /* SQLCipher */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D9A1C0012F00000100A1B2C3 /* XCRemoteSwiftPackageReference "SQLCipher" */;
+			productName = SQLCipher;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = D940C3AE2E97956A005FED23 /* Project object */;
 }

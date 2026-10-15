@@ -11,7 +11,8 @@ class BookRepository: BookRepositoryProtocol {
     
     func fetchAll() async throws -> [Book] {
         let sql = """
-        SELECT id, name, currency, created_at, updated_at, archived_at, color
+        SELECT id, name, currency, created_at, updated_at, archived_at, color,
+               EXISTS (SELECT 1 FROM book_keys WHERE book_keys.book_id = books.id) AS is_protected
         FROM books
         ORDER BY created_at DESC;
         """
@@ -24,7 +25,8 @@ class BookRepository: BookRepositoryProtocol {
     
     func fetchActive() async throws -> [Book] {
         let sql = """
-        SELECT id, name, currency, created_at, updated_at, archived_at, color
+        SELECT id, name, currency, created_at, updated_at, archived_at, color,
+               EXISTS (SELECT 1 FROM book_keys WHERE book_keys.book_id = books.id) AS is_protected
         FROM books
         WHERE archived_at IS NULL
         ORDER BY created_at DESC;
@@ -38,7 +40,8 @@ class BookRepository: BookRepositoryProtocol {
     
     func fetchArchived() async throws -> [Book] {
         let sql = """
-        SELECT id, name, currency, created_at, updated_at, archived_at, color
+        SELECT id, name, currency, created_at, updated_at, archived_at, color,
+               EXISTS (SELECT 1 FROM book_keys WHERE book_keys.book_id = books.id) AS is_protected
         FROM books
         WHERE archived_at IS NOT NULL
         ORDER BY archived_at DESC;
@@ -52,7 +55,8 @@ class BookRepository: BookRepositoryProtocol {
     
     func fetch(id: UUID) async throws -> Book? {
         let sql = """
-        SELECT id, name, currency, created_at, updated_at, archived_at, color
+        SELECT id, name, currency, created_at, updated_at, archived_at, color,
+               EXISTS (SELECT 1 FROM book_keys WHERE book_keys.book_id = books.id) AS is_protected
         FROM books
         WHERE id = ?;
         """

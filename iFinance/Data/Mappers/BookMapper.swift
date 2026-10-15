@@ -60,6 +60,8 @@ struct BookMapper {
             color: row["color"] as? String
         )
         
-        return fromDTO(dto)
+        var book = fromDTO(dto)
+        book?.isProtected = (row["is_protected"] as? Int64 ?? 0) != 0
+        return book
     }
 }

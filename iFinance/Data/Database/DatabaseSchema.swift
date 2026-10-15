@@ -21,14 +21,17 @@ struct DatabaseSchema {
         createSavingsPlanSettingsTable,
         createAccountTermsTable,
         createCategoryTaxCasesTable,
-        createPriceIndicesTable
+        createPriceIndicesTable,
+        // Vide dans un livre : présente pour que le dépôt des livres lise aussi l'ancienne base commune
+        createBookKeysTable
     ]
     
     /// Catalogue des livres (catalog.sqlite) : la liste des livres et ce qui est commun à l'app.
     /// Les données de chaque livre sont dans son propre fichier.
     static let catalogStatements: [String] = [
         createBooksTable,
-        createPriceIndicesTable
+        createPriceIndicesTable,
+        createBookKeysTable
     ]
 
     /// Colonnes ajoutées au catalogue après sa création (ALTER TABLE)
@@ -395,6 +398,21 @@ struct DatabaseSchema {
         category_id TEXT PRIMARY KEY,
         tax_case TEXT NOT NULL,
         FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+    );
+    """
+
+    // MARK: - Book Keys (catalogue : clé de données d'un livre protégé, chiffrée deux fois)
+
+    static let createBookKeysTable = """
+    CREATE TABLE IF NOT EXISTS book_keys (
+        book_id TEXT PRIMARY KEY,
+        password_salt BLOB NOT NULL,
+        password_iterations INTEGER NOT NULL,
+        password_wrapped_key BLOB NOT NULL,
+        recovery_salt BLOB NOT NULL,
+        recovery_iterations INTEGER NOT NULL,
+        recovery_wrapped_key BLOB NOT NULL,
+        updated_at TEXT NOT NULL
     );
     """
 

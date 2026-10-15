@@ -1,5 +1,5 @@
 import Foundation
-import SQLite3
+import SQLCipher
 
 class SQLiteManager {
     /// Demande à SQLite de copier le texte lié. Sans cela (destructeur nil = SQLITE_STATIC),
@@ -19,28 +19,71 @@ class SQLiteManager {
     private var db: OpaquePointer?
     private(set) var dbPath: String
     private let schema: Schema
+    /// Clé SQLCipher de la base ouverte (nil : base en clair)
+    private var key: Data?
 
-    /// Ouvre (ou crée) la base `path` ; ":memory:" pour une base vide en mémoire
-    init(path: String, schema: Schema = .book) throws {
+    var isEncrypted: Bool { key != nil }
+    /// Clé de la base ouverte (nil : base en clair)
+    var currentKey: Data? { key }
+
+    /// Ouvre (ou crée) la base `path` ; ":memory:" pour une base vide en mémoire.
+    /// Avec `key`, la base est chiffrée par SQLCipher : une mauvaise clé lève une erreur.
+    init(path: String, schema: Schema = .book, key: Data? = nil) throws {
         self.dbPath = path
         self.schema = schema
+        self.key = key
         print("📁 Database path: \(dbPath)")
         try openDatabase()
         createTables()
     }
 
-    /// Ferme la base courante et en ouvre une autre (changement de livre).
+    /// Ferme la base courante et en ouvre une autre (changement de livre, verrouillage).
     /// Les repositories gardent la même instance : ils lisent aussitôt la nouvelle base.
-    func reopen(path: String) throws {
-        guard path != dbPath else { return }
+    func reopen(path: String, key: Data? = nil) throws {
+        guard path != dbPath || key != self.key else { return }
         closeDatabase()
         dbPath = path
-        try openDatabase()
+        self.key = key
+        do {
+            try openDatabase()
+        } catch {
+            // Base vide en mémoire plutôt qu'un handle fermé
+            self.key = nil
+            dbPath = ":memory:"
+            try? openDatabase()
+            createTables()
+            throw error
+        }
         createTables()
     }
 
-    /// Copie cohérente de la base ouverte dans `destination` (VACUUM INTO)
+    /// Version de SQLCipher liée à l'app (vide si le SQLite du système était utilisé par erreur)
+    var cipherVersion: String {
+        ((try? query(sql: "PRAGMA cipher_version;"))?.first?["cipher_version"] as? String) ?? ""
+    }
+
+    /// Copie cohérente de la base ouverte dans `destination`, chiffrée avec `key` (nil : en clair).
+    /// Sert à chiffrer, déchiffrer ou recopier une base (sqlcipher_export).
+    func export(to destination: URL, key destinationKey: Data?) throws {
+        try? FileManager.default.removeItem(at: destination)
+        let escaped = destination.path.replacingOccurrences(of: "'", with: "''")
+        // KEY '' : copie en clair ; KEY "x'…'" : copie chiffrée avec cette clé brute
+        let keyClause = destinationKey.map { "\"\(BookCrypto.sqlcipherKey($0))\"" } ?? "''"
+        guard execute(sql: "ATTACH DATABASE '\(escaped)' AS exported KEY \(keyClause);") else {
+            throw SQLiteError.executeQuery(message: "Copie impossible vers \(destination.lastPathComponent)")
+        }
+        defer { execute(sql: "DETACH DATABASE exported;") }
+        guard (try? query(sql: "SELECT sqlcipher_export('exported');")) != nil else {
+            throw SQLiteError.executeQuery(message: "Copie impossible vers \(destination.lastPathComponent)")
+        }
+    }
+
+    /// Copie cohérente de la base ouverte dans `destination`, avec la même clé
     func copy(to destination: URL) throws {
+        if isEncrypted {
+            try export(to: destination, key: key)
+            return
+        }
         try? FileManager.default.removeItem(at: destination)
         let escaped = destination.path.replacingOccurrences(of: "'", with: "''")
         guard execute(sql: "VACUUM INTO '\(escaped)';") else {
@@ -61,6 +104,16 @@ class SQLiteManager {
             sqlite3_close(db)
             db = nil
             throw SQLiteError.openDatabase(message: "\(errorMessage) (\(dbPath))")
+        }
+        if let key {
+            // La clé doit être donnée avant toute lecture ; une mauvaise clé fait échouer la première requête
+            // PRAGMA key renvoie une ligne « ok » : lue comme une requête
+            guard (try? query(sql: "PRAGMA key = \"\(BookCrypto.sqlcipherKey(key))\";")) != nil,
+                  (try? query(sql: "SELECT count(*) FROM sqlite_master;")) != nil else {
+                sqlite3_close(db)
+                db = nil
+                throw SQLiteError.openDatabase(message: "Clé du livre incorrecte (\(dbPath))")
+            }
         }
         print("✅ Base de données ouverte avec succès")
         
@@ -139,6 +192,10 @@ class SQLiteManager {
             case let value as Date:
                 let iso8601 = ISO8601DateFormatter().string(from: value)
                 sqlite3_bind_text(statement, bindIndex, iso8601, -1, SQLiteManager.transient)
+            case let value as Data:
+                _ = value.withUnsafeBytes { bytes in
+                    sqlite3_bind_blob(statement, bindIndex, bytes.baseAddress, Int32(value.count), SQLiteManager.transient)
+                }
             case is NSNull:
                 sqlite3_bind_null(statement, bindIndex)
             case Optional<Any>.none:
@@ -210,6 +267,10 @@ class SQLiteManager {
             case let value as Date:
                 let iso8601 = ISO8601DateFormatter().string(from: value)
                 sqlite3_bind_text(statement, bindIndex, iso8601, -1, SQLiteManager.transient)
+            case let value as Data:
+                _ = value.withUnsafeBytes { bytes in
+                    sqlite3_bind_blob(statement, bindIndex, bytes.baseAddress, Int32(value.count), SQLiteManager.transient)
+                }
             case is NSNull:
                 sqlite3_bind_null(statement, bindIndex)
             case Optional<Any>.none:
@@ -238,6 +299,13 @@ class SQLiteManager {
                 case SQLITE_TEXT:
                     if let cString = sqlite3_column_text(statement, i) {
                         row[columnName] = String(cString: cString)
+                    }
+                case SQLITE_BLOB:
+                    let count = Int(sqlite3_column_bytes(statement, i))
+                    if let bytes = sqlite3_column_blob(statement, i) {
+                        row[columnName] = Data(bytes: bytes, count: count)
+                    } else {
+                        row[columnName] = Data()
                     }
                 case SQLITE_NULL:
                     row[columnName] = NSNull()

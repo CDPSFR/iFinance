@@ -22,6 +22,7 @@ struct iFinanceApp: App {
                 .environmentObject(appState.recurringController)
                 .environmentObject(appState.quoteService)
                 .environmentObject(appState.inflationService)
+                .environmentObject(appState.bookLockController)
                 .environmentObject(appState.backupManager)
                 .environmentObject(appState.investmentsController)
                 .environmentObject(appState.savingsPlansController)
@@ -52,6 +53,12 @@ struct iFinanceApp: App {
                 Divider()
                 creationButton(.book)
             }
+            // Verrouille le livre affiché s'il est protégé par un mot de passe
+            CommandGroup(after: .newItem) {
+                Divider()
+                Button("Verrouiller le livre") { appState.bookLockController.lock() }
+                    .keyboardShortcut("l", modifiers: .command)
+            }
         }
 
         // Fenêtres de transactions d'un bénéficiaire ou d'une catégorie (« Ouvrir dans une nouvelle fenêtre »)
@@ -71,6 +78,7 @@ struct iFinanceApp: App {
                     .environmentObject(appState.recurringController)
                     .environmentObject(appState.quoteService)
                     .environmentObject(appState.inflationService)
+                .environmentObject(appState.bookLockController)
                     .environmentObject(appState.backupManager)
                     .environmentObject(appState.investmentsController)
                     .environmentObject(appState.savingsPlansController)
@@ -97,6 +105,7 @@ struct iFinanceApp: App {
                 .environmentObject(appState.recurringController)
                 .environmentObject(appState.quoteService)
                 .environmentObject(appState.inflationService)
+                .environmentObject(appState.bookLockController)
                 .environmentObject(appState.backupManager)
                 .environmentObject(appState.investmentsController)
                 .environmentObject(appState.savingsPlansController)

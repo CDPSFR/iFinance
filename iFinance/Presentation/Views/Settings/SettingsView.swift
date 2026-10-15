@@ -134,12 +134,16 @@ struct GeneralSettingsTab: View {
 
 struct BooksSettingsTab: View {
     @EnvironmentObject var booksController: BooksController
+    @EnvironmentObject var bookLock: BookLockController
 
     @State private var selection: Book.ID?
     @State private var editedName = ""
     @State private var showBookForm = false
     @State private var bookToDelete: Book?
     @State private var showDeleteConfirmation = false
+    /// Mot de passe demandé pour supprimer un livre protégé
+    @State private var deletePassword = ""
+    @State private var deleteError: String?
 
     private var selectedBook: Book? {
         booksController.books.first { $0.id == selection }
@@ -154,6 +158,12 @@ struct BooksSettingsTab: View {
                             .fill(book.color.map { Color(hex: $0) } ?? Color.accentColor)
                             .frame(width: 10, height: 10)
                         Text(book.name)
+                        if book.isProtected {
+                            Image(systemName: "lock.fill")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .help("Protégé par un mot de passe")
+                        }
                     }
                 }
 
@@ -245,10 +255,11 @@ struct BooksSettingsTab: View {
                         Text(book.currency)
                             .foregroundStyle(.secondary)
                     }
+
+                    BookProtectionSection(book: book)
                 }
                 .formStyle(.grouped)
-                .scrollDisabled(true)
-                .frame(height: 170)
+                .frame(minHeight: 300)
             } else {
                 Text("Sélectionnez un livre pour le modifier.")
                     .foregroundStyle(.secondary)
@@ -269,15 +280,30 @@ struct BooksSettingsTab: View {
             BookFormView(isPresented: $showBookForm)
         }
         .alert("Supprimer le livre ?", isPresented: $showDeleteConfirmation, presenting: bookToDelete) { book in
-            Button("Annuler", role: .cancel) { }
+            if book.isProtected {
+                SecureField("Mot de passe du livre", text: $deletePassword)
+            }
+            Button("Annuler", role: .cancel) { deletePassword = "" }
             Button("Supprimer", role: .destructive) {
+                let password = deletePassword
+                deletePassword = ""
                 Task {
+                    // Un livre protégé ne se supprime qu'avec son mot de passe
+                    if book.isProtected, !(await bookLock.verifyPassword(book.id, password: password)) {
+                        deleteError = "Mot de passe incorrect : le livre « \(book.name) » n'a pas été supprimé."
+                        return
+                    }
                     await booksController.deleteBook(id: book.id)
                     selection = booksController.currentBook?.id
                 }
             }
         } message: { book in
             Text("Le livre « \(book.name) » sera supprimé avec tous ses comptes, transactions, catégories et budgets. Cette action est irréversible.")
+        }
+        .alert("Suppression impossible", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(deleteError ?? "")
         }
     }
 
@@ -605,6 +631,7 @@ struct DataSettingsTab: View {
 
 struct PrivacySettingsTab: View {
     @EnvironmentObject var appSettings: AppSettings
+    @EnvironmentObject var bookLock: BookLockController
 
     @AppStorage(SettingsKeys.hideAmountsAtLaunch) private var hideAmountsAtLaunch = false
 
@@ -622,6 +649,17 @@ struct PrivacySettingsTab: View {
                 Toggle(isOn: $hideAmountsAtLaunch) {
                     Text("Masquer les montants à l'ouverture")
                     Text("L'app démarre toujours avec les montants floutés.")
+                }
+            }
+
+            Section {
+                Picker(selection: $bookLock.autoLockMinutes) {
+                    ForEach(BookLockController.autoLockChoices, id: \.self) { minutes in
+                        Text(minutes == 0 ? "Jamais" : "Après \(minutes) min d'inactivité").tag(minutes)
+                    }
+                } label: {
+                    Text("Verrouiller les livres protégés")
+                    Text("Aussi à la mise en veille, au verrouillage de l'écran, en changeant de livre et avec ⌘L.")
                 }
             }
 

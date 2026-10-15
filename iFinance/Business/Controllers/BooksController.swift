@@ -47,6 +47,9 @@ class BooksController: ObservableObject {
             // Charger le dernier livre sélectionné ou le premier actif par défaut
             if currentBook == nil {
                 loadLastSelectedBook()
+            } else if let current = currentBook, let fresh = books.first(where: { $0.id == current.id }), fresh != current {
+                // Même livre, informations à jour (nom, couleur, protection) : la base n'est pas rouverte
+                currentBook = fresh
             }
             
         } catch {

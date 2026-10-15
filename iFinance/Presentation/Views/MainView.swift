@@ -16,6 +16,7 @@ struct MainView: View {
     @EnvironmentObject var payeesController: PayeesController
     @EnvironmentObject var budgetsController: BudgetsController
     @EnvironmentObject var projectsController: ProjectsController
+    @EnvironmentObject var bookLock: BookLockController
 
     // MARK: - State
     @State private var showTransactionForm = false
@@ -75,7 +76,11 @@ struct MainView: View {
         NavigationSplitView {
             sidebar
         } detail: {
-            contentView
+            if bookLock.isLocked, let book = booksController.currentBook {
+                BookLockView(book: book)
+            } else {
+                contentView
+            }
         }
         .frame(minWidth: 800, minHeight: 600)
         .toolbar { toolbarContent }
@@ -114,24 +119,33 @@ struct MainView: View {
             guard let command = notification.object as? CreationCommand else { return }
             handle(command)
         }
-        .onChange(of: booksController.currentBook?.id) { _, newValue in
-            guard let bookID = newValue else { return }
-            Task {
-                await accountsController.loadAccounts(for: bookID)
-                await categoriesController.loadCategories(for: bookID)
-                await payeesController.loadPayees(for: bookID)
-                // Avant les transactions : les échéances en saisie automatique y sont créées
-                await recurringController.load(for: bookID)
-                await transactionsController.loadAllTransactions(
-                    for: accountsController.activeAccounts
-                )
-                await investmentsController.load(for: accountsController.activeAccounts)
-                await savingsPlansController.load(for: accountsController.activeAccounts)
-                await accountTermsController.load()
-                await taxMappingController.load()
-                await budgetsController.loadBudgets(for: bookID)
-                await projectsController.loadProjects(for: bookID)
-            }
+        .onChange(of: booksController.currentBook?.id) { _, _ in
+            loadBookData()
+        }
+        // Verrouiller vide les données chargées ; déverrouiller les recharge
+        .onChange(of: bookLock.isLocked) { _, _ in
+            loadBookData()
+        }
+    }
+
+    /// Charge les données du livre courant (vides si le livre est verrouillé : sa base est fermée)
+    private func loadBookData() {
+        guard let bookID = booksController.currentBook?.id else { return }
+        Task {
+            await accountsController.loadAccounts(for: bookID)
+            await categoriesController.loadCategories(for: bookID)
+            await payeesController.loadPayees(for: bookID)
+            // Avant les transactions : les échéances en saisie automatique y sont créées
+            await recurringController.load(for: bookID)
+            await transactionsController.loadAllTransactions(
+                for: accountsController.activeAccounts
+            )
+            await investmentsController.load(for: accountsController.activeAccounts)
+            await savingsPlansController.load(for: accountsController.activeAccounts)
+            await accountTermsController.load()
+            await taxMappingController.load()
+            await budgetsController.loadBudgets(for: bookID)
+            await projectsController.loadProjects(for: bookID)
         }
     }
 
@@ -219,6 +233,9 @@ struct MainView: View {
                 }
             }
             .listStyle(.sidebar)
+            // Livre verrouillé : barre latérale vide (le sélecteur de livre reste accessible)
+            .opacity(bookLock.isLocked ? 0 : 1)
+            .allowsHitTesting(!bookLock.isLocked)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 // Lien vers la fenêtre Réglages (⌘,), fixé en bas de la barre latérale
                 VStack(spacing: 0) {
@@ -322,8 +339,8 @@ struct MainView: View {
     // MARK: - Commandes de création (menu Fichier et raccourcis clavier)
 
     private func handle(_ command: CreationCommand) {
-        // Sans livre ouvert, seule la création d'un livre a un sens
-        guard command == .book || booksController.currentBook != nil else { return }
+        // Sans livre ouvert (ou livre verrouillé), seule la création d'un livre a un sens
+        guard command == .book || (booksController.currentBook != nil && !bookLock.isLocked) else { return }
         // Une seule feuille à la fois
         let isPresenting = showTransactionForm || showAccountForm || showCategoryForm || showPayeeForm
             || showBudgetForm || showProjectForm || showBookForm || showFilterForm
