@@ -117,6 +117,7 @@ struct StatementImportView: View {
                 .font(.title3)
                 .foregroundColor(.secondary)
 
+            // Libellés, sélecteur et bouton dans une même colonne, à la même largeur
             VStack(alignment: .leading, spacing: 6) {
                 Text("Compte de destination")
                     .font(.subheadline)
@@ -124,25 +125,26 @@ struct StatementImportView: View {
                 Text("Pour un relevé OFX, le compte est reconnu par son IBAN quand c'est possible.")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                Picker("Compte", selection: $selectedAccountID) {
-                    Text("Choisir un compte…").tag(nil as UUID?)
-                    ForEach(accountsController.activeAccounts) { account in
-                        Text(account.name).tag(account.id as UUID?)
-                    }
+                FillPopUpPicker(
+                    items: [FillPopUpItem(id: nil, title: "Choisir un compte…")]
+                        + accountsController.activeAccounts.map { FillPopUpItem(id: $0.id, title: $0.name, systemImage: $0.type.icon) },
+                    selection: $selectedAccountID
+                )
+                .frame(maxWidth: .infinity)
+
+                Button {
+                    openFilePicker()
+                } label: {
+                    Label(selectedFileName.isEmpty ? "Choisir un relevé" : selectedFileName,
+                          systemImage: "doc.badge.plus")
+                        .frame(maxWidth: .infinity)
                 }
-                .labelsHidden()
-                .frame(maxWidth: 300)
+                .buttonStyle(.bordered)
+                .padding(.top, 10)
             }
-
-            Button {
-                openFilePicker()
-            } label: {
-                Label(selectedFileName.isEmpty ? "Choisir un relevé" : selectedFileName,
-                      systemImage: "doc.badge.plus")
-                    .frame(minWidth: 220)
-            }
-            .buttonStyle(.bordered)
+            .frame(width: 320)
 
             if let err = errorMessage {
                 Text(err)
