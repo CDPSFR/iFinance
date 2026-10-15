@@ -3,34 +3,6 @@ import Foundation
 // Rapports d'analyse « Au quotidien » et « Bilans et objectifs » : modèles et calculs.
 // Tous les montants de dépenses sont positifs.
 
-// MARK: - Indice des prix (INSEE)
-
-/// Inflation moyenne annuelle en France (indice des prix à la consommation, INSEE).
-/// Intégrée à l'app, à mettre à jour à chaque version.
-enum InseeInflation {
-    static let yearly: [Int: Double] = [
-        2019: 0.011, 2020: 0.005, 2021: 0.016, 2022: 0.052, 2023: 0.049, 2024: 0.020, 2025: 0.009
-    ]
-
-    /// Postes de l'INSEE, moyenne annuelle 2025
-    static let byPost2025: [String: Double] = [
-        "Alimentation": 0.012, "Énergie": -0.056, "Services": 0.023, "Produits manufacturés": -0.003
-    ]
-
-    static var lastYear: Int { yearly.keys.max() ?? 2025 }
-    static var last: Double { yearly[lastYear] ?? 0 }
-
-    /// Poste INSEE probable d'une catégorie, d'après son nom
-    static func post(forCategoryName name: String) -> String? {
-        let folded = name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-        let food = ["aliment", "course", "supermarche", "epicerie", "boulangerie"]
-        let energy = ["energie", "electricite", "gaz", "carburant", "essence", "edf", "chauffage"]
-        if food.contains(where: { folded.contains($0) }) { return "Alimentation" }
-        if energy.contains(where: { folded.contains($0) }) { return "Énergie" }
-        return nil
-    }
-}
-
 // MARK: - Prévision de trésorerie
 
 struct ForecastEvent: Identifiable {
@@ -204,13 +176,14 @@ struct PriceChange: Identifiable {
     let name: String
     let before: Decimal          // Moyenne mensuelle, même période il y a un an
     let now: Decimal             // Moyenne mensuelle, 3 derniers mois complets
-    let inseePost: String?
+    let inseePost: InflationPost?
+    /// Hausse des prix de ce poste selon l'INSEE, dernière année connue
+    let inseeChange: Double?
 
     var change: Double? {
         guard before > 0 else { return nil }
         return NSDecimalNumber(decimal: (now - before) / before).doubleValue
     }
-    var inseeChange: Double? { inseePost.flatMap { InseeInflation.byPost2025[$0] } }
 }
 
 struct YearSpending: Identifiable {
@@ -220,6 +193,8 @@ struct YearSpending: Identifiable {
 }
 
 struct InflationReport {
+    /// Indices des prix utilisés (intégrés ou téléchargés)
+    var prices = InflationTable.embedded
     var posts: [PriceChange] = []
     var yearly: [YearSpending] = []   // Dépenses courantes par année complète
 
@@ -232,7 +207,7 @@ struct InflationReport {
     /// Surcoût annuel par rapport à une hausse au rythme de l'inflation
     var extraPerYear: Decimal? {
         guard let change else { return nil }
-        return before * 12 * Decimal(change - InseeInflation.last)
+        return before * 12 * Decimal(change - prices.last)
     }
 }
 
@@ -610,8 +585,8 @@ struct AnalysisReportBuilder {
 
     // MARK: Inflation personnelle
 
-    func inflation() -> InflationReport {
-        var report = InflationReport()
+    func inflation(prices: InflationTable = .embedded) -> InflationReport {
+        var report = InflationReport(prices: prices)
         let currentMonth = monthStart(now)
         let recentStart = addMonths(-3, to: currentMonth)
         let previousStart = addMonths(-12, to: recentStart), previousEnd = addMonths(-12, to: currentMonth)
@@ -630,10 +605,12 @@ struct AnalysisReportBuilder {
         let previousBy = sum(previous, coveredMonths(from: previousStart, to: previousEnd, since: first))
         for id in Set(recentBy.keys).union(previousBy.keys) {
             guard let category = categoriesController.getCategory(id: id) else { continue }
+            let post = InflationPost.post(forCategoryName: category.name)
             report.posts.append(PriceChange(
                 id: id, name: category.name,
                 before: previousBy[id] ?? 0, now: recentBy[id] ?? 0,
-                inseePost: InseeInflation.post(forCategoryName: category.name)
+                inseePost: post,
+                inseeChange: post.flatMap { prices.change(for: $0) }
             ))
         }
         report.posts.sort { $0.now > $1.now }

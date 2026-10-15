@@ -36,6 +36,7 @@ class AppState: ObservableObject {
     let recurringController: RecurringController
     let positionPriceRepository: PositionPriceRepository
     let quoteService: QuoteService
+    let inflationService: InflationService
 
     // Sauvegardes de la base
     let backupManager: BackupManager
@@ -103,6 +104,8 @@ class AppState: ObservableObject {
             investmentsController: investmentsController,
             priceRepository: positionPriceRepository
         )
+        // Indices des prix de l'INSEE (valeurs intégrées, mise à jour en ligne désactivée par défaut)
+        self.inflationService = InflationService(repository: PriceIndexRepository(db: db))
 
         // Le filtre par catégorie parente inclut ses sous-catégories
         transactionsController.subcategoryIDs = { [weak categoriesController] categoryID in

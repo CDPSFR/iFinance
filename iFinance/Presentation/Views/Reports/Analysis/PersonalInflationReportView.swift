@@ -2,7 +2,7 @@ import SwiftUI
 import Charts
 
 /// Rapport « Inflation personnelle » : l'évolution de vos dépenses courantes comparée
-/// à la hausse des prix mesurée par l'INSEE (valeurs intégrées à l'app).
+/// à la hausse des prix mesurée par l'INSEE (valeurs intégrées, ou téléchargées si l'option est active).
 struct PersonalInflationReportView: View {
     @EnvironmentObject var accountsController: AccountsController
     @EnvironmentObject var transactionsController: TransactionsController
@@ -11,6 +11,7 @@ struct PersonalInflationReportView: View {
     @EnvironmentObject var recurringController: RecurringController
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var appSettings: AppSettings
+    @EnvironmentObject var inflationService: InflationService
 
     private var format: AnalysisFormat {
         AnalysisFormat(currency: booksController.currentBook?.currency ?? "EUR", hidden: appSettings.hideAmounts)
@@ -23,7 +24,7 @@ struct PersonalInflationReportView: View {
             categoriesController: categoriesController,
             payeesController: payeesController,
             recurringController: recurringController
-        ).inflation()
+        ).inflation(prices: inflationService.table)
 
         if report.change == nil {
             ReportEmptyState(systemImage: "chart.line.uptrend.xyaxis", message: "Il faut au moins 15 mois d’historique pour comparer vos dépenses à celles de l’an dernier.")
@@ -39,22 +40,23 @@ struct PersonalInflationReportView: View {
         }
     }
 
-    private var reference: String { "INSEE \(String(InseeInflation.lastYear))" }
+    private var prices: InflationTable { inflationService.table }
+    private var reference: String { "INSEE \(String(prices.lastYear))" }
 
     // MARK: - Réponse
 
     private func headline(_ report: InflationReport) -> some View {
         let change = report.change ?? 0
-        let gap = change - InseeInflation.last
+        let gap = change - prices.last
         let drivers = report.posts
-            .filter { ($0.change ?? 0) > InseeInflation.last + 0.02 && $0.now >= 50 }
+            .filter { ($0.change ?? 0) > prices.last + 0.02 && $0.now >= 50 }
             .sorted { PlanFormat.double($0.now - $0.before) > PlanFormat.double($1.now - $1.before) }
             .prefix(2)
             .map(\.name)
 
         return ReportHeadline(
             question: "Mes dépenses augmentent-elles plus vite que les prix ?",
-            answer: "Vos dépenses courantes ont \(change >= 0 ? "augmenté" : "baissé") de \(format.percent(abs(change))) en un an, contre \(format.percent(InseeInflation.last)) pour les prix en France.",
+            answer: "Vos dépenses courantes ont \(change >= 0 ? "augmenté" : "baissé") de \(format.percent(abs(change))) en un an, contre \(format.percent(prices.last)) pour les prix en France.",
             detail: gap > 0.01
                 ? (drivers.isEmpty ? "" : "\(drivers.joined(separator: " et ")) tire\(drivers.count > 1 ? "nt" : "") la hausse. ") + "Une partie vient de ce que vous consommez plus, pas seulement des prix."
                 : "Vos dépenses suivent la hausse des prix, ou progressent moins vite.",
@@ -66,12 +68,12 @@ struct PersonalInflationReportView: View {
 
     private func tiles(_ report: InflationReport) -> some View {
         let change = report.change ?? 0
-        let gap = change - InseeInflation.last
+        let gap = change - prices.last
         let top = report.posts.filter { $0.now >= 50 }.max { ($0.change ?? -1) < ($1.change ?? -1) }
 
         return ReportTiles {
-            StatTile(title: "Vos dépenses courantes", value: format.percent(change, signed: true), valueColor: change > InseeInflation.last ? .red : .green, detail: "sur 12 mois, postes comparables")
-            StatTile(title: "Hausse des prix", value: format.percent(InseeInflation.last, signed: true), detail: "moyenne annuelle, \(reference)")
+            StatTile(title: "Vos dépenses courantes", value: format.percent(change, signed: true), valueColor: change > prices.last ? .red : .green, detail: "sur 12 mois, postes comparables")
+            StatTile(title: "Hausse des prix", value: format.percent(prices.last, signed: true), detail: "moyenne annuelle, \(reference)")
             StatTile(
                 title: "Écart",
                 value: "\(gap >= 0 ? "+" : "−")\(abs(gap * 100).formatted(.number.precision(.fractionLength(1)))) points",
@@ -92,10 +94,10 @@ struct PersonalInflationReportView: View {
             VStack(spacing: 10) {
                 ForEach(Array(posts)) { post in
                     let change = post.change ?? 0
-                    let faster = change > (post.inseeChange ?? InseeInflation.last) + 0.02
+                    let faster = change > (post.inseeChange ?? prices.last) + 0.02
                     LTBarRow(
                         label: post.name,
-                        detail: faster ? "plus vite que les prix" : change < (post.inseeChange ?? InseeInflation.last) ? "moins vite que les prix" : "comme les prix",
+                        detail: faster ? "plus vite que les prix" : change < (post.inseeChange ?? prices.last) ? "moins vite que les prix" : "comme les prix",
                         bar: LTBar(fraction: abs(change) / largest, color: change < 0 ? .green : faster ? .red : .accentColor),
                         value: format.percent(change, signed: true),
                         valueColor: faster ? .red : change < 0 ? .green : .primary,
@@ -105,7 +107,7 @@ struct PersonalInflationReportView: View {
                     )
                 }
             }
-            PlanNote("Moyennes mensuelles sur 3 mois, pour lisser les variations. Les prix par poste (alimentation, énergie) sont ceux de l’INSEE pour \(String(InseeInflation.lastYear)).")
+            PlanNote("Moyennes mensuelles sur 3 mois, pour lisser les variations. Les prix par poste (alimentation, énergie, loyers…) sont ceux de l’INSEE pour \(String(prices.lastYear)).")
         }
     }
 
@@ -121,12 +123,12 @@ struct PersonalInflationReportView: View {
     private func yearsBlock(_ report: InflationReport) -> some View {
         var points: [IndexPoint] = []
         if let first = report.yearly.first {
-            var prices = 100.0
+            var priceIndex = 100.0
             for entry in report.yearly {
-                if entry.year > first.year { prices *= 1 + (InseeInflation.yearly[entry.year] ?? InseeInflation.last) }
+                if entry.year > first.year { priceIndex *= 1 + self.prices.yearly(entry.year) }
                 let own = PlanFormat.double(entry.spending) / PlanFormat.double(first.spending) * 100
                 points.append(IndexPoint(id: "o\(entry.year)", year: entry.year, series: "Vos dépenses", value: own))
-                points.append(IndexPoint(id: "p\(entry.year)", year: entry.year, series: "Prix (INSEE)", value: prices))
+                points.append(IndexPoint(id: "p\(entry.year)", year: entry.year, series: "Prix (INSEE)", value: priceIndex))
             }
         }
 
@@ -161,7 +163,9 @@ struct PersonalInflationReportView: View {
             VStack(spacing: 10) {
                 ExplanationRow(label: "Vos dépenses courantes", detail: "dépenses des comptes courants, par catégorie principale, hors virements vers l’épargne", value: "")
                 Divider()
-                ExplanationRow(label: "Hausse des prix", detail: "indice des prix à la consommation de l’INSEE, intégré à l’app et mis à jour à chaque version", value: format.percent(InseeInflation.last, signed: true))
+                ExplanationRow(label: "Hausse des prix", detail: inflationService.isEnabled
+                    ? "indice des prix à la consommation de l’INSEE, mis à jour en ligne\(inflationService.lastUpdate.map { " le \($0.formatted(date: .abbreviated, time: .omitted))" } ?? "")"
+                    : "indice des prix à la consommation de l’INSEE, intégré à l’app ; mise à jour en ligne possible dans Réglages › Confidentialité", value: format.percent(prices.last, signed: true))
                 Divider()
                 ExplanationRow(label: "Si vous dépassez les prix", detail: "vous achetez plus, ou plus cher que la moyenne : ce n’est pas forcément un problème", value: "")
             }

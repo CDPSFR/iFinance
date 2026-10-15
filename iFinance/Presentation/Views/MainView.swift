@@ -11,6 +11,7 @@ struct MainView: View {
     @EnvironmentObject var savingsPlansController: SavingsPlansController
     @EnvironmentObject var accountTermsController: AccountTermsController
     @EnvironmentObject var taxMappingController: TaxMappingController
+    @EnvironmentObject var inflationService: InflationService
     @EnvironmentObject var categoriesController: CategoriesController
     @EnvironmentObject var payeesController: PayeesController
     @EnvironmentObject var budgetsController: BudgetsController
@@ -105,6 +106,9 @@ struct MainView: View {
         }
         .task {
             await booksController.loadBooks()
+            // Indices des prix : valeurs connues, puis mise à jour mensuelle si l'option est active
+            inflationService.load()
+            await inflationService.updateIfStale()
         }
         .onReceive(NotificationCenter.default.publisher(for: CreationCommand.notification)) { notification in
             guard let command = notification.object as? CreationCommand else { return }

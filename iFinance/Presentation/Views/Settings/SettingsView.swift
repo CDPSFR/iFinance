@@ -638,11 +638,13 @@ struct PrivacySettingsTab: View {
 
             QuoteSettingsSection()
 
+            InflationSettingsSection()
+
             Section {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Vos données restent sur ce Mac")
                         .fontWeight(.semibold)
-                    Text("iFinance ne se connecte à aucune banque. Vos comptes, transactions et montants ne quittent jamais ce Mac, et les fichiers importés sont lus localement. La seule connexion possible est la mise à jour des cours ci-dessus, si vous l'activez.")
+                    Text("iFinance ne se connecte à aucune banque. Vos comptes, transactions et montants ne quittent jamais ce Mac, et les fichiers importés sont lus localement. Les seules connexions possibles sont la mise à jour des cours et celle des indices INSEE ci-dessus, si vous les activez.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

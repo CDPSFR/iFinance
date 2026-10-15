@@ -20,7 +20,8 @@ struct DatabaseSchema {
         createContributionDetailsTable,
         createSavingsPlanSettingsTable,
         createAccountTermsTable,
-        createCategoryTaxCasesTable
+        createCategoryTaxCasesTable,
+        createPriceIndicesTable
     ]
     
     static let migrationStatements: [String] = [
@@ -382,6 +383,17 @@ struct DatabaseSchema {
         category_id TEXT PRIMARY KEY,
         tax_case TEXT NOT NULL,
         FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+    );
+    """
+
+    // MARK: - Price Indices (variations annuelles des prix téléchargées sur le site de l'INSEE)
+
+    static let createPriceIndicesTable = """
+    CREATE TABLE IF NOT EXISTS price_indices (
+        post TEXT NOT NULL,
+        year INTEGER NOT NULL,
+        change REAL NOT NULL,
+        PRIMARY KEY (post, year)
     );
     """
 }
