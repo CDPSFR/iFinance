@@ -30,8 +30,13 @@ struct ImportDuplicateDetector {
         var result: [Int: ImportDuplicate] = [:]
         var used = Set<UUID>()
 
-        // 1. Identifiant bancaire : correspondance certaine
-        let byFitID = Dictionary(existing.compactMap { tx in tx.externalID.map { ($0, tx) } }, uniquingKeysWith: { first, _ in first })
+        // 1. Identifiant bancaire : correspondance certaine. Un relevé exporté par iFinance
+        //    porte l'identifiant de la transaction quand elle n'a pas d'identifiant bancaire.
+        var byFitID: [String: Transaction] = [:]
+        for tx in existing {
+            if let external = tx.externalID, byFitID[external] == nil { byFitID[external] = tx }
+            if byFitID[tx.id.uuidString] == nil { byFitID[tx.id.uuidString] = tx }
+        }
         for (index, line) in lines.enumerated() {
             guard let line, let fitID = line.fitID, let match = byFitID[fitID], !used.contains(match.id) else { continue }
             result[index] = .alreadyImported(transactionID: match.id)
@@ -44,13 +49,21 @@ struct ImportDuplicateDetector {
             guard let line else { continue }
             let candidates = byDay[calendar.startOfDay(for: line.date)] ?? []
             if let match = candidates.first(where: { tx in
-                !used.contains(tx.id) && signedAmount(tx) == line.amount && sameLabel(tx, line)
+                !used.contains(tx.id) && Self.cents(signedAmount(tx)) == Self.cents(line.amount) && sameLabel(tx, line)
             }) {
                 result[index] = .probable(transactionID: match.id)
                 used.insert(match.id)
             }
         }
         return result
+    }
+
+    /// Montant arrondi au centime : les montants enregistrés en base passent par un Double
+    /// (12,30 peut y valoir 12,2999999…) alors que ceux d'un relevé sont exacts
+    nonisolated static func cents(_ value: Decimal) -> Decimal {
+        var source = value, rounded = Decimal()
+        NSDecimalRound(&rounded, &source, 2, .plain)
+        return rounded
     }
 
     /// Montant signé tel qu'il apparaît sur le relevé du compte

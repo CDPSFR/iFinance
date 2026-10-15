@@ -95,7 +95,8 @@ struct RecurringImportMatcher {
             return payeeMatches(line.payee, template: template) == true
         }
         // Montant identique : les libellés bancaires (« VIR LOYER ») diffèrent souvent du bénéficiaire
-        return abs(line.amount) == abs(postedAmount ?? template.amount)
+        // Au centime près : les montants enregistrés en base passent par un Double
+        return ImportDuplicateDetector.cents(abs(line.amount)) == ImportDuplicateDetector.cents(abs(postedAmount ?? template.amount))
     }
 
     /// Ordre de préférence entre lignes candidates : bénéficiaire reconnu, puis proximité de date
