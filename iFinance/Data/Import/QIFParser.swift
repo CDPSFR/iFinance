@@ -38,6 +38,8 @@ struct QIFTransaction {
     var payee: String?
     var memo: String?
     var category: String?
+    /// Identifiant de l'opération chez la banque (FITID d'un relevé OFX ; absent en QIF)
+    var fitID: String?
     var type: TransactionType {
         guard let amount else { return .debit }
         return amount >= 0 ? .credit : .debit

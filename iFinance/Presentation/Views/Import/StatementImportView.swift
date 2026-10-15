@@ -1,7 +1,8 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct QIFImportView: View {
+/// Import d'un relevé bancaire : fichier QIF ou OFX (QFX), vers un compte de l'app
+struct StatementImportView: View {
     @Binding var isPresented: Bool
 
     @EnvironmentObject var accountsController: AccountsController
@@ -12,6 +13,7 @@ struct QIFImportView: View {
     @EnvironmentObject var appSettings: AppSettings
 
     enum Step { case pickFile, preview, importing, done }
+    enum FileFormat { case qif, ofx }
     @State private var step: Step = .pickFile
 
     @State private var selectedAccountID: UUID? = nil
@@ -30,12 +32,20 @@ struct QIFImportView: View {
     /// Libellés bancaires simplifiés en noms de bénéficiaires (« CB CARREFOUR FACT 280924 » → « CARREFOUR »)
     @State private var simplifyLabels = true
     @State private var reconciledCount = 0
+    @State private var format: FileFormat = .qif
+    /// Relevés d'un fichier OFX (un par compte) et relevé affiché
+    @State private var statements: [OFXStatement] = []
+    @State private var statementIndex = 0
+    /// Le compte de destination a été reconnu par le numéro de compte du relevé
+    @State private var accountRecognized = false
+    /// Contrôle du solde après l'import d'un relevé OFX
+    @State private var balanceCheck: (statement: Decimal, app: Decimal, date: Date)? = nil
 
     private var currency: String { booksController.currentBook?.currency ?? "EUR" }
 
     var body: some View {
         VStack(spacing: 0) {
-            SheetHeader(title: "Importer un fichier QIF")
+            SheetHeader(title: "Importer un relevé", subtitle: "Fichier QIF ou OFX exporté depuis votre banque")
 
             switch step {
             case .pickFile:  pickFileView
@@ -54,6 +64,8 @@ struct QIFImportView: View {
                             selected = []
                             unlinked = []
                             dateAnalysis = nil
+                            statements = []
+                            accountRecognized = false
                         }
 
                         Text("\(selected.count) transaction(s) à importer")
@@ -73,7 +85,7 @@ struct QIFImportView: View {
                                 Task { await doImport() }
                             }
                             .keyboardShortcut(.defaultAction)
-                            .disabled(selected.isEmpty)
+                            .disabled(selected.isEmpty || selectedAccountID == nil)
                         }
                     }
                 }
@@ -101,13 +113,16 @@ struct QIFImportView: View {
                 .font(.system(size: 50))
                 .foregroundColor(.blue.opacity(0.7))
 
-            Text("Sélectionnez un fichier QIF et le compte cible")
+            Text("Sélectionnez un relevé QIF ou OFX et le compte cible")
                 .font(.title3)
                 .foregroundColor(.secondary)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text("Compte de destination")
                     .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Text("Pour un relevé OFX, le compte est reconnu par son IBAN quand c'est possible.")
+                    .font(.caption)
                     .foregroundColor(.secondary)
 
                 Picker("Compte", selection: $selectedAccountID) {
@@ -123,12 +138,11 @@ struct QIFImportView: View {
             Button {
                 openFilePicker()
             } label: {
-                Label(selectedFileName.isEmpty ? "Choisir un fichier QIF" : selectedFileName,
+                Label(selectedFileName.isEmpty ? "Choisir un relevé" : selectedFileName,
                       systemImage: "doc.badge.plus")
                     .frame(minWidth: 220)
             }
             .buttonStyle(.bordered)
-            .disabled(selectedAccountID == nil)
 
             if let err = errorMessage {
                 Text(err)
@@ -165,12 +179,20 @@ struct QIFImportView: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 8)
 
-            dateFormatBar
+            destinationBar
+
+            if format == .qif {
+                dateFormatBar
+            }
 
             payeeLabelBar
 
             if !matches.isEmpty {
                 recurringSummary(matches)
+            }
+
+            if !duplicates.isEmpty {
+                duplicateSummary
             }
 
             Divider()
@@ -212,6 +234,8 @@ struct QIFImportView: View {
                             }
                             if let match = matches[i] {
                                 recurringBadge(match, line: i)
+                            } else if let duplicate = duplicates[i] {
+                                duplicateBadge(duplicate)
                             }
                         }
 
@@ -269,6 +293,128 @@ struct QIFImportView: View {
             unlinked = []
             deselectAlreadyPosted()
         }
+    }
+
+    // MARK: - Relevé et compte de destination
+
+    /// Choix du relevé (fichier OFX à plusieurs comptes) et du compte de destination
+    private var destinationBar: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if statements.count > 1 {
+                HStack {
+                    Text("Relevé")
+                        .font(.subheadline)
+                    Spacer()
+                    Picker("Relevé", selection: $statementIndex) {
+                        ForEach(statements.indices, id: \.self) { index in
+                            Text("\(statements[index].title) · \(statements[index].transactions.count) opération(s)").tag(index)
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                }
+                .onChange(of: statementIndex) { _, index in
+                    loadStatement(index)
+                }
+            }
+
+            HStack {
+                Text("Compte de destination")
+                    .font(.subheadline)
+                Spacer()
+                Picker("Compte de destination", selection: $selectedAccountID) {
+                    Text("Choisir un compte…").tag(nil as UUID?)
+                    ForEach(accountsController.activeAccounts) { account in
+                        Text(account.name).tag(account.id as UUID?)
+                    }
+                }
+                .labelsHidden()
+                .fixedSize()
+            }
+            .onChange(of: selectedAccountID) { _, _ in
+                accountRecognized = false
+                unlinked = []
+                selected = Set(parsedTransactions.indices.filter { parsedTransactions[$0].date != nil })
+                deselectAlreadyPosted()
+            }
+
+            if accountRecognized, let statement = currentStatement {
+                Label("Compte reconnu par son numéro (\(statement.accountNumber)).", systemImage: "checkmark.circle")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else if format == .ofx, selectedAccountID == nil, let statement = currentStatement {
+                Label("Aucun compte n'a d'IBAN contenant le numéro \(statement.accountNumber) : choisissez le compte.", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 8)
+    }
+
+    private var currentStatement: OFXStatement? {
+        statements.indices.contains(statementIndex) ? statements[statementIndex] : nil
+    }
+
+    /// Affiche les opérations d'un relevé OFX et propose le compte qui lui correspond
+    private func loadStatement(_ index: Int) {
+        guard statements.indices.contains(index) else { return }
+        let statement = statements[index]
+        parsedTransactions = statement.transactions
+        unlinked = []
+        if let account = OFXAccountMatcher.account(for: statement, in: accountsController.activeAccounts) {
+            selectedAccountID = account.id
+            // Posé après le changement de compte, qui remet l'indicateur à zéro
+            DispatchQueue.main.async { accountRecognized = true }
+        }
+        selected = Set(parsedTransactions.indices.filter { parsedTransactions[$0].date != nil })
+        deselectAlreadyPosted()
+    }
+
+    // MARK: - Doublons
+
+    /// Lignes déjà présentes dans le compte de destination (même identifiant bancaire,
+    /// ou même jour, même montant et même libellé)
+    private var duplicates: [Int: ImportDuplicate] {
+        guard let accountID = selectedAccountID else { return [:] }
+        let payeeNames = Dictionary(payeesController.payees.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+        let detector = ImportDuplicateDetector(
+            existing: transactionsController.allTransactions.filter { $0.accountID == accountID && $0.status != .skipped },
+            payeeName: { payeeNames[$0] }
+        )
+        let lines = parsedTransactions.map { tx in
+            tx.date.map {
+                ImportDuplicateDetector.Line(date: $0, amount: tx.amount ?? 0, label: tx.payee, payeeName: payeeName(for: tx), fitID: tx.fitID)
+            }
+        }
+        return detector.duplicates(for: lines)
+    }
+
+    private var duplicateSummary: some View {
+        let found = duplicates
+        let imported = found.values.filter { if case .alreadyImported = $0 { return true } else { return false } }.count
+        let probable = found.count - imported
+        var parts: [String] = []
+        if imported > 0 { parts.append("\(imported) déjà importée\(imported > 1 ? "s" : "")") }
+        if probable > 0 { parts.append("\(probable) doublon\(probable > 1 ? "s" : "") probable\(probable > 1 ? "s" : "")") }
+        return Label(parts.joined(separator: " · ") + " : décochée\(found.count > 1 ? "s" : "")", systemImage: "doc.on.doc")
+            .font(.caption)
+            .foregroundColor(.orange)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 8)
+            .help("Les lignes déjà présentes dans le compte ne sont pas importées par défaut ; cochez-les pour les importer quand même")
+    }
+
+    private func duplicateBadge(_ duplicate: ImportDuplicate) -> some View {
+        let text: String
+        switch duplicate {
+        case .alreadyImported: text = "Déjà importée d'un précédent relevé"
+        case .probable: text = "Doublon probable : même jour, même montant, même libellé"
+        }
+        return Label(text, systemImage: "doc.on.doc")
+            .font(.caption)
+            .foregroundColor(.orange)
     }
 
     private var undatedCount: Int {
@@ -343,6 +489,9 @@ struct QIFImportView: View {
     private func deselectAlreadyPosted() {
         for (index, match) in recurringMatches {
             if case .alreadyPosted = match { selected.remove(index) }
+        }
+        for index in duplicates.keys where recurringMatches[index] == nil {
+            selected.remove(index)
         }
     }
 
@@ -425,6 +574,10 @@ struct QIFImportView: View {
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
+
+                        if let check = balanceCheck {
+                            balanceCheckView(check)
+                        }
                     }
                     .padding(.top, 24)
 
@@ -468,18 +621,47 @@ struct QIFImportView: View {
         }
     }
 
+    /// Solde du relevé comparé au solde du compte dans l'app, à la même date
+    private func balanceCheckView(_ check: (statement: Decimal, app: Decimal, date: Date)) -> some View {
+        let gap = check.app - check.statement
+        let date = check.date.formatted(.dateTime.day().month().year())
+        return VStack(spacing: 4) {
+            if gap == 0 {
+                Label("Solde au \(date) identique à celui du relevé : \(check.statement.formatted(.currency(code: currency)))", systemImage: "checkmark.seal")
+                    .foregroundColor(.green)
+            } else {
+                Label("Écart de solde au \(date) : \(gap.formatted(.currency(code: currency).sign(strategy: .always())))", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+                Text("Relevé : \(check.statement.formatted(.currency(code: currency))) · iFinance : \(check.app.formatted(.currency(code: currency))). Vérifiez le solde initial du compte ou les opérations décochées.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .font(.subheadline)
+        .privacyBlur(hidden: appSettings.hideAmounts)
+        .padding(.horizontal, 20)
+    }
+
     // MARK: - Actions
 
     private func openFilePicker() {
         let panel = NSOpenPanel()
-        panel.title = "Choisir un fichier QIF"
-        panel.allowedContentTypes = [UTType(filenameExtension: "qif") ?? .plainText]
+        panel.title = "Choisir un relevé QIF ou OFX"
+        panel.allowedContentTypes = ["qif", "ofx", "qfx"].compactMap { UTType(filenameExtension: $0) }
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
 
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
+            if ["ofx", "qfx"].contains(url.pathExtension.lowercased()) {
+                openOFX(url)
+                return
+            }
             do {
+                format = .qif
+                statements = []
+                accountRecognized = false
                 let txs = try QIFParser.parse(url: url)
                 if txs.isEmpty {
                     errorMessage = "Aucune transaction trouvée dans ce fichier."
@@ -500,6 +682,35 @@ struct QIFImportView: View {
                 errorMessage = "Erreur de lecture : \(error.localizedDescription)"
             }
         }
+    }
+
+    private func openOFX(_ url: URL) {
+        do {
+            let found = try OFXParser.parse(url: url).filter { !$0.transactions.isEmpty }
+            guard !found.isEmpty else {
+                errorMessage = "Aucune opération trouvée dans ce relevé."
+                return
+            }
+            format = .ofx
+            statements = found
+            statementIndex = 0
+            dateAnalysis = nil
+            selectedFileName = url.lastPathComponent
+            errorMessage = nil
+            loadStatement(0)
+            step = .preview
+        } catch {
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? "Erreur de lecture : \(error.localizedDescription)"
+        }
+    }
+
+    /// Solde du compte dans l'app à la date du solde du relevé
+    private func balance(of accountID: UUID, asOf date: Date) -> Decimal? {
+        guard let account = accountsController.getAccount(id: accountID) else { return nil }
+        let end = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: date)) ?? date
+        return account.initialBalance + transactionsController.allTransactions
+            .filter { $0.accountID == accountID && $0.status != .skipped && $0.date < end }
+            .reduce(Decimal(0)) { $0 + $1.signedAmount }
     }
 
     private func doImport() async {
@@ -582,7 +793,8 @@ struct QIFImportView: View {
                         type: .transfer,
                         memo: template.memo ?? memo,
                         recurringTemplateID: template.id,
-                        status: .cleared
+                        status: .cleared,
+                        externalID: tx.fitID
                     )
                     let mirror = Transaction(
                         date: date,
@@ -611,7 +823,8 @@ struct QIFImportView: View {
                     type: amount >= 0 ? .credit : .debit,
                     memo: memo,
                     recurringTemplateID: template?.id,
-                    status: .cleared
+                    status: .cleared,
+                    externalID: tx.fitID
                 )]
             }
             // Toutes les transactions en une seule écriture : toutes ou aucune
@@ -628,6 +841,12 @@ struct QIFImportView: View {
             await transactionsController.loadAllTransactions(for: accountsController.activeAccounts)
 
             importedCount = transactions.count - transferLinks.count
+            if format == .ofx, let statement = currentStatement, let amount = statement.balance, let date = statement.balanceDate,
+               let app = balance(of: accountID, asOf: date) {
+                balanceCheck = (amount, app, date)
+            } else {
+                balanceCheck = nil
+            }
             reconciledCount = settled.count
             createdPayees = newNames
             step = .done

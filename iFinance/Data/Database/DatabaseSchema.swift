@@ -36,6 +36,7 @@ struct DatabaseSchema {
         "ALTER TABLE books ADD COLUMN color TEXT;",
         // Transactions
         "ALTER TABLE transactions ADD COLUMN project_id TEXT;",
+        "ALTER TABLE transactions ADD COLUMN external_id TEXT;",
         // Recurring templates
         "ALTER TABLE recurring_templates ADD COLUMN next_due_date TEXT;",
         "ALTER TABLE recurring_templates ADD COLUMN auto_post INTEGER NOT NULL DEFAULT 0;",
@@ -172,6 +173,7 @@ struct DatabaseSchema {
         recurring_template_id TEXT,
         status TEXT NOT NULL DEFAULT 'cleared',
         project_id TEXT,
+        external_id TEXT,
         FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
         FOREIGN KEY (to_account_id) REFERENCES accounts(id) ON DELETE SET NULL,
         FOREIGN KEY (linked_transaction_id) REFERENCES transactions(id) ON DELETE SET NULL,

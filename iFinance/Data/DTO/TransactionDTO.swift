@@ -15,4 +15,5 @@ struct TransactionDTO {
     let recurringTemplateID: String?
     let status: String
     var projectID: String? = nil
+    var externalID: String? = nil
 }

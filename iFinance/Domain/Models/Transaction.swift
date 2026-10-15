@@ -122,6 +122,7 @@ struct Transaction: Identifiable, Codable, Equatable, Hashable {
     var recurringTemplateID: UUID?   // Lien vers template récurrent
     var status: TransactionStatus = .cleared
     var projectID: UUID?             // Projet auquel la transaction est rattachée
+    var externalID: String?          // Identifiant de l'opération chez la banque (FITID d'un relevé OFX)
     
     // Helper pour savoir si c'est un transfert
     var isTransfer: Bool {

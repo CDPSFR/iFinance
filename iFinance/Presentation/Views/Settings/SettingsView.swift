@@ -492,7 +492,7 @@ struct DataSettingsTab: View {
                     Button("Importer…") { showQIFImport = true }
                 } label: {
                     Text("Importer des transactions")
-                    Text("Fichier QIF exporté depuis votre banque.")
+                    Text("Relevé QIF ou OFX exporté depuis votre banque.")
                 }
 
                 LabeledContent {
@@ -553,7 +553,7 @@ struct DataSettingsTab: View {
             Text("Les catégories par défaut seront ajoutées au livre « \(booksController.currentBook?.name ?? "") ». Les catégories existantes ne sont pas modifiées.")
         }
         .sheet(isPresented: $showQIFImport) {
-            QIFImportView(isPresented: $showQIFImport)
+            StatementImportView(isPresented: $showQIFImport)
         }
         .sheet(isPresented: $showDuplicateDetection) {
             DuplicateDetectionView(isPresented: $showDuplicateDetection)
