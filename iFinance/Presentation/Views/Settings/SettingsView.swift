@@ -512,9 +512,9 @@ struct DataSettingsTab: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var categoriesController: CategoriesController
+    @EnvironmentObject var bookLock: BookLockController
 
-    @State private var exportError: String?
-    @State private var showExportError = false
+    @State private var showExport = false
     @State private var showQIFImport = false
     @State private var showDuplicateDetection = false
     @State private var showDefaultCategoriesConfirmation = false
@@ -539,11 +539,11 @@ struct DataSettingsTab: View {
 
             Section {
                 LabeledContent {
-                    Button("Exporter…") { exportDatabase() }
-                        .disabled(booksController.currentBook == nil)
+                    Button("Exporter…") { showExport = true }
+                        .disabled(booksController.currentBook == nil || bookLock.isLocked)
                 } label: {
                     Text("Exporter le livre")
-                    Text("Copie de la base du livre « \(booksController.currentBook?.name ?? "—") », non chiffrée. Pour tous les livres, utilisez les sauvegardes, qui sont chiffrées.")
+                    Text("Livre « \(booksController.currentBook?.name ?? "—") » au format SQLite, QIF ou OFX, non chiffré. Pour tous les livres, utilisez les sauvegardes, qui sont chiffrées.")
                 }
 
                 LabeledContent {
@@ -572,10 +572,8 @@ struct DataSettingsTab: View {
             }
         }
         .formStyle(.grouped)
-        .alert("Erreur d'export", isPresented: $showExportError) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(exportError ?? "Une erreur est survenue.")
+        .sheet(isPresented: $showExport) {
+            BookExportView(isPresented: $showExport)
         }
         .alert("Créer les catégories courantes ?", isPresented: $showDefaultCategoriesConfirmation) {
             Button("Annuler", role: .cancel) { }
@@ -611,26 +609,6 @@ struct DataSettingsTab: View {
     private func revealDatabase() {
         guard let url = databaseURL else { return }
         NSWorkspace.shared.activateFileViewerSelecting([url])
-    }
-
-    /// Exporte une copie cohérente de la base du livre ouvert
-    private func exportDatabase() {
-        guard let book = booksController.currentBook else { return }
-        let panel = NSSavePanel()
-        panel.title = "Exporter le livre"
-        panel.nameFieldStringValue = "\(book.name).sqlite"
-        panel.allowedContentTypes = [.database]
-        panel.canCreateDirectories = true
-
-        panel.begin { response in
-            guard response == .OK, let destinationURL = panel.url else { return }
-            do {
-                try appState.library.copyOpenBook(to: destinationURL)
-            } catch {
-                exportError = error.localizedDescription
-                showExportError = true
-            }
-        }
     }
 }
 
