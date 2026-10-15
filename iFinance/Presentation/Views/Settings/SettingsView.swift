@@ -476,6 +476,7 @@ struct AccountsSettingsTab: View {
 // MARK: - Données
 
 struct DataSettingsTab: View {
+    @EnvironmentObject var appState: AppState
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var categoriesController: CategoriesController
 
@@ -506,16 +507,17 @@ struct DataSettingsTab: View {
             Section {
                 LabeledContent {
                     Button("Exporter…") { exportDatabase() }
+                        .disabled(booksController.currentBook == nil)
                 } label: {
-                    Text("Exporter la base de données")
-                    Text("Copie complète de tous les livres, à conserver comme sauvegarde.")
+                    Text("Exporter le livre")
+                    Text("Copie de la base du livre « \(booksController.currentBook?.name ?? "—") ». Pour tous les livres, utilisez les sauvegardes.")
                 }
 
                 LabeledContent {
                     Button("Afficher dans le Finder") { revealDatabase() }
                         .disabled(databaseURL == nil)
                 } label: {
-                    Text("Emplacement de la base")
+                    Text("Emplacement des données")
                     Text(databaseURL?.path ?? "Introuvable")
                         .textSelection(.enabled)
                 }
@@ -562,20 +564,15 @@ struct DataSettingsTab: View {
 
     // MARK: Base de données
 
+    /// Dossier des données : catalogue des livres et un fichier par livre
     private var databaseURL: URL? {
-        let fileManager = FileManager.default
-        guard let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
-        let url = appSupport.appendingPathComponent("iFinance/iFinance.sqlite")
-        return fileManager.fileExists(atPath: url.path) ? url : nil
+        let url = appState.library.directory
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
     private var databaseSize: String {
-        guard let url = databaseURL,
-              let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
-              let bytes = attributes[.size] as? Int64 else {
-            return "—"
-        }
-        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        let bytes = appState.library.totalSize
+        return bytes > 0 ? ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) : "—"
     }
 
     private func revealDatabase() {
@@ -583,27 +580,19 @@ struct DataSettingsTab: View {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
+    /// Exporte une copie cohérente de la base du livre ouvert
     private func exportDatabase() {
-        let fileManager = FileManager.default
-        guard let sourceURL = databaseURL else {
-            exportError = "Fichier de base de données introuvable."
-            showExportError = true
-            return
-        }
-
+        guard let book = booksController.currentBook else { return }
         let panel = NSSavePanel()
-        panel.title = "Exporter la base de données"
-        panel.nameFieldStringValue = "iFinance.sqlite"
+        panel.title = "Exporter le livre"
+        panel.nameFieldStringValue = "\(book.name).sqlite"
         panel.allowedContentTypes = [.database]
         panel.canCreateDirectories = true
 
         panel.begin { response in
             guard response == .OK, let destinationURL = panel.url else { return }
             do {
-                if fileManager.fileExists(atPath: destinationURL.path) {
-                    try fileManager.removeItem(at: destinationURL)
-                }
-                try fileManager.copyItem(at: sourceURL, to: destinationURL)
+                try appState.library.copyOpenBook(to: destinationURL)
             } catch {
                 exportError = error.localizedDescription
                 showExportError = true

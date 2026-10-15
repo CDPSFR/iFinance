@@ -7,7 +7,22 @@ class BooksController: ObservableObject {
     @Published var books: [Book] = []
     @Published var activeBooks: [Book] = []
     @Published var archivedBooks: [Book] = []
-    @Published var currentBook: Book?
+    /// Livre affiché. En changer ouvre aussitôt sa base (voir `openBook`).
+    @Published var currentBook: Book? {
+        didSet {
+            guard oldValue?.id != currentBook?.id else { return }
+            do {
+                try openBook?(currentBook?.id)
+            } catch {
+                self.error = error
+                print("❌ Ouverture du livre impossible: \(error)")
+            }
+        }
+    }
+    /// Ouvre la base d'un livre (nil : aucun livre)
+    var openBook: ((UUID?) throws -> Void)?
+    /// Supprime les données d'un livre retiré du catalogue
+    var deleteBookData: ((UUID) throws -> Void)?
     @Published var isLoading = false
     @Published var error: Error?
     
@@ -115,6 +130,7 @@ class BooksController: ObservableObject {
     func deleteBook(id: UUID) async {
         do {
             try await repository.delete(id: id)
+            try deleteBookData?(id)
             await loadBooks()
             
             // Si on supprime le book courant, sélectionner un autre

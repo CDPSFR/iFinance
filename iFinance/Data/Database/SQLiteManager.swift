@@ -8,24 +8,44 @@ class SQLiteManager {
     /// requête ne modifie aucune ligne sans signaler d'erreur.
     private static let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
+    /// Tables créées à l'ouverture : celles d'un livre, ou celles du catalogue des livres
+    enum Schema {
+        case book
+        case catalog
+        /// Aucune création : fichier ouvert tel quel (copie, vérification)
+        case none
+    }
+
     private var db: OpaquePointer?
-    private let dbPath: String
-    
-    init(dbName: String = "iFinance.sqlite") throws {
-        // Stockage dans Application Support
-        let fileManager = FileManager.default
-        let appSupportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let appDirectory = appSupportURL.appendingPathComponent("iFinance", isDirectory: true)
-        
-        // Créer le dossier s'il n'existe pas
-        try? fileManager.createDirectory(at: appDirectory, withIntermediateDirectories: true)
-        
-        self.dbPath = appDirectory.appendingPathComponent(dbName).path
-        
+    private(set) var dbPath: String
+    private let schema: Schema
+
+    /// Ouvre (ou crée) la base `path` ; ":memory:" pour une base vide en mémoire
+    init(path: String, schema: Schema = .book) throws {
+        self.dbPath = path
+        self.schema = schema
         print("📁 Database path: \(dbPath)")
-        
         try openDatabase()
         createTables()
+    }
+
+    /// Ferme la base courante et en ouvre une autre (changement de livre).
+    /// Les repositories gardent la même instance : ils lisent aussitôt la nouvelle base.
+    func reopen(path: String) throws {
+        guard path != dbPath else { return }
+        closeDatabase()
+        dbPath = path
+        try openDatabase()
+        createTables()
+    }
+
+    /// Copie cohérente de la base ouverte dans `destination` (VACUUM INTO)
+    func copy(to destination: URL) throws {
+        try? FileManager.default.removeItem(at: destination)
+        let escaped = destination.path.replacingOccurrences(of: "'", with: "''")
+        guard execute(sql: "VACUUM INTO '\(escaped)';") else {
+            throw SQLiteError.executeQuery(message: "Copie impossible vers \(destination.lastPathComponent)")
+        }
     }
     
     deinit {
@@ -241,6 +261,16 @@ class SQLiteManager {
     // MARK: - Table Creation
     
     private func createTables() {
+        switch schema {
+        case .none:
+            return
+        case .catalog:
+            for sql in DatabaseSchema.catalogStatements { execute(sql: sql) }
+            for sql in DatabaseSchema.catalogMigrationStatements { execute(sql: sql) }
+            return
+        case .book:
+            break
+        }
         print("📊 Création des tables...")
         
         for sql in DatabaseSchema.createTableStatements {
@@ -257,14 +287,23 @@ class SQLiteManager {
         }
         
         runMigrations()
+        // Migrations numérotées (anciens schémas de budgets, plans d'épargne…)
+        DatabaseMigrations(db: self).runMigrations()
 
         print("✅ Base de données initialisée")
     }
 
     private func runMigrations() {
-        for sql in DatabaseSchema.migrationStatements {
-            // Les ALTER TABLE échouent silencieusement si la colonne existe déjà
+        for sql in DatabaseSchema.migrationStatements where !isAppliedColumn(sql) {
             execute(sql: sql)
         }
+    }
+
+    /// « ALTER TABLE t ADD COLUMN c » déjà appliqué : la colonne existe (évite une erreur à chaque ouverture)
+    private func isAppliedColumn(_ sql: String) -> Bool {
+        let words = sql.replacingOccurrences(of: ";", with: "").split(separator: " ").map(String.init)
+        guard words.count >= 6, words[0].uppercased() == "ALTER", words[3].uppercased() == "ADD", words[4].uppercased() == "COLUMN" else { return false }
+        let columns = (try? query(sql: "SELECT name FROM pragma_table_info(?);", parameters: [words[2]])) ?? []
+        return columns.contains { ($0["name"] as? String) == words[5] }
     }
 }

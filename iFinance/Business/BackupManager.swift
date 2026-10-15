@@ -56,7 +56,10 @@ final class BackupManager: ObservableObject {
     }
 
     private static let filePrefix = "iFinance-"
-    private static let fileExtension = "sqlite"
+    /// Sauvegarde actuelle : un dossier avec le catalogue et un fichier par livre
+    private static let fileExtension = "ifbackup"
+    /// Anciennes sauvegardes : la base commune à tous les livres, toujours restaurables
+    private static let legacyExtension = "sqlite"
 
     @Published private(set) var backups: [BackupFile] = []
     @Published private(set) var folderURL: URL?
@@ -64,12 +67,12 @@ final class BackupManager: ObservableObject {
     @Published private(set) var isWorking = false
     @Published var errorMessage: String?
 
-    private let db: SQLiteManager
+    private let library: LibraryStore
     private let defaults = UserDefaults.standard
     private var timer: Timer?
 
-    init(db: SQLiteManager) {
-        self.db = db
+    init(library: LibraryStore) {
+        self.library = library
         self.folderURL = resolveFolder()
         let last = defaults.double(forKey: Keys.lastBackup)
         self.lastBackupDate = last > 0 ? Date(timeIntervalSince1970: last) : nil
@@ -183,13 +186,13 @@ final class BackupManager: ObservableObject {
                     options: [.skipsHiddenFiles]
                 )
                 return urls
-                    .filter { $0.pathExtension == Self.fileExtension && $0.lastPathComponent.hasPrefix(Self.filePrefix) }
+                    .filter { [Self.fileExtension, Self.legacyExtension].contains($0.pathExtension) && $0.lastPathComponent.hasPrefix(Self.filePrefix) }
                     .map { url in
                         let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
                         return BackupFile(
                             url: url,
                             date: values?.contentModificationDate ?? .distantPast,
-                            size: Int64(values?.fileSize ?? 0)
+                            size: Self.size(of: url) ?? Int64(values?.fileSize ?? 0)
                         )
                     }
                     .sorted { $0.date > $1.date }
@@ -209,7 +212,19 @@ final class BackupManager: ObservableObject {
         await backupNow()
     }
 
-    /// Crée une copie cohérente de la base (VACUUM INTO) puis la dépose dans le dossier de sauvegarde
+    /// Taille d'une sauvegarde-dossier (somme de ses fichiers) ; nil pour un simple fichier
+    private static func size(of url: URL) -> Int64? {
+        guard url.pathExtension == fileExtension,
+              let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: [.fileSizeKey]) else { return nil }
+        var total: Int64 = 0
+        for case let file as URL in enumerator {
+            total += Int64((try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+        }
+        return total
+    }
+
+    /// Crée une copie cohérente du catalogue et de chaque livre (VACUUM INTO) puis la dépose
+    /// dans le dossier de sauvegarde
     func backupNow() async {
         guard !isWorking else { return }
         isWorking = true
@@ -223,9 +238,7 @@ final class BackupManager: ObservableObject {
         let temporary = fileManager.temporaryDirectory.appendingPathComponent(name)
 
         do {
-            try? fileManager.removeItem(at: temporary)
-            let escaped = temporary.path.replacingOccurrences(of: "'", with: "''")
-            guard db.execute(sql: "VACUUM INTO '\(escaped)';") else { throw BackupError.copyFailed }
+            try library.copyLibrary(to: temporary)
             defer { try? fileManager.removeItem(at: temporary) }
 
             try withFolder { folder in
@@ -277,19 +290,27 @@ final class BackupManager: ObservableObject {
             .appendingPathComponent("iFinance", isDirectory: true)
     }
 
-    private static var databaseURL: URL { databaseDirectory.appendingPathComponent("iFinance.sqlite") }
-    private static var pendingRestoreURL: URL { databaseDirectory.appendingPathComponent("iFinance.sqlite.restore") }
-    /// Copie de la base remplacée par la dernière restauration, gardée par sécurité
-    static var beforeRestoreURL: URL { databaseDirectory.appendingPathComponent("iFinance.sqlite.before-restore") }
+    /// Sauvegarde à restaurer au prochain lancement (dossier .ifbackup, ou ancienne base .sqlite)
+    private static var pendingRestoreURL: URL { databaseDirectory.appendingPathComponent("restauration-en-attente", isDirectory: true) }
+    /// Bibliothèque remplacée par la dernière restauration, gardée par sécurité
+    static var beforeRestoreURL: URL { databaseDirectory.appendingPathComponent("avant-restauration", isDirectory: true) }
 
-    /// Prépare la restauration : la sauvegarde est copiée à côté de la base et remplacera
-    /// celle-ci au prochain lancement. Renvoie vrai si la copie est prête.
+    /// Prépare la restauration : la sauvegarde est copiée à côté des bases et les remplacera
+    /// au prochain lancement. Renvoie vrai si la copie est prête.
     func prepareRestore(from file: BackupFile) -> Bool {
         do {
             try withFolder { _ in
                 let fileManager = FileManager.default
                 try? fileManager.removeItem(at: Self.pendingRestoreURL)
-                try fileManager.copyItem(at: file.url, to: Self.pendingRestoreURL)
+                try fileManager.createDirectory(at: Self.pendingRestoreURL, withIntermediateDirectories: true)
+                if file.url.pathExtension == Self.legacyExtension {
+                    // Ancienne sauvegarde : la base commune sera découpée par livre au lancement
+                    try fileManager.copyItem(at: file.url, to: LibraryStore.legacyURL(in: Self.pendingRestoreURL))
+                } else {
+                    for item in try fileManager.contentsOfDirectory(at: file.url, includingPropertiesForKeys: nil) {
+                        try fileManager.copyItem(at: item, to: Self.pendingRestoreURL.appendingPathComponent(item.lastPathComponent))
+                    }
+                }
             }
             return true
         } catch {
@@ -307,33 +328,38 @@ final class BackupManager: ObservableObject {
         }
     }
 
-    /// À appeler au lancement, AVANT l'ouverture de la base : remplace la base par la sauvegarde
-    /// préparée, en gardant l'ancienne base sous « iFinance.sqlite.before-restore ».
-    nonisolated static func applyPendingRestoreIfNeeded() {
+    /// À appeler au lancement, AVANT l'ouverture des bases : remplace la bibliothèque (catalogue,
+    /// livres, ancienne base) par la sauvegarde préparée. L'ancienne bibliothèque est gardée
+    /// dans « avant-restauration ».
+    nonisolated static func applyPendingRestoreIfNeeded(in directory: URL = LibraryStore.defaultDirectory) {
         let fileManager = FileManager.default
-        let directory = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("iFinance", isDirectory: true)
-        let database = directory.appendingPathComponent("iFinance.sqlite")
-        let pending = directory.appendingPathComponent("iFinance.sqlite.restore")
-        let previous = directory.appendingPathComponent("iFinance.sqlite.before-restore")
-
+        let pending = directory.appendingPathComponent("restauration-en-attente", isDirectory: true)
+        let previous = directory.appendingPathComponent("avant-restauration", isDirectory: true)
         guard fileManager.fileExists(atPath: pending.path) else { return }
+
+        // Fichiers de la bibliothèque, journaux SQLite compris
+        let catalog = LibraryStore.catalogURL(in: directory)
+        let legacy = LibraryStore.legacyURL(in: directory)
+        let books = LibraryStore.booksDirectory(in: directory)
+        let current = [catalog, legacy].flatMap { url in ["", "-wal", "-shm", "-journal"].map { URL(fileURLWithPath: url.path + $0) } } + [books]
+
         do {
-            if fileManager.fileExists(atPath: database.path) {
-                try? fileManager.removeItem(at: previous)
-                try fileManager.moveItem(at: database, to: previous)
+            try? fileManager.removeItem(at: previous)
+            try fileManager.createDirectory(at: previous, withIntermediateDirectories: true)
+            for url in current where fileManager.fileExists(atPath: url.path) {
+                try fileManager.moveItem(at: url, to: previous.appendingPathComponent(url.lastPathComponent))
             }
-            // Les journaux de l'ancienne base ne doivent pas être rejoués sur la base restaurée
-            for suffix in ["-wal", "-shm", "-journal"] {
-                try? fileManager.removeItem(atPath: database.path + suffix)
+            for item in try fileManager.contentsOfDirectory(at: pending, includingPropertiesForKeys: nil) {
+                try fileManager.moveItem(at: item, to: directory.appendingPathComponent(item.lastPathComponent))
             }
-            try fileManager.moveItem(at: pending, to: database)
-            print("✅ Base restaurée depuis une sauvegarde")
+            try fileManager.removeItem(at: pending)
+            print("✅ Bibliothèque restaurée depuis une sauvegarde")
         } catch {
             print("❌ Restauration impossible : \(error)")
-            // On remet l'ancienne base en place si elle a été déplacée
-            if !fileManager.fileExists(atPath: database.path), fileManager.fileExists(atPath: previous.path) {
-                try? fileManager.moveItem(at: previous, to: database)
+            // On remet l'ancienne bibliothèque en place
+            for item in (try? fileManager.contentsOfDirectory(at: previous, includingPropertiesForKeys: nil)) ?? [] {
+                let target = directory.appendingPathComponent(item.lastPathComponent)
+                if !fileManager.fileExists(atPath: target.path) { try? fileManager.moveItem(at: item, to: target) }
             }
         }
     }

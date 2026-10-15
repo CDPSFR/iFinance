@@ -5,7 +5,9 @@ import Combine
 @MainActor
 class AppState: ObservableObject {
     
-    // Database
+    // Bases : catalogue des livres et base du livre ouvert
+    let library: LibraryStore
+    /// Base du livre ouvert (la même instance pour tous les repositories)
     let db: SQLiteManager
     
     // Repositories
@@ -49,19 +51,17 @@ class AppState: ObservableObject {
         // Une restauration demandée à la session précédente s'applique avant d'ouvrir la base
         BackupManager.applyPendingRestoreIfNeeded()
 
-        // Initialiser la base de données
+        // Catalogue des livres, et une base par livre (l'ancienne base commune est découpée au besoin)
         do {
-            self.db = try SQLiteManager(dbName: "iFinance.sqlite")
+            self.library = try LibraryStore()
         } catch {
             fatalError("❌ Impossible de démarrer iFinance : \(error.localizedDescription)")
         }
+        self.db = library.bookDB
 
-        // Exécuter les migrations
-        let migrations = DatabaseMigrations(db: db)
-        migrations.runMigrations()
 
         // Initialiser les repositories
-        self.bookRepository = BookRepository(db: db)
+        self.bookRepository = BookRepository(db: library.catalogDB)
         self.accountRepository = AccountRepository(db: db)
         self.transactionRepository = TransactionRepository(db: db)
         self.categoryRepository = CategoryRepository(db: db)
@@ -78,6 +78,9 @@ class AppState: ObservableObject {
 
         // Initialiser les controllers
         self.bookController = BooksController(repository: bookRepository)
+        // Choisir un livre ouvre sa base, avant que les vues ne chargent ses données
+        bookController.openBook = { [library] id in try library.open(bookID: id) }
+        bookController.deleteBookData = { [library] id in try library.deleteBookFile(id) }
         self.accountsController = AccountsController(repository: accountRepository)
         self.transactionsController = TransactionsController(repository: transactionRepository)
         self.categoriesController = CategoriesController(repository: categoryRepository)
@@ -89,7 +92,7 @@ class AppState: ObservableObject {
             repository: recurringTemplateRepository,
             transactionRepository: transactionRepository
         )
-        self.backupManager = BackupManager(db: db)
+        self.backupManager = BackupManager(library: library)
         self.investmentsController = InvestmentsController(
             positionRepository: investmentPositionRepository,
             transactionRepository: investmentTransactionRepository
@@ -105,7 +108,7 @@ class AppState: ObservableObject {
             priceRepository: positionPriceRepository
         )
         // Indices des prix de l'INSEE (valeurs intégrées, mise à jour en ligne désactivée par défaut)
-        self.inflationService = InflationService(repository: PriceIndexRepository(db: db))
+        self.inflationService = InflationService(repository: PriceIndexRepository(db: library.catalogDB))
 
         // Le filtre par catégorie parente inclut ses sous-catégories
         transactionsController.subcategoryIDs = { [weak categoriesController] categoryID in

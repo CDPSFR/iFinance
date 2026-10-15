@@ -24,6 +24,16 @@ struct DatabaseSchema {
         createPriceIndicesTable
     ]
     
+    /// Catalogue des livres (catalog.sqlite) : la liste des livres et ce qui est commun à l'app.
+    /// Les données de chaque livre sont dans son propre fichier.
+    static let catalogStatements: [String] = [
+        createBooksTable,
+        createPriceIndicesTable
+    ]
+
+    /// Colonnes ajoutées au catalogue après sa création (ALTER TABLE)
+    static let catalogMigrationStatements: [String] = []
+
     static let migrationStatements: [String] = [
         // Accounts
         "ALTER TABLE accounts ADD COLUMN iban TEXT;",
