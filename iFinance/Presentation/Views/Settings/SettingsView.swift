@@ -186,6 +186,8 @@ struct BooksSettingsTab: View {
                 .width(90)
             }
             .frame(minHeight: 150)
+            // Mêmes marges que les cartes du formulaire en dessous (le style groupé ajoute 20 pt)
+            .padding(.horizontal, 20)
 
             HStack(spacing: 8) {
                 Button {
@@ -223,6 +225,7 @@ struct BooksSettingsTab: View {
                     }
                 }
             }
+            .padding(.horizontal, 20)
 
             if let book = selectedBook {
                 Form {
@@ -266,7 +269,7 @@ struct BooksSettingsTab: View {
                     .frame(maxWidth: .infinity, minHeight: 170)
             }
         }
-        .padding(16)
+        .padding(.vertical, 16)
         .onAppear {
             if selection == nil {
                 selection = booksController.currentBook?.id
