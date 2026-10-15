@@ -536,7 +536,7 @@ struct DataSettingsTab: View {
                         .disabled(booksController.currentBook == nil)
                 } label: {
                     Text("Exporter le livre")
-                    Text("Copie de la base du livre « \(booksController.currentBook?.name ?? "—") ». Pour tous les livres, utilisez les sauvegardes.")
+                    Text("Copie de la base du livre « \(booksController.currentBook?.name ?? "—") », non chiffrée. Pour tous les livres, utilisez les sauvegardes, qui sont chiffrées.")
                 }
 
                 LabeledContent {

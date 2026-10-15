@@ -124,8 +124,33 @@ final class LibraryStore {
 
     // MARK: - Copies
 
-    /// Copie cohérente de toute la bibliothèque (catalogue et livres) dans `destination`, un dossier
-    func copyLibrary(to destination: URL) throws {
+    /// Chiffrement d'un fichier dans une sauvegarde
+    enum BackupProtection: String, Codable {
+        /// Livre protégé : sa propre clé (son mot de passe ou sa clé de secours l'ouvrira)
+        case book
+        /// Livre non protégé : chiffré avec la clé de la sauvegarde (mot de passe de sauvegarde)
+        case backup
+        /// En clair (anciennes sauvegardes)
+        case none
+    }
+
+    struct BackupEntry: Codable, Equatable {
+        /// Identifiant du livre, ou « legacy » pour l'ancienne base commune
+        let id: String
+        let protection: BackupProtection
+    }
+
+    /// Une sauvegarde doit-elle avoir un mot de passe ? Oui dès qu'un livre n'est pas protégé.
+    var needsBackupPassword: Bool {
+        guard mode == .split else { return true }
+        return ((try? bookIDs()) ?? []).contains { !isProtected($0) }
+    }
+
+    /// Copie cohérente de toute la bibliothèque dans `destination`, un dossier : le catalogue
+    /// (noms des livres et clés chiffrées) et chaque livre. Un livre protégé garde sa propre clé ;
+    /// les autres sont chiffrés avec `backupKey` (en clair si nil).
+    @discardableResult
+    func copyLibrary(to destination: URL, backupKey: Data? = nil) throws -> [BackupEntry] {
         let fileManager = FileManager.default
         try? fileManager.removeItem(at: destination)
         let books = Self.booksDirectory(in: destination)
@@ -133,18 +158,61 @@ final class LibraryStore {
 
         switch mode {
         case .legacy:
-            try bookDB.copy(to: Self.legacyURL(in: destination))
+            try bookDB.export(to: Self.legacyURL(in: destination), key: backupKey)
+            return [BackupEntry(id: "legacy", protection: backupKey == nil ? .none : .backup)]
         case .split:
             try catalogDB.copy(to: Self.catalogURL(in: destination))
+            var entries: [BackupEntry] = []
             for id in try bookIDs() {
                 let target = Self.bookURL(id, in: destination)
-                if id == openBookID {
-                    // Livre ouvert : copie cohérente, chiffrée avec sa clé s'il est protégé
-                    try bookDB.copy(to: target)
-                } else if fileManager.fileExists(atPath: bookURL(id).path) {
-                    // Livre fermé : le fichier est stable, copié tel quel (chiffré s'il est protégé)
-                    try fileManager.copyItem(at: bookURL(id), to: target)
+                if isProtected(id) {
+                    if id == openBookID {
+                        // Livre ouvert : copie cohérente, chiffrée avec sa clé
+                        try bookDB.copy(to: target)
+                    } else if fileManager.fileExists(atPath: bookURL(id).path) {
+                        // Livre fermé : le fichier est stable et déjà chiffré, copié tel quel
+                        try fileManager.copyItem(at: bookURL(id), to: target)
+                    } else { continue }
+                    entries.append(BackupEntry(id: id.uuidString, protection: .book))
+                } else {
+                    let source: SQLiteManager
+                    if id == openBookID {
+                        source = bookDB
+                    } else if fileManager.fileExists(atPath: bookURL(id).path) {
+                        source = try SQLiteManager(path: bookURL(id).path, schema: .none)
+                    } else { continue }
+                    try source.export(to: target, key: backupKey)
+                    entries.append(BackupEntry(id: id.uuidString, protection: backupKey == nil ? .none : .backup))
                 }
+            }
+            return entries
+        }
+    }
+
+    /// Prépare `pending` à partir d'une sauvegarde : le catalogue et les livres protégés sont repris
+    /// tels quels, les livres chiffrés avec la clé de la sauvegarde sont remis en clair.
+    static func extractBackup(_ package: URL, entries: [BackupEntry], backupKey: Data?, to pending: URL) throws {
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: booksDirectory(in: pending), withIntermediateDirectories: true)
+        let catalog = catalogURL(in: package)
+        if fileManager.fileExists(atPath: catalog.path) {
+            try fileManager.copyItem(at: catalog, to: catalogURL(in: pending))
+        }
+        for entry in entries {
+            let source: URL, target: URL
+            if entry.id == "legacy" {
+                source = legacyURL(in: package)
+                target = legacyURL(in: pending)
+            } else {
+                guard let id = UUID(uuidString: entry.id) else { continue }
+                source = bookURL(id, in: package)
+                target = bookURL(id, in: pending)
+            }
+            if entry.protection == .backup {
+                let encrypted = try SQLiteManager(path: source.path, schema: .none, key: backupKey)
+                try encrypted.export(to: target, key: nil)
+            } else {
+                try fileManager.copyItem(at: source, to: target)
             }
         }
     }

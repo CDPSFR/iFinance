@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import SwiftUI
 import Combine
+import Security
 
 /// Copie de la base enregistrée dans le dossier de sauvegarde
 struct BackupFile: Identifiable, Hashable {
@@ -11,6 +12,33 @@ struct BackupFile: Identifiable, Hashable {
 
     var id: URL { url }
     var name: String { url.lastPathComponent }
+}
+
+/// Description d'une sauvegarde chiffrée (backup.json) : clé de la sauvegarde chiffrée par le
+/// mot de passe de sauvegarde, et protection de chaque livre
+struct BackupManifest: Codable {
+    struct StoredKey: Codable {
+        let salt: Data
+        let iterations: Int
+        let sealed: Data
+
+        init(_ key: WrappedKey) { salt = key.salt; iterations = key.iterations; sealed = key.sealed }
+        var wrapped: WrappedKey { WrappedKey(salt: salt, iterations: iterations, sealed: sealed) }
+    }
+
+    static let fileName = "backup.json"
+    var format = 2
+    var createdAt: Date
+    var backupKey: StoredKey?
+    var books: [LibraryStore.BackupEntry]
+}
+
+/// Résultat de la préparation d'une restauration
+enum RestorePreparation: Equatable {
+    case ready
+    /// Livres chiffrés avec un mot de passe de sauvegarde qui n'est pas (ou plus) le bon
+    case needsPassword
+    case failed
 }
 
 /// Fréquence des sauvegardes automatiques
@@ -55,6 +83,10 @@ final class BackupManager: ObservableObject {
         static let lastBackup = "backupLastDate"
     }
 
+    /// Mot de passe des sauvegardes, rangé dans le trousseau (sauvegardes automatiques sans saisie)
+    private static let passwordService = "iFinance.backup"
+    private static let passwordAccount = "password"
+
     private static let filePrefix = "iFinance-"
     /// Sauvegarde actuelle : un dossier avec le catalogue et un fichier par livre
     private static let fileExtension = "ifbackup"
@@ -66,6 +98,8 @@ final class BackupManager: ObservableObject {
     @Published private(set) var lastBackupDate: Date?
     @Published private(set) var isWorking = false
     @Published var errorMessage: String?
+    /// Sauvegarde automatique impossible (mot de passe de sauvegarde manquant)
+    @Published private(set) var blockedReason: String?
 
     private let library: LibraryStore
     private let defaults = UserDefaults.standard
@@ -209,7 +243,44 @@ final class BackupManager: ObservableObject {
     func backupIfDue() async {
         guard isEnabled, folderURL != nil else { return }
         if let last = lastBackupDate, Date().timeIntervalSince(last) < interval.seconds { return }
-        await backupNow()
+        await backupNow(automatic: true)
+    }
+
+    // MARK: - Mot de passe des sauvegardes
+
+    var hasBackupPassword: Bool { backupPassword != nil }
+
+    private var backupPassword: String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.passwordService,
+            kSecAttrAccount as String: Self.passwordAccount,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess, let data = item as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    /// Définit ou remplace le mot de passe (l'actuel est demandé pour le remplacer). nil le supprime.
+    /// Les sauvegardes déjà faites gardent le mot de passe avec lequel elles ont été chiffrées.
+    func setBackupPassword(_ new: String?, current: String?) throws {
+        if let stored = backupPassword, stored != current { throw BookCryptoError.wrongSecret }
+        let base: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.passwordService,
+            kSecAttrAccount as String: Self.passwordAccount
+        ]
+        SecItemDelete(base as CFDictionary)
+        if let new, let data = new.data(using: .utf8) {
+            var attributes = base
+            attributes[kSecValueData as String] = data
+            attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            guard SecItemAdd(attributes as CFDictionary, nil) == errSecSuccess else { throw BackupError.keychain }
+        }
+        blockedReason = nil
+        objectWillChange.send()
     }
 
     /// Taille d'une sauvegarde-dossier (somme de ses fichiers) ; nil pour un simple fichier
@@ -223,10 +294,19 @@ final class BackupManager: ObservableObject {
         return total
     }
 
-    /// Crée une copie cohérente du catalogue et de chaque livre (VACUUM INTO) puis la dépose
-    /// dans le dossier de sauvegarde
-    func backupNow() async {
+    /// Crée une copie chiffrée du catalogue et de chaque livre puis la dépose dans le dossier de
+    /// sauvegarde. Les livres protégés gardent leur clé ; les autres sont chiffrés avec une clé
+    /// propre à la sauvegarde, elle-même chiffrée par le mot de passe de sauvegarde.
+    func backupNow(automatic: Bool = false) async {
         guard !isWorking else { return }
+        let password = backupPassword
+        if library.needsBackupPassword, password == nil {
+            let message = "Définissez un mot de passe de sauvegarde : il chiffre les livres qui ne sont pas protégés par leur propre mot de passe."
+            blockedReason = message
+            if !automatic { errorMessage = message }
+            return
+        }
+        blockedReason = nil
         isWorking = true
         defer { isWorking = false }
 
@@ -238,8 +318,20 @@ final class BackupManager: ObservableObject {
         let temporary = fileManager.temporaryDirectory.appendingPathComponent(name)
 
         do {
-            try library.copyLibrary(to: temporary)
+            var manifest = BackupManifest(createdAt: Date(), backupKey: nil, books: [])
+            var backupKey: Data?
+            if let password {
+                let key = try BookCrypto.newDataKey()
+                let wrapped = try await Task.detached(priority: .utility) { try BookCrypto.wrap(key, with: password) }.value
+                backupKey = key
+                manifest.backupKey = BackupManifest.StoredKey(wrapped)
+            }
+            manifest.books = try library.copyLibrary(to: temporary, backupKey: backupKey)
             defer { try? fileManager.removeItem(at: temporary) }
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(manifest).write(to: temporary.appendingPathComponent(BackupManifest.fileName))
 
             try withFolder { folder in
                 try fileManager.copyItem(at: temporary, to: folder.appendingPathComponent(name))
@@ -295,27 +387,53 @@ final class BackupManager: ObservableObject {
     /// Bibliothèque remplacée par la dernière restauration, gardée par sécurité
     static var beforeRestoreURL: URL { databaseDirectory.appendingPathComponent("avant-restauration", isDirectory: true) }
 
-    /// Prépare la restauration : la sauvegarde est copiée à côté des bases et les remplacera
-    /// au prochain lancement. Renvoie vrai si la copie est prête.
-    func prepareRestore(from file: BackupFile) -> Bool {
+    /// Prépare la restauration : la sauvegarde est copiée (et ses livres non protégés déchiffrés)
+    /// à côté des bases, qu'elle remplacera au prochain lancement.
+    /// Le mot de passe de sauvegarde du trousseau est essayé d'abord, puis `password`.
+    func prepareRestore(from file: BackupFile, password: String? = nil) async -> RestorePreparation {
+        let fileManager = FileManager.default
+        let pending = Self.pendingRestoreURL
         do {
+            // Sauvegarde chiffrée : clé de la sauvegarde à partir du mot de passe
+            var manifest: BackupManifest?
+            var backupKey: Data?
+            let manifestURL = file.url.appendingPathComponent(BackupManifest.fileName)
+            let manifestData = try withFolder { _ in try? Data(contentsOf: manifestURL) }
+            if let manifestData {
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                let decoded = try decoder.decode(BackupManifest.self, from: manifestData)
+                manifest = decoded
+                if let stored = decoded.backupKey, decoded.books.contains(where: { $0.protection == .backup }) {
+                    let candidates = [backupPassword, password].compactMap { $0 }
+                    let wrapped = stored.wrapped
+                    backupKey = await Task.detached(priority: .userInitiated) {
+                        candidates.lazy.compactMap { try? BookCrypto.unwrap(wrapped, with: $0) }.first
+                    }.value
+                    guard backupKey != nil else { return .needsPassword }
+                }
+            }
+
             try withFolder { _ in
-                let fileManager = FileManager.default
-                try? fileManager.removeItem(at: Self.pendingRestoreURL)
-                try fileManager.createDirectory(at: Self.pendingRestoreURL, withIntermediateDirectories: true)
+                try? fileManager.removeItem(at: pending)
+                try fileManager.createDirectory(at: pending, withIntermediateDirectories: true)
                 if file.url.pathExtension == Self.legacyExtension {
                     // Ancienne sauvegarde : la base commune sera découpée par livre au lancement
-                    try fileManager.copyItem(at: file.url, to: LibraryStore.legacyURL(in: Self.pendingRestoreURL))
+                    try fileManager.copyItem(at: file.url, to: LibraryStore.legacyURL(in: pending))
+                } else if let manifest {
+                    try LibraryStore.extractBackup(file.url, entries: manifest.books, backupKey: backupKey, to: pending)
                 } else {
+                    // Sauvegarde en clair, sans manifeste
                     for item in try fileManager.contentsOfDirectory(at: file.url, includingPropertiesForKeys: nil) {
-                        try fileManager.copyItem(at: item, to: Self.pendingRestoreURL.appendingPathComponent(item.lastPathComponent))
+                        try fileManager.copyItem(at: item, to: pending.appendingPathComponent(item.lastPathComponent))
                     }
                 }
             }
-            return true
+            return .ready
         } catch {
+            try? fileManager.removeItem(at: pending)
             errorMessage = "La restauration a échoué : \(error.localizedDescription)"
-            return false
+            return .failed
         }
     }
 
@@ -368,11 +486,13 @@ final class BackupManager: ObservableObject {
 enum BackupError: LocalizedError {
     case noFolder
     case copyFailed
+    case keychain
 
     var errorDescription: String? {
         switch self {
         case .noFolder: return "Aucun dossier de sauvegarde n'est choisi."
         case .copyFailed: return "La copie de la base n'a pas pu être créée."
+        case .keychain: return "Le mot de passe n'a pas pu être enregistré dans le trousseau."
         }
     }
 }
