@@ -145,6 +145,9 @@ struct BooksSettingsTab: View {
     @State private var deletePassword = ""
     @State private var deleteError: String?
 
+    /// Retrait des lignes (fond de sélection arrondi) à l'intérieur du cadre du tableau
+    private static let tableRowInset: CGFloat = 10
+
     private var selectedBook: Book? {
         booksController.books.first { $0.id == selection }
     }
@@ -186,7 +189,6 @@ struct BooksSettingsTab: View {
                 .width(90)
             }
             .frame(minHeight: 150)
-            // Mêmes marges que les cartes du formulaire en dessous (le style groupé ajoute 20 pt)
             .padding(.horizontal, 20)
 
             HStack(spacing: 8) {
@@ -225,7 +227,8 @@ struct BooksSettingsTab: View {
                     }
                 }
             }
-            .padding(.horizontal, 20)
+            // Boutons et cartes alignés sur les lignes du tableau, en retrait de 10 pt dans son cadre
+            .padding(.horizontal, 20 + Self.tableRowInset)
 
             if let book = selectedBook {
                 Form {
@@ -262,6 +265,7 @@ struct BooksSettingsTab: View {
                     BookProtectionSection(book: book)
                 }
                 .formStyle(.grouped)
+                .padding(.horizontal, Self.tableRowInset)
                 .frame(minHeight: 300)
             } else {
                 Text("Sélectionnez un livre pour le modifier.")
