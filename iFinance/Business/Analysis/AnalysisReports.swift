@@ -412,11 +412,17 @@ struct AnalysisReportBuilder {
         var report = FixedChargesReport()
         let yearAgo = addMonths(-12, to: now)
         let cashIDs = accountsController.cashFlowAccountIDs
+        let loanTemplateIDs = Set(loanRepaymentTemplates(cashIDs: cashIDs).map(\.id))
 
-        for template in recurringController.templates where template.isActive && template.type == .debit && cashIDs.contains(template.accountID) {
+        let charges = recurringController.templates.filter { template in
+            template.isActive && (template.type == .debit && cashIDs.contains(template.accountID) || loanTemplateIDs.contains(template.id))
+        }
+        for template in charges {
             let topName: String
             if let id = template.categoryID, let category = categoriesController.getCategory(id: id) {
                 topName = category.parentID.flatMap { categoriesController.getCategory(id: $0)?.name } ?? category.name
+            } else if loanTemplateIDs.contains(template.id) {
+                topName = "Remboursements de prêts"
             } else {
                 topName = "Sans catégorie"
             }
@@ -468,9 +474,14 @@ struct AnalysisReportBuilder {
         for offset in (1...12).reversed() {
             let start = addMonths(-offset, to: currentMonth), end = addMonths(1, to: start)
             let debits = cashFlowTransactions(from: start, to: end).filter { $0.type == .debit }
+            // Remboursements de prêts : côté compte courant des virements récurrents vers un prêt
+            let repayments = transactionsController.allTransactions.filter { tx in
+                tx.type == .transfer && tx.status != .skipped && tx.amount < 0 && cashIDs.contains(tx.accountID)
+                    && tx.recurringTemplateID.map { loanTemplateIDs.contains($0) } == true && tx.date >= start && tx.date < end
+            }.reduce(Decimal(0)) { $0 + abs($1.amount) }
             let fixed = debits.filter { $0.recurringTemplateID != nil || $0.payeeID.map { fixedPayees.contains($0) } == true }
-                .reduce(Decimal(0)) { $0 + abs($1.amount) }
-            let total = debits.reduce(Decimal(0)) { $0 + abs($1.amount) }
+                .reduce(Decimal(0)) { $0 + abs($1.amount) } + repayments
+            let total = debits.reduce(Decimal(0)) { $0 + abs($1.amount) } + repayments
             report.months.append(FixedVariableMonth(month: start, fixed: fixed, variable: total - fixed))
         }
 
@@ -479,6 +490,17 @@ struct AnalysisReportBuilder {
             report.monthlyIncome = credits.reduce(Decimal(0)) { $0 + abs($1.amount) } / 12
         }
         return report
+    }
+
+    /// Virements récurrents d'un compte courant vers un compte de prêt : une charge fixe,
+    /// contrairement aux virements vers l'épargne
+    func loanRepaymentTemplates(cashIDs: Set<UUID>) -> [RecurringTemplate] {
+        recurringController.templates.filter { template in
+            guard template.isTransfer, let to = template.toAccountID,
+                  cashIDs.contains(template.accountID),
+                  accountsController.getAccount(id: to)?.type.group == .debt else { return false }
+            return true
+        }
     }
 
     // MARK: Dépenses inhabituelles
