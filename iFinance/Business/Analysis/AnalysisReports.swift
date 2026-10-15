@@ -92,6 +92,8 @@ struct ChargeGroup: Identifiable {
     let name: String
     let monthly: Decimal
     let count: Int
+    /// Noms des charges du groupe, de la plus lourde à la plus légère
+    let names: [String]
 }
 
 struct FixedChargesReport {
@@ -108,7 +110,8 @@ struct FixedChargesReport {
     /// Charges regroupées par catégorie principale, de la plus lourde à la plus légère
     var groups: [ChargeGroup] {
         Dictionary(grouping: charges, by: \.group)
-            .map { entry in ChargeGroup(name: entry.key, monthly: entry.value.reduce(Decimal(0)) { $0 + $1.monthly }, count: entry.value.count) }
+            .map { entry in ChargeGroup(name: entry.key, monthly: entry.value.reduce(Decimal(0)) { $0 + $1.monthly }, count: entry.value.count,
+                                        names: entry.value.sorted { $0.monthly > $1.monthly }.map(\.name)) }
             .sorted { $0.monthly > $1.monthly }
     }
 }
@@ -666,7 +669,9 @@ struct AnalysisReportBuilder {
         }
 
         let all = cashFlowTransactions(from: start, to: end)
-        let previous = cashFlowTransactions(from: previousStart, to: start)
+        // Année en cours : comparée à la même période de l'année précédente, pas à l'année entière
+        let previousEnd = now < end ? min(calendar.date(byAdding: .year, value: -1, to: now) ?? start, start) : start
+        let previous = cashFlowTransactions(from: previousStart, to: previousEnd)
         review.previousIncome = previous.filter { $0.type == .credit }.reduce(0) { $0 + abs($1.amount) }
         review.previousExpense = previous.filter { $0.type == .debit }.reduce(0) { $0 + abs($1.amount) }
         review.biggestExpense = all.filter { $0.type == .debit }.max { abs($0.amount) < abs($1.amount) }
@@ -694,9 +699,8 @@ struct AnalysisReportBuilder {
         var report = TaxReport(year: year)
         guard let start = calendar.date(from: DateComponents(year: year, month: 1, day: 1)) else { return report }
         let end = addMonths(12, to: start)
-        let transactions = transactionsController.allTransactions.filter {
-            $0.type == .debit && $0.status != .skipped && $0.date >= start && $0.date < end
-        }
+        // Dépenses des comptes courants : les versements vers l'épargne ou la retraite n'en font pas partie
+        let transactions = cashFlowTransactions(from: start, to: end).filter { $0.type == .debit }
 
         // Une sous-catégorie hérite de la case de sa catégorie parente
         func caseFor(_ categoryID: UUID?) -> TaxCase? {

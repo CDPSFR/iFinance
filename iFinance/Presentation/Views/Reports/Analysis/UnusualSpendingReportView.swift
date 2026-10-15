@@ -10,10 +10,10 @@ struct UnusualSpendingReportView: View {
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var appSettings: AppSettings
 
+    /// Mois affiché : par défaut le mois en cours, pour repérer un doublon ou un gros achat sans attendre
     @State private var month: Date = {
         let calendar = Calendar.current
-        let current = calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
-        return calendar.date(byAdding: .month, value: -1, to: current) ?? current
+        return calendar.date(from: calendar.dateComponents([.year, .month], from: Date())) ?? Date()
     }()
 
     /// Opérations marquées « c'est normal » (mémorisées sur cet appareil)

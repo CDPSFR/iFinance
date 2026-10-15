@@ -175,7 +175,8 @@ struct IndependenceReportView: View {
                     RuleMark(x: .value("Année", year))
                         .foregroundStyle(.secondary)
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                        .annotation(position: .top) {
+                        // Repère gardé dans le graphique, sous le titre du bloc
+                        .annotation(position: .top, overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .plot))) {
                             Text(String(year)).font(.caption).foregroundStyle(.secondary)
                         }
                 }

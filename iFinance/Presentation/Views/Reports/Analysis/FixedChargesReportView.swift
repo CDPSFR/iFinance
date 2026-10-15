@@ -71,8 +71,10 @@ struct FixedChargesReportView: View {
             )
             StatTile(
                 title: "Abonnements",
-                value: "\(report.subscriptions.count) · \(format.money(report.subscriptionsTotal)) / mois",
-                detail: "\(format.money(report.subscriptionsTotal * 12)) par an"
+                value: report.subscriptions.isEmpty ? "Aucun" : "\(format.money(report.subscriptionsTotal)) / mois",
+                detail: report.subscriptions.isEmpty
+                    ? "aucun abonnement repéré"
+                    : "\(report.subscriptions.count) abonnement\(report.subscriptions.count > 1 ? "s" : "") · \(format.money(report.subscriptionsTotal * 12)) par an"
             )
             StatTile(
                 title: "À vérifier",
@@ -100,7 +102,7 @@ struct FixedChargesReportView: View {
                 ForEach(groups) { group in
                     LTBarRow(
                         label: group.name,
-                        detail: "\(group.count) charge\(group.count > 1 ? "s" : "")",
+                        detail: chargeNames(group),
                         bar: LTBar(fraction: PlanFormat.double(group.monthly) / max(largest, 1), color: .accentColor),
                         value: format.money(group.monthly),
                         extra: report.monthlyIncome.flatMap { PlanFormat.ratio(group.monthly, $0) }.map { "\(format.percent($0)) des revenus" },
@@ -110,6 +112,13 @@ struct FixedChargesReportView: View {
             }
             PlanNote("Les charges fixes viennent de vos opérations récurrentes. Une charge annuelle compte pour un douzième chaque mois.")
         }
+    }
+
+    /// Charges du groupe par leur nom : les deux premières, puis le nombre restant
+    private func chargeNames(_ group: ChargeGroup) -> String {
+        let shown = group.names.prefix(2).joined(separator: ", ")
+        let others = group.names.count - 2
+        return others > 0 ? "\(shown) et \(others) autre\(others > 1 ? "s" : "")" : shown
     }
 
     // MARK: - Abonnements et points à vérifier

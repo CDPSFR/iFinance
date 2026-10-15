@@ -12,8 +12,13 @@ struct YearReviewReportView: View {
     @EnvironmentObject var booksController: BooksController
     @EnvironmentObject var appSettings: AppSettings
 
-    /// Année affichée : par défaut la dernière année complète
-    @State private var year = Calendar.current.component(.year, from: Date()) - 1
+    /// Année affichée : par défaut l'année en cours, sauf en janvier où elle est encore presque vide
+    @State private var year: Int = {
+        let calendar = Calendar.current
+        let now = Date()
+        let year = calendar.component(.year, from: now)
+        return calendar.component(.month, from: now) == 1 ? year - 1 : year
+    }()
 
     private var format: AnalysisFormat {
         AnalysisFormat(currency: booksController.currentBook?.currency ?? "EUR", hidden: appSettings.hideAmounts)
@@ -56,9 +61,14 @@ struct YearReviewReportView: View {
 
     private var isCurrentYear: Bool { year == Calendar.current.component(.year, from: Date()) }
 
+    /// Période de comparaison : l'année précédente, ou sa même période quand l'année est en cours
+    private var previousPeriod: String {
+        isCurrentYear ? "la même période de \(String(year - 1))" : String(year - 1)
+    }
+
     private func change(_ now: Decimal, _ before: Decimal) -> String? {
         guard before > 0 else { return nil }
-        return "\(format.percent(PlanFormat.double((now - before) / before), signed: true)) par rapport à \(String(year - 1))"
+        return "\(format.percent(PlanFormat.double((now - before) / before), signed: true)) vs \(isCurrentYear ? "même période " : "")\(String(year - 1))"
     }
 
     // MARK: - Réponse
@@ -73,7 +83,7 @@ struct YearReviewReportView: View {
                 ? "\(period) : vous avez mis de côté \(format.money(saving)), soit \(format.percent(PlanFormat.ratio(saving, review.income) ?? 0)) de vos revenus."
                 : "\(period) : vos dépenses ont dépassé vos revenus de \(format.money(-saving)).",
             detail: "\(review.positiveMonths) mois sur \(review.months.count) se terminent en positif."
-                + (previousSaving > 0 && saving > previousSaving ? " Vous avez épargné plus qu’en \(String(year - 1))." : ""),
+                + (previousSaving > 0 && saving > previousSaving ? (isCurrentYear ? " Vous avez épargné plus que sur \(previousPeriod)." : " Vous avez épargné plus qu’en \(previousPeriod).") : ""),
             tone: saving > 0 ? .good : .warning
         )
     }
@@ -146,10 +156,10 @@ struct YearReviewReportView: View {
                     )
                 }
                 if let riser = review.risers.first, let change = riser.change {
-                    LTNoticeRow(title: "Le poste qui a le plus augmenté", detail: "\(riser.name), comparé à \(String(year - 1))", value: format.percent(change, signed: true), color: .red, valueColor: .red)
+                    LTNoticeRow(title: "Le poste qui a le plus augmenté", detail: "\(riser.name), comparé à \(previousPeriod)", value: format.percent(change, signed: true), color: .red, valueColor: .red)
                 }
                 if let faller = review.fallers.first, let change = faller.change {
-                    LTNoticeRow(title: "Le poste qui a le plus baissé", detail: "\(faller.name), comparé à \(String(year - 1))", value: format.percent(change, signed: true), color: .green, valueColor: .green)
+                    LTNoticeRow(title: "Le poste qui a le plus baissé", detail: "\(faller.name), comparé à \(previousPeriod)", value: format.percent(change, signed: true), color: .green, valueColor: .green)
                 }
             }
         }
@@ -161,7 +171,7 @@ struct YearReviewReportView: View {
         let top = review.categories.prefix(7)
         let largest = PlanFormat.double(top.first?.amount ?? 1)
 
-        return PlanBlock(title: "Où est passé l’argent", subtitle: "comparé à \(String(year - 1))") {
+        return PlanBlock(title: "Où est passé l’argent", subtitle: "comparé à \(previousPeriod)") {
             VStack(spacing: 10) {
                 ForEach(Array(top)) { category in
                     LTBarRow(
